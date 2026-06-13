@@ -11,5 +11,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str = "cambiar-en-produccion"
 
+    # --- JWT (E2) ---
+    jwt_algoritmo: str = "HS256"
+    access_token_minutos: int = 30      # token corto: viaja en cada request
+    refresh_token_dias: int = 7         # token largo: solo para renovar el corto
+
 
 settings = Settings()

@@ -69,3 +69,31 @@ MVP = **E0 → E8** con el rubro barbería. No se avanza de etapa sin pasar su V
 - [ ] **E0** Análisis y diseño final ← _en curso_
 - [ ] E1 Base de datos completa · E2 API núcleo · E3 Panel · E4 Landing · E5 Super-admin · E6 WhatsApp · E7 Email · E8 Automatizaciones → **LANZAR**
 - [ ] E9–E16 (seguridad, finanzas, fidelización, packs, estadísticas, SaaS)
+
+
+# 1. Pararte en el proyecto (ya estás ahí)
+cd ~/Documentos/Turnos360
+
+# 2. Levantar los 3 servicios (Postgres + Redis + API)
+make up
+
+# 3. Verificar que están vivos
+make ps        # los 3 deben decir "Up" / "healthy"
+
+# 4. Prueba rápida de que la API responde
+curl http://localhost:8000/health    # {"status":"ok"}
+
+# 5. Entrar al contenedor 
+make sh
+
+# 6 Ver la base 
+make psql
+salir \q
+
+# 7 Guardar trabajo 
+git add . && git commit -m "..." && git push
+
+# 8 Apagar 
+make down
+
+
