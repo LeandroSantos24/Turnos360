@@ -1,0 +1,862 @@
+// ============================================================
+// TURNOS360 — ER definitivo (E0)
+// Pegar este archivo completo en https://dbdiagram.io
+// Regla 1: TODA tabla de negocio lleva empresa_id (multi-tenant por fila).
+// Núcleo: se construye en E1. Módulos opcionales: migraciones preparadas
+// en E1, se activan en su etapa (E11/E13/E14/E16).
+// ============================================================
+
+Project Turnos360 {
+  database_type: 'PostgreSQL'
+  Note: 'SaaS multiempresa de gestión de turnos · CRM · WhatsApp · Finanzas · Fidelización'
+}
+
+// ===================== ENUMS =====================
+
+Enum tipo_recurso {
+  persona
+  box
+  equipo
+}
+
+Enum tipo_turno {
+  simple
+  recurrente
+  serie
+  orden_llegada
+  orden_trabajo
+}
+
+Enum estado_turno {
+  pendiente
+  confirmado
+  en_curso
+  finalizado
+  cancelado
+  ausente
+}
+
+Enum rol_usuario {
+  dueno
+  admin
+  recepcion
+  profesional
+}
+
+Enum tipo_excepcion {
+  feriado
+  licencia
+  vacaciones
+  bloqueo
+}
+
+Enum tipo_movimiento {
+  ingreso
+  egreso
+}
+
+Enum estado_caja {
+  abierta
+  cerrada
+}
+
+Enum canal_mensaje {
+  whatsapp
+  email
+}
+
+Enum direccion_mensaje {
+  saliente
+  entrante
+}
+
+Enum estado_mensaje {
+  pendiente
+  enviado
+  entregado
+  leido
+  fallido
+}
+
+Enum estado_giftcard {
+  activa
+  canjeada
+  vencida
+}
+
+Enum estado_membresia {
+  activa
+  suspendida
+  vencida
+  pendiente_pago
+}
+
+Enum tipo_item_orden {
+  repuesto
+  material
+  mano_obra
+}
+
+Enum estado_orden_trabajo {
+  presupuestado
+  aprobado
+  en_proceso
+  pausado
+  terminado
+  entregado
+}
+
+Enum modalidad_comision {
+  porcentaje
+  canon_consulta
+  alquiler
+}
+
+Enum estado_suscripcion {
+  activa
+  vencida
+  suspendida
+  cancelada
+}
+
+Enum tipo_promocion {
+  cupon
+  descuento
+  combo
+  paquete
+  cumpleanos
+  fecha_especial
+}
+
+// ===================== CONFIGURACIÓN / SaaS (globales) =====================
+
+Table rubro {
+  id int [pk, increment]
+  codigo varchar [unique, note: 'barberia, spa, lavadero, taller, medico, dentista, nutricion, kinesio, psicologo']
+  nombre varchar
+  preset jsonb [note: 'terminología, campos_cliente, módulos on/off, tipo_turno_default, servicios sugeridos, régimen datos sensibles']
+  activo boolean [default: true]
+}
+
+Table plan_saas {
+  id int [pk, increment]
+  nombre varchar
+  precio_mensual decimal
+  limites jsonb
+  activo boolean [default: true]
+  Note: 'Se activa en E16'
+}
+
+Table suscripcion {
+  id int [pk, increment]
+  empresa_id int [not null]
+  plan_id int [not null]
+  estado estado_suscripcion
+  inicio date
+  vence date
+  ultimo_pago date
+  Note: 'Se activa en E16'
+}
+
+Table super_admin {
+  id int [pk, increment]
+  nombre varchar
+  email varchar [unique]
+  hash_clave varchar
+  activo boolean [default: true]
+  Note: 'Login separado del de los negocios (E5)'
+}
+
+// ===================== NÚCLEO (E1) =====================
+
+Table empresa {
+  id int [pk, increment]
+  rubro_id int [not null]
+  nombre varchar [not null]
+  slug varchar [unique, note: 'turnos360.com/<slug>']
+  config_pack jsonb [note: 'override del preset del rubro + flags de automatizaciones on/off']
+  wa_credenciales bytea [note: 'waba_id, phone_number_id, token — ENCRIPTADO']
+  email_credenciales bytea [note: 'remitente, api key proveedor — ENCRIPTADO']
+  activa boolean [default: true]
+  creada_en timestamp
+}
+
+Table sucursal {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  direccion varchar
+  activa boolean [default: true]
+  Note: 'Prevista en E1, se activa en E16 (D-09)'
+}
+
+Table usuario {
+  id int [pk, increment]
+  empresa_id int [not null]
+  sucursal_id int
+  nombre varchar
+  email varchar [note: 'unique por empresa']
+  hash_clave varchar
+  rol rol_usuario [not null]
+  activo boolean [default: true]
+
+  indexes {
+    (empresa_id, email) [unique]
+  }
+}
+
+Table recurso {
+  id int [pk, increment]
+  empresa_id int [not null]
+  sucursal_id int
+  tipo tipo_recurso [not null, note: 'D-03: persona, box o equipo']
+  nombre varchar
+  usuario_id int [note: 'si el recurso es una persona con login']
+  color varchar [note: 'para la agenda visual']
+  activo boolean [default: true]
+
+  indexes {
+    (empresa_id, tipo)
+  }
+}
+
+Table especialidad {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  Note: 'Catálogo parametrizable. D-15: tabla propia + puente N:M con recurso'
+}
+
+Table recurso_especialidad {
+  recurso_id int [not null]
+  especialidad_id int [not null]
+
+  indexes {
+    (recurso_id, especialidad_id) [pk]
+  }
+}
+
+Table horario_recurso {
+  id int [pk, increment]
+  empresa_id int [not null]
+  recurso_id int [not null]
+  dia_semana int [note: '0=lunes … 6=domingo']
+  hora_desde time
+  hora_hasta time
+  vigencia_desde date
+  vigencia_hasta date [note: 'apertura por día o por semana: "martes 10-15 hasta fin de año"']
+
+  indexes {
+    (empresa_id, recurso_id, dia_semana)
+  }
+}
+
+Table excepcion_agenda {
+  id int [pk, increment]
+  empresa_id int [not null]
+  recurso_id int [note: 'NULL = aplica a toda la empresa (feriado)']
+  tipo tipo_excepcion
+  fecha_desde date
+  fecha_hasta date
+  motivo varchar
+}
+
+Table servicio {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  duracion_min int
+  buffer_min int [default: 0]
+  precio decimal
+  activo boolean [default: true]
+
+  indexes {
+    (empresa_id, activo)
+  }
+}
+
+Table servicio_recurso {
+  servicio_id int [not null]
+  recurso_id int [not null]
+
+  indexes {
+    (servicio_id, recurso_id) [pk]
+  }
+}
+
+Table cliente {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  apellido varchar
+  dni varchar
+  email varchar
+  telefono varchar [note: 'la llave de WhatsApp (D-13)']
+  fecha_nacimiento date
+  canal_adquisicion varchar [note: 'N-04: instagram, tiktok, referido, google, paso_por_la_puerta…']
+  campos_rubro jsonb [note: 'lo que define el preset: patente-resumen, tipo de piel, obra social…']
+  preferencias jsonb [note: 'prefiere la mañana, le gusta recibir promociones…']
+  etiquetas jsonb [note: 'VIP, frecuente…']
+  observaciones text
+  activo boolean [default: true]
+  creado_en timestamp
+
+  indexes {
+    (empresa_id, apellido, nombre)
+    (empresa_id, telefono)
+    (empresa_id, dni)
+  }
+}
+
+Table turno {
+  id int [pk, increment]
+  empresa_id int [not null]
+  sucursal_id int
+  cliente_id int [not null]
+  recurso_id int [not null]
+  servicio_id int
+  vehiculo_id int [note: 'taller/lavadero: el sujeto es el vehículo']
+  tipo tipo_turno [not null, default: 'simple', note: 'D-04: las 5 formas desde el día uno']
+  estado estado_turno [not null, default: 'pendiente']
+  categoria varchar [note: 'categorización libre del turno']
+  fecha_inicio timestamp
+  fecha_fin timestamp
+  posicion_cola int [note: 'orden de llegada (taller): cola del día']
+  serie_grupo_id int [note: 'agrupa recurrencias/series; sesión N de M']
+  paquete_id int [note: 'si descuenta de un PaqueteSesiones']
+  es_sobreturno boolean [default: false]
+  importe_previsto decimal [note: 'importe ingresable al reservar']
+  motivo_cancelacion varchar
+  notas text
+  creado_por int [note: 'usuario_id; NULL si vino de la landing pública']
+  creado_en timestamp
+
+  indexes {
+    (empresa_id, recurso_id, fecha_inicio)
+    (empresa_id, cliente_id)
+    (empresa_id, estado, fecha_inicio)
+  }
+}
+
+Table lista_espera {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  servicio_id int
+  recurso_id int [note: 'NULL = cualquiera']
+  rango_preferido varchar
+  estado varchar [default: 'esperando']
+  creado_en timestamp
+}
+
+Table historial_cliente {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  tipo_evento varchar [note: 'turno, pago, promocion, encuesta, tratamiento, mensaje…']
+  descripcion varchar
+  ref_tabla varchar
+  ref_id int
+  fecha timestamp
+
+  indexes {
+    (empresa_id, cliente_id, fecha)
+  }
+}
+
+Table calificacion {
+  id int [pk, increment]
+  empresa_id int [not null]
+  turno_id int [not null]
+  cliente_id int [not null]
+  puntaje int [note: '1 a 5']
+  comentario text
+  fecha timestamp
+}
+
+Table adjunto {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  entrada_clinica_id int [note: 'si es un estudio adjunto a una evolución']
+  tipo varchar [note: 'contrato, consentimiento, estudio, radiografia, foto, pdf']
+  nombre_archivo varchar
+  ruta varchar
+  subido_por int
+  fecha timestamp
+}
+
+Table log_auditoria {
+  id bigint [pk, increment]
+  empresa_id int
+  usuario_id int
+  accion varchar [note: 'crear, modificar, eliminar, LEER (salud)']
+  tabla varchar
+  registro_id int
+  detalle jsonb
+  ip varchar
+  fecha timestamp
+
+  indexes {
+    (empresa_id, fecha)
+    (tabla, registro_id)
+  }
+  Note: 'Nace en E9. En salud registra también cada lectura de ficha.'
+}
+
+// ===================== FINANZAS Y CAJA (E10) =====================
+
+Table caja {
+  id int [pk, increment]
+  empresa_id int [not null]
+  sucursal_id int
+  fecha_apertura timestamp
+  fecha_cierre timestamp
+  saldo_inicial decimal
+  saldo_final decimal
+  estado estado_caja [default: 'abierta']
+  abierta_por int
+  cerrada_por int
+}
+
+Table categoria_financiera {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar [note: 'ingresos: turnos, productos, membresías, gift cards, paquetes, cursos / egresos: sueldos, comisiones, alquiler, servicios, marketing, insumos, equipamiento, impuestos, mantenimiento']
+  tipo tipo_movimiento
+}
+
+Table metodo_pago {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar [note: 'efectivo, débito, crédito, transferencia, Mercado Pago, MODO, dólares, otro']
+  comision_pct decimal [default: 0, note: 'D-14: comisión configurable por empresa']
+  activo boolean [default: true]
+}
+
+Table movimiento_financiero {
+  id int [pk, increment]
+  empresa_id int [not null]
+  caja_id int
+  fecha timestamp
+  tipo tipo_movimiento [not null]
+  concepto varchar
+  descripcion varchar
+  monto decimal [not null]
+  moneda varchar [default: 'ARS']
+  metodo_pago_id int
+  categoria_id int
+  usuario_id int
+
+  indexes {
+    (empresa_id, fecha)
+    (empresa_id, tipo, categoria_id)
+  }
+}
+
+Table pago {
+  id int [pk, increment]
+  empresa_id int [not null]
+  turno_id int
+  orden_trabajo_id int
+  cliente_id int [not null]
+  metodo_pago_id int
+  monto decimal
+  comision_aplicada decimal
+  movimiento_id int [note: 'genera su MovimientoFinanciero']
+  fecha timestamp
+}
+
+Table deuda_cliente {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  monto decimal
+  saldada boolean [default: false]
+  ref_tabla varchar
+  ref_id int
+  fecha timestamp
+  Note: 'Cuenta corriente simple de clientes (E10)'
+}
+
+Table comision_profesional {
+  id int [pk, increment]
+  empresa_id int [not null]
+  recurso_id int [not null]
+  modalidad modalidad_comision [note: 'porcentaje (70/30), canon por consulta o alquiler diario']
+  porcentaje decimal
+  monto decimal
+  vigencia_desde date
+  Note: 'Base de la cuenta corriente y liquidaciones a profesionales'
+}
+
+// ===================== MENSAJERÍA (E6/E7) =====================
+
+Table plantilla_mensaje {
+  id int [pk, increment]
+  empresa_id int [not null]
+  canal canal_mensaje
+  codigo varchar [note: 'confirmacion, recordatorio_24h, recordatorio_2h, cancelacion, cambio_fecha, cambio_profesional, calificacion, auto_listo, cumpleanos, bienvenida, detalle_trabajo']
+  nombre varchar
+  cuerpo text
+  aprobada_meta boolean [default: false, note: 'WhatsApp: plantillas pre-aprobadas']
+  activa boolean [default: true]
+}
+
+Table mensaje {
+  id bigint [pk, increment]
+  empresa_id int [not null]
+  cliente_id int
+  turno_id int
+  canal canal_mensaje [not null]
+  direccion direccion_mensaje [default: 'saliente']
+  plantilla_id int
+  contenido text [note: 'PROHIBIDO: datos de salud o motivo de consulta']
+  estado estado_mensaje [default: 'pendiente']
+  error varchar
+  fecha timestamp
+
+  indexes {
+    (empresa_id, fecha)
+    (empresa_id, cliente_id)
+  }
+}
+
+// ===================== FIDELIZACIÓN (E11) =====================
+
+Table gift_card {
+  id int [pk, increment]
+  empresa_id int [not null]
+  codigo varchar [unique]
+  qr_token varchar [unique, note: 'QR único, canje único']
+  comprador_cliente_id int
+  beneficiario_nombre varchar
+  beneficiario_cliente_id int
+  servicio_id int [note: 'o monto, uno de los dos']
+  monto decimal
+  vencimiento date
+  estado estado_giftcard [default: 'activa']
+  canjeada_en timestamp
+  canjeada_por int [note: 'usuario que escaneó']
+}
+
+Table movimiento_puntos {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  tipo varchar [note: 'acumulacion | canje']
+  puntos int
+  motivo varchar
+  ref_tabla varchar
+  ref_id int
+  fecha timestamp
+  Note: 'D-16: fuente de verdad del programa de puntos'
+}
+
+Table saldo_puntos {
+  empresa_id int [not null]
+  cliente_id int [not null]
+  saldo int [default: 0]
+  actualizado timestamp
+
+  indexes {
+    (empresa_id, cliente_id) [pk]
+  }
+  Note: 'D-16: caché del saldo'
+}
+
+Table promocion {
+  id int [pk, increment]
+  empresa_id int [not null]
+  tipo tipo_promocion
+  nombre varchar
+  codigo varchar [note: 'cupón']
+  valor decimal
+  condiciones jsonb
+  vigencia_desde date
+  vigencia_hasta date
+  activa boolean [default: true]
+}
+
+Table campania {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  segmento jsonb [note: 'edad, frecuencia, servicio favorito, cumpleaños, canal de adquisición; referidos']
+  canal canal_mensaje
+  plantilla_id int
+  estado varchar [default: 'borrador']
+  programada_para timestamp
+  enviada_en timestamp
+}
+
+Table membresia {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar [note: 'mensual barbería, spa, premium…']
+  precio decimal
+  periodicidad varchar [default: 'mensual']
+  beneficios jsonb
+  activa boolean [default: true]
+}
+
+Table membresia_cliente {
+  id int [pk, increment]
+  empresa_id int [not null]
+  membresia_id int [not null]
+  cliente_id int [not null]
+  estado estado_membresia [default: 'activa']
+  inicio date
+  proximo_cobro date
+}
+
+Table paquete_sesiones {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  servicio_id int
+  total_sesiones int
+  usadas int [default: 0]
+  vencimiento date
+  estado varchar [default: 'activo']
+  Note: 'Bonos/abonos: 10 de kinesio, 5 nutricionales, 20 de estética'
+}
+
+// ===================== PACK SALUD (E13) =====================
+
+Table obra_social {
+  id int [pk, increment]
+  empresa_id int [not null]
+  nombre varchar
+  Note: 'Catálogo parametrizable (obras sociales y prepagas)'
+}
+
+Table plan_obra_social {
+  id int [pk, increment]
+  empresa_id int [not null]
+  obra_social_id int [not null]
+  nombre varchar
+  copago decimal
+  sesiones_autorizadas int [note: 'M-22: la OS autoriza N sesiones y define copago']
+}
+
+Table ficha_clinica {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null, unique, note: 'ficha ÚNICA por paciente']
+  obra_social_id int
+  plan_obra_social_id int
+  nro_afiliado varchar [note: 'aporte Dr. Ivo']
+  tipo_sangre varchar [note: 'opcional; interesa al odontólogo']
+  vive_cerca boolean
+  antecedentes jsonb [note: 'patológicos, familiares, vacunas s/n, cirugías, alergias, medicación habitual, hábitos tóxicos (alcohol/tabaco/drogas + frecuencia), vida sexual y anticoncepción']
+  creada_en timestamp
+  Note: 'ACCESO RESTRINGIDO: solo el profesional tratante. Recepción NUNCA. Toda lectura → log_auditoria. Ley 25.326.'
+}
+
+Table entrada_clinica {
+  id int [pk, increment]
+  empresa_id int [not null]
+  ficha_id int [not null]
+  profesional_recurso_id int [not null]
+  turno_id int
+  fecha timestamp
+  tipo varchar [default: 'consulta', note: 'consulta | odontograma | control_nutricional | sesion_psico…']
+  motivo varchar
+  enfermedad_actual text [note: 'evolutiva: los síntomas se van sumando']
+  estudios text [note: 'análisis, radiografías (+ adjuntos)']
+  resultados text
+  diagnostico text
+  tratamiento text
+  mediciones jsonb [note: 'peso, altura, IMC, IPA → graficables en el tiempo']
+  datos_tipo jsonb [note: 'odontograma, plan alimentario, notas confidenciales del psicólogo…']
+  firmada boolean [default: false]
+}
+
+Table consentimiento {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  tipo varchar
+  texto text
+  firmado_en timestamp
+  adjunto_id int
+}
+
+Table plan_rehabilitacion {
+  id int [pk, increment]
+  empresa_id int [not null]
+  ficha_id int [not null]
+  diagnostico varchar
+  partes_cuerpo varchar [note: 'entrevista Álvaro']
+  motivo_consulta varchar
+  sesiones_autorizadas int
+  sesiones_realizadas int [default: 0]
+  obra_social_id int
+  estado varchar [default: 'activo']
+  Note: 'El "bono": autorizadas vs realizadas vs restantes'
+}
+
+Table sesion_ejercicio {
+  id int [pk, increment]
+  empresa_id int [not null]
+  plan_id int [not null]
+  turno_id int
+  nro_sesion int
+  ejercicios jsonb [note: 'progresión del tratamiento']
+  notas text
+  enviada_email boolean [default: false, note: 'Álvaro: los ejercicios se adjuntan por email al paciente']
+}
+
+// ===================== PACK TALLER / LAVADERO (E14) =====================
+
+Table vehiculo {
+  id int [pk, increment]
+  empresa_id int [not null]
+  cliente_id int [not null]
+  patente varchar
+  tipo varchar [note: 'auto, camioneta, SUV…']
+  marca varchar
+  modelo varchar
+  anio int
+  km int
+  estado varchar [note: 'chocado, despintado…']
+  observaciones text
+
+  indexes {
+    (empresa_id, patente)
+  }
+}
+
+Table orden_trabajo {
+  id int [pk, increment]
+  empresa_id int [not null]
+  vehiculo_id int [not null]
+  cliente_id int [not null]
+  turno_id int
+  estado estado_orden_trabajo [default: 'presupuestado']
+  descripcion text [note: 'qué se va a realizar']
+  diagnostico text
+  presupuesto_total decimal
+  resumen_ia text [note: 'M-11: redactado con IA desde las notas del mecánico → email al cliente']
+  aprobada_en timestamp
+  entregada_en timestamp
+}
+
+Table item_orden {
+  id int [pk, increment]
+  empresa_id int [not null]
+  orden_id int [not null]
+  tipo tipo_item_orden
+  descripcion varchar
+  cantidad decimal [default: 1]
+  precio_unitario decimal
+}
+
+Table registro_tiempo {
+  id int [pk, increment]
+  empresa_id int [not null]
+  orden_id int [not null]
+  recurso_id int
+  inicio timestamp
+  fin timestamp
+  acumulado_seg int [default: 0]
+  estado varchar [default: 'detenido', note: 'corriendo | pausado | detenido']
+  Note: 'M-10: cronómetro iniciar/pausar/terminar → ganancia real por hora'
+}
+
+// ===================== RELACIONES =====================
+
+Ref: empresa.rubro_id > rubro.id
+Ref: suscripcion.empresa_id > empresa.id
+Ref: suscripcion.plan_id > plan_saas.id
+Ref: sucursal.empresa_id > empresa.id
+Ref: usuario.empresa_id > empresa.id
+Ref: usuario.sucursal_id > sucursal.id
+Ref: recurso.empresa_id > empresa.id
+Ref: recurso.sucursal_id > sucursal.id
+Ref: recurso.usuario_id > usuario.id
+Ref: especialidad.empresa_id > empresa.id
+Ref: recurso_especialidad.recurso_id > recurso.id
+Ref: recurso_especialidad.especialidad_id > especialidad.id
+Ref: horario_recurso.recurso_id > recurso.id
+Ref: excepcion_agenda.empresa_id > empresa.id
+Ref: excepcion_agenda.recurso_id > recurso.id
+Ref: servicio.empresa_id > empresa.id
+Ref: servicio_recurso.servicio_id > servicio.id
+Ref: servicio_recurso.recurso_id > recurso.id
+Ref: cliente.empresa_id > empresa.id
+Ref: turno.empresa_id > empresa.id
+Ref: turno.sucursal_id > sucursal.id
+Ref: turno.cliente_id > cliente.id
+Ref: turno.recurso_id > recurso.id
+Ref: turno.servicio_id > servicio.id
+Ref: turno.vehiculo_id > vehiculo.id
+Ref: turno.paquete_id > paquete_sesiones.id
+Ref: lista_espera.empresa_id > empresa.id
+Ref: lista_espera.cliente_id > cliente.id
+Ref: lista_espera.servicio_id > servicio.id
+Ref: lista_espera.recurso_id > recurso.id
+Ref: historial_cliente.cliente_id > cliente.id
+Ref: calificacion.turno_id > turno.id
+Ref: calificacion.cliente_id > cliente.id
+Ref: adjunto.cliente_id > cliente.id
+Ref: adjunto.entrada_clinica_id > entrada_clinica.id
+Ref: caja.empresa_id > empresa.id
+Ref: caja.sucursal_id > sucursal.id
+Ref: categoria_financiera.empresa_id > empresa.id
+Ref: metodo_pago.empresa_id > empresa.id
+Ref: movimiento_financiero.empresa_id > empresa.id
+Ref: movimiento_financiero.caja_id > caja.id
+Ref: movimiento_financiero.metodo_pago_id > metodo_pago.id
+Ref: movimiento_financiero.categoria_id > categoria_financiera.id
+Ref: movimiento_financiero.usuario_id > usuario.id
+Ref: pago.turno_id > turno.id
+Ref: pago.orden_trabajo_id > orden_trabajo.id
+Ref: pago.cliente_id > cliente.id
+Ref: pago.metodo_pago_id > metodo_pago.id
+Ref: pago.movimiento_id > movimiento_financiero.id
+Ref: deuda_cliente.cliente_id > cliente.id
+Ref: comision_profesional.recurso_id > recurso.id
+Ref: plantilla_mensaje.empresa_id > empresa.id
+Ref: mensaje.empresa_id > empresa.id
+Ref: mensaje.cliente_id > cliente.id
+Ref: mensaje.turno_id > turno.id
+Ref: mensaje.plantilla_id > plantilla_mensaje.id
+Ref: gift_card.empresa_id > empresa.id
+Ref: gift_card.comprador_cliente_id > cliente.id
+Ref: gift_card.beneficiario_cliente_id > cliente.id
+Ref: gift_card.servicio_id > servicio.id
+Ref: movimiento_puntos.cliente_id > cliente.id
+Ref: saldo_puntos.cliente_id > cliente.id
+Ref: promocion.empresa_id > empresa.id
+Ref: campania.empresa_id > empresa.id
+Ref: campania.plantilla_id > plantilla_mensaje.id
+Ref: membresia.empresa_id > empresa.id
+Ref: membresia_cliente.membresia_id > membresia.id
+Ref: membresia_cliente.cliente_id > cliente.id
+Ref: paquete_sesiones.cliente_id > cliente.id
+Ref: paquete_sesiones.servicio_id > servicio.id
+Ref: obra_social.empresa_id > empresa.id
+Ref: plan_obra_social.obra_social_id > obra_social.id
+Ref: ficha_clinica.cliente_id - cliente.id
+Ref: ficha_clinica.obra_social_id > obra_social.id
+Ref: ficha_clinica.plan_obra_social_id > plan_obra_social.id
+Ref: entrada_clinica.ficha_id > ficha_clinica.id
+Ref: entrada_clinica.profesional_recurso_id > recurso.id
+Ref: entrada_clinica.turno_id > turno.id
+Ref: consentimiento.cliente_id > cliente.id
+Ref: consentimiento.adjunto_id > adjunto.id
+Ref: plan_rehabilitacion.ficha_id > ficha_clinica.id
+Ref: plan_rehabilitacion.obra_social_id > obra_social.id
+Ref: sesion_ejercicio.plan_id > plan_rehabilitacion.id
+Ref: sesion_ejercicio.turno_id > turno.id
+Ref: vehiculo.cliente_id > cliente.id
+Ref: orden_trabajo.vehiculo_id > vehiculo.id
+Ref: orden_trabajo.cliente_id > cliente.id
+Ref: orden_trabajo.turno_id > turno.id
+Ref: item_orden.orden_id > orden_trabajo.id
+Ref: registro_tiempo.orden_id > orden_trabajo.id
+Ref: registro_tiempo.recurso_id > recurso.id
+Ref: log_auditoria.empresa_id > empresa.id
+Ref: log_auditoria.usuario_id > usuario.id

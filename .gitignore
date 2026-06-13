@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Entorno y secretos (regla 7: secretos fuera del repo)
+.env
+.env.*
+!.env.example
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store

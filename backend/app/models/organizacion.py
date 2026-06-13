@@ -1,0 +1,92 @@
+"""Tenant y organización: Rubro (catálogo global), Empresa, Sucursal, Usuario, SuperAdmin.
+
+Regla 1: TODA tabla de negocio hereda TenantMixin → empresa_id NOT NULL + índice.
+"""
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.models.enums import RolUsuario
+from app.models.tipos import enum_pg
+
+
+class TenantMixin:
+    """empresa_id obligatorio e indexado en toda tabla de negocio (Regla 1)."""
+
+    empresa_id: Mapped[int] = mapped_column(
+        ForeignKey("empresa.id"), nullable=False, index=True
+    )
+
+
+class Rubro(Base):
+    """Catálogo GLOBAL de presets (sin empresa_id). Se puebla en E5/E12."""
+
+    __tablename__ = "rubro"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(40), unique=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    # terminología, campos_cliente, módulos on/off, tipo_turno_default,
+    # servicios sugeridos, régimen de datos sensibles
+    preset: Mapped[dict] = mapped_column(JSONB, default=dict)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Empresa(Base):
+    """El tenant. config_pack overridea el preset del rubro; credenciales encriptadas (Regla 7)."""
+
+    __tablename__ = "empresa"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rubro_id: Mapped[int] = mapped_column(ForeignKey("rubro.id"))
+    nombre: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(80), unique=True)  # turnos360.com/<slug>
+    config_pack: Mapped[dict] = mapped_column(JSONB, default=dict)
+    wa_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)  # Fernet (app.core.crypto)
+    email_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)
+    activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    creada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    rubro: Mapped["Rubro"] = relationship()
+
+
+class Sucursal(TenantMixin, Base):
+    """Prevista en E1, se activa en E16 (D-09)."""
+
+    __tablename__ = "sucursal"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    direccion: Mapped[str | None] = mapped_column(String(200))
+    activa: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Usuario(TenantMixin, Base):
+    __tablename__ = "usuario"
+    __table_args__ = (UniqueConstraint("empresa_id", "email"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))
+    nombre: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200))
+    hash_clave: Mapped[str] = mapped_column(String(300))
+    rol: Mapped[RolUsuario] = mapped_column(enum_pg(RolUsuario, "rol_usuario"))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SuperAdmin(Base):
+    """Login separado del de los negocios (E5). Tabla global, sin tenant."""
+
+    __tablename__ = "super_admin"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200), unique=True)
+    hash_clave: Mapped[str] = mapped_column(String(300))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -1,0 +1,68 @@
+name: turnos360
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-turnos360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-turnos360}
+      POSTGRES_DB: ${POSTGRES_DB:-turnos360}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
+      REDIS_URL: redis://redis:6379/0
+      ENV: dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # El frontend en desarrollo se corre local con `npm run dev` (más rápido).
+  # En E16 se agrega su servicio + nginx con TLS para producción.
+  # frontend:
+  #   build: ../frontend
+  #   ports:
+  #     - "3000:3000"
+
+  # Celery worker + beat: se activan en E6 (mensajería) y E8 (automatizaciones).
+  # worker:
+  #   build: ../backend
+  #   command: celery -A app.worker worker --loglevel=info
+  #   depends_on: [redis, db]
+  # beat:
+  #   build: ../backend
+  #   command: celery -A app.worker beat --loglevel=info
+  #   depends_on: [redis]
+
+volumes:
+  pgdata:
