@@ -7,7 +7,7 @@ En E2 arranca con auth; los CRUDs y el motor de turnos se suman después.
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.routers import auth, clientes
+from app.routers import auth, clientes, recursos
 
 app = FastAPI(
     title="Turnos360 API",
@@ -18,6 +18,7 @@ app = FastAPI(
 # Routers
 app.include_router(auth.router)
 app.include_router(clientes.router)
+app.include_router(recursos.router)
 
 
 @app.get("/", tags=["meta"])
