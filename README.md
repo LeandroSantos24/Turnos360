@@ -97,3 +97,7 @@ git add . && git commit -m "..." && git push
 make down
 
 
+{
+  "email": "dueno@lacueva.com",
+  "clave": "demo1234"
+}

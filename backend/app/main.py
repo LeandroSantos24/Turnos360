@@ -1,19 +1,22 @@
 """Turnos360 — API principal.
 
-Punto de entrada de FastAPI. En E2 se montan acá los routers
-(auth, clientes, recursos, servicios, turnos) y la dependencia
-get_current_empresa() que inyecta empresa_id en toda query.
+Punto de entrada de FastAPI. Acá se montan los routers de cada módulo.
+En E2 arranca con auth; los CRUDs y el motor de turnos se suman después.
 """
 
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.routers import auth
 
 app = FastAPI(
     title="Turnos360 API",
     version="0.1.0",
     description="SaaS multiempresa de gestión de turnos · CRM · WhatsApp · Finanzas · Fidelización",
 )
+
+# Routers
+app.include_router(auth.router)
 
 
 @app.get("/", tags=["meta"])

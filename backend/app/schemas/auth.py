@@ -30,3 +30,14 @@ class TokenData(BaseModel):
     usuario_id: int
     empresa_id: int
     rol: str
+
+class UsuarioMe(BaseModel):
+    """Datos del usuario autenticado que la API puede devolver (sin hash_clave)."""
+
+    id: int
+    nombre: str
+    email: EmailStr
+    rol: str
+    empresa_id: int
+
+    model_config = {"from_attributes": True}
