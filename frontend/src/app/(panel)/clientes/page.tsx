@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback } from "react";
 import { listarClientes, Cliente } from "@/lib/clientes-api";
 import { ApiError } from "@/lib/api";
 import { Input } from "@/components/ui/input";
+import { NuevoClienteDialog } from "./nuevo-cliente-dialog";
 import {
   Table,
   TableBody,
@@ -63,6 +64,7 @@ export default function ClientesPage() {
             {total} {total === 1 ? "cliente" : "clientes"}
           </p>
         </div>
+        <NuevoClienteDialog onCreado={() => cargar(buscar)} />
       </div>
 
       <div className="mb-4 max-w-sm">
