@@ -18,6 +18,8 @@ dependencies = [
     "pyjwt>=2.10",
     "pydantic[email]>=2.10",
     "python-multipart>=0.0.18",
+    "pytest>=8.3",
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]
