@@ -106,6 +106,9 @@ class Servicio(TenantMixin, Base):
     nombre: Mapped[str] = mapped_column(String(120))
     duracion_min: Mapped[int] = mapped_column(Integer)
     buffer_min: Mapped[int] = mapped_column(Integer, default=0)
+    # cada cuántos minutos se ofrecen turnos de este servicio.
+    # corte: 15-20 · color/reflejos: 60 (el barbero maneja varias a la vez)
+    paso_turno_min: Mapped[int] = mapped_column(Integer, default=15)
     precio: Mapped[float | None] = mapped_column(Numeric(12, 2))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 

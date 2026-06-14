@@ -74,6 +74,18 @@ CATEGORIAS = {
 METODOS = [("Efectivo", 0), ("Débito", 1.5), ("Crédito", 4.5),
            ("Transferencia", 0), ("Mercado Pago", 6.0), ("MODO", 2.0)]
 
+# Servicios de la barbería. paso_turno_min = cada cuánto se ofrecen turnos:
+# cortes/barba cada 20 min; color y reflejos cada 60 (atención activa ~45 min,
+# pero el barbero maneja varias clientas con color actuando a la vez).
+SERVICIOS_BARBERIA = [
+    # (nombre, duracion_min, buffer_min, paso_turno_min, precio)
+    ("Corte", 40, 0, 20, 9000),
+    ("Corte + barba", 40, 5, 20, 13000),
+    ("Barba", 15, 0, 15, 6000),
+    ("Color global", 45, 15, 60, 18000),
+    ("Reflejos", 45, 15, 60, 22000),
+]
+
 
 def _base_empresa(db, empresa: Empresa) -> None:
     """Catálogos financieros por empresa (D-14)."""
@@ -159,9 +171,9 @@ def run() -> None:
                 db.add(HorarioRecurso(empresa_id=barberia.id, recurso_id=b.id, dia_semana=dia,
                                       hora_desde=dt.time(9), hora_hasta=dt.time(19)))
         servicios_b = [
-            Servicio(empresa_id=barberia.id, nombre="Corte", duracion_min=30, precio=9000),
-            Servicio(empresa_id=barberia.id, nombre="Corte + barba", duracion_min=45,
-                     buffer_min=5, precio=13000),
+            Servicio(empresa_id=barberia.id, nombre=nombre, duracion_min=dur,
+                     buffer_min=buf, paso_turno_min=paso, precio=precio)
+            for nombre, dur, buf, paso, precio in SERVICIOS_BARBERIA
         ]
         db.add_all(servicios_b)
         db.flush()
@@ -197,7 +209,7 @@ def run() -> None:
                 db.add(HorarioRecurso(empresa_id=consultorio.id, recurso_id=m.id, dia_semana=dia,
                                       hora_desde=dt.time(8), hora_hasta=dt.time(14)))
         servicios_c = [Servicio(empresa_id=consultorio.id, nombre="Consulta", duracion_min=20,
-                                buffer_min=5, precio=15000)]
+                                buffer_min=5, paso_turno_min=20, precio=15000)]
         db.add_all(servicios_c)
         db.flush()
         _base_empresa(db, consultorio)
