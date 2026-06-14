@@ -1,0 +1,150 @@
+"use client";
+
+/**
+ * Pantalla de Recursos (/recursos).
+ * Lo reservable de cada negocio: personas, boxes, equipos.
+ * Con buscador y orden alfabético (filtrado en el navegador, son pocos).
+ */
+
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { listarRecursos, Recurso } from "@/lib/recursos-api";
+import { ApiError } from "@/lib/api";
+import { NuevoRecursoDialog } from "./nuevo-recurso-dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+// Etiquetas lindas para cada tipo
+const TIPO_LABEL: Record<string, string> = {
+  persona: "Persona",
+  box: "Box",
+  equipo: "Equipo",
+};
+
+export default function RecursosPage() {
+  const [recursos, setRecursos] = useState<Recurso[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [buscar, setBuscar] = useState("");
+  const [orden, setOrden] = useState<"asc" | "desc">("asc");
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setError(null);
+    try {
+      const data = await listarRecursos();
+      setRecursos(data.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Error al cargar");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const visibles = useMemo(() => {
+    const texto = buscar.trim().toLowerCase();
+    return recursos
+      .filter((r) => r.nombre.toLowerCase().includes(texto))
+      .sort((a, b) => {
+        const cmp = a.nombre.localeCompare(b.nombre, "es");
+        return orden === "asc" ? cmp : -cmp;
+      });
+  }, [recursos, buscar, orden]);
+
+  function alternarOrden() {
+    setOrden((o) => (o === "asc" ? "desc" : "asc"));
+  }
+
+  return (
+    <div className="p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Recursos</h1>
+          <p className="text-sm text-muted-foreground">
+            {visibles.length} de {recursos.length}{" "}
+            {recursos.length === 1 ? "recurso" : "recursos"}
+          </p>
+        </div>
+        <NuevoRecursoDialog onCreado={cargar} />
+      </div>
+
+      <div className="mb-4 max-w-sm">
+        <Input
+          placeholder="Buscar recurso…"
+          value={buscar}
+          onChange={(e) => setBuscar(e.target.value)}
+        />
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {cargando && !error && (
+        <p className="text-sm text-muted-foreground">Cargando recursos…</p>
+      )}
+
+      {!cargando && !error && visibles.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {buscar
+            ? "No se encontraron recursos con ese nombre."
+            : "Todavía no hay recursos. Creá el primero."}
+        </p>
+      )}
+
+      {!cargando && !error && visibles.length > 0 && (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead
+                  className="cursor-pointer select-none hover:text-foreground"
+                  onClick={alternarOrden}
+                >
+                  Nombre {orden === "asc" ? "↑" : "↓"}
+                </TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Especialidades</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibles.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">
+                      {r.color && (
+                        <span
+                          className="inline-block h-3 w-3 rounded-full"
+                          style={{ backgroundColor: r.color }}
+                        />
+                      )}
+                      {r.nombre}
+                    </span>
+                  </TableCell>
+                  <TableCell>{TIPO_LABEL[r.tipo] ?? r.tipo}</TableCell>
+                  <TableCell>
+                    {r.especialidades.length > 0
+                      ? r.especialidades.map((e) => e.nombre).join(", ")
+                      : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
