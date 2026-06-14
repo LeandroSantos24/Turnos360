@@ -48,12 +48,20 @@ services:
       redis:
         condition: service_healthy
 
-  # El frontend en desarrollo se corre local con `npm run dev` (más rápido).
-  # En E16 se agrega su servicio + nginx con TLS para producción.
-  # frontend:
-  #   build: ../frontend
-  #   ports:
-  #     - "3000:3000"
+  frontend:
+    build:
+      context: ../frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
 
   # Celery worker + beat: se activan en E6 (mensajería) y E8 (automatizaciones).
   # worker:

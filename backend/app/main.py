@@ -5,6 +5,7 @@ En E2 arranca con auth; los CRUDs y el motor de turnos se suman después.
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos
@@ -15,6 +16,16 @@ app = FastAPI(
     description="SaaS multiempresa de gestión de turnos · CRM · WhatsApp · Finanzas · Fidelización",
 )
 
+# CORS: permite que el frontend (localhost:3000) llame a esta API.
+# En producción se restringe a los dominios reales (E16).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Routers
 app.include_router(auth.router)
 app.include_router(clientes.router)
@@ -23,6 +34,7 @@ app.include_router(agenda.horarios_router)
 app.include_router(agenda.excepciones_router)
 app.include_router(turnos.router)
 app.include_router(servicios.router)
+
 
 @app.get("/", tags=["meta"])
 def root() -> dict:
