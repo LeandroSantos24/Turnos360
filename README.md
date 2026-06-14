@@ -96,8 +96,3 @@ git add . && git commit -m "..." && git push
 # 8 Apagar 
 make down
 
-
-{
-  "email": "dueno@lacueva.com",
-  "clave": "demo1234"
-}
