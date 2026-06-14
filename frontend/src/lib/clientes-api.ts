@@ -38,12 +38,17 @@ export interface ClienteCrear {
   canal_adquisicion?: string;
 }
 
-/** Lista los clientes, con búsqueda opcional. */
-export function listarClientes(buscar?: string): Promise<ClientesPagina> {
+/** Lista clientes con búsqueda y paginación. */
+export function listarClientes(
+  buscar?: string,
+  offset = 0,
+  limite = 10,
+): Promise<ClientesPagina> {
   const params = new URLSearchParams();
   if (buscar) params.set("buscar", buscar);
-  const query = params.toString();
-  return api.get<ClientesPagina>(`/clientes${query ? `?${query}` : ""}`);
+  params.set("offset", String(offset));
+  params.set("limite", String(limite));
+  return api.get<ClientesPagina>(`/clientes?${params.toString()}`);
 }
 
 /** Crea un cliente. */
