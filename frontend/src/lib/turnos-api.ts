@@ -51,3 +51,15 @@ export function listarTurnos(
   });
   return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
 }
+
+/**
+ * Lista TODOS los turnos del día (de todos los recursos), para las métricas.
+ * No filtra por recurso: cuenta el total del local.
+ */
+export function listarTurnosDelDia(
+  desde: string,
+  hasta: string,
+): Promise<TurnosPagina> {
+  const params = new URLSearchParams({ desde, hasta });
+  return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
+}

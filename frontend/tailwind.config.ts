@@ -16,6 +16,7 @@ const config: Config = {
     "bg-green-100", "text-green-900", "border-green-300",
     "bg-gray-100", "text-gray-500", "border-gray-300", "line-through",
     "bg-red-50", "text-red-700", "border-red-200",
+    "text-blue-600", "text-amber-600", "text-green-600",
   ],
   theme: {
     extend: {

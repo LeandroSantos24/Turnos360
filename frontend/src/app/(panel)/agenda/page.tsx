@@ -1,19 +1,29 @@
 "use client";
 
 /**
- * Agenda visual (/agenda) — Etapa B: con los turnos pintados.
+ * Agenda visual (/agenda) — vista de lista (una fila por turno).
  *
- * Trae los turnos del recurso para el día elegido y los dibuja como bloques
- * posicionados sobre la grilla, según su hora de inicio y duración.
+ * En vez de posicionar bloques por hora (frágil y se solapan), mostramos los
+ * turnos como filas ordenadas por horario, una debajo de la otra. Cada fila:
+ * hora a la izquierda + barra de color + avatar + cliente y servicio.
+ * Imposible que se descuadre: es flujo natural, no posición absoluta.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { addDays, format, startOfDay, endOfDay } from "date-fns";
+import { isToday } from "date-fns/isToday";
 import { es } from "date-fns/locale";
 
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
-import { listarTurnos, Turno } from "@/lib/turnos-api";
-import { colorEstado, labelEstado, horaDe } from "@/lib/turno-visual";
+import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
+import { MetricasDia } from "./metricas-dia";
+import {
+  colorEstadoHex,
+  estaInactivo,
+  labelEstado,
+  horaDe,
+  inicialDe,
+} from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,46 +34,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const HORA_INICIO = 9;
-const HORA_FIN = 19;
-const FRANJA_MIN = 30;
-const ALTO_FRANJA = 48; // píxeles por franja de 30 min
-
-function generarFranjas(): string[] {
-  const franjas: string[] = [];
-  for (let h = HORA_INICIO; h < HORA_FIN; h++) {
-    for (let m = 0; m < 60; m += FRANJA_MIN) {
-      franjas.push(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
-      );
-    }
-  }
-  return franjas;
-}
-
-/**
- * Calcula la posición vertical (top) y la altura de un turno en píxeles,
- * según su hora de inicio y fin relativas al comienzo de la grilla.
- */
-function posicionTurno(turno: Turno): { top: number; alto: number } | null {
-  if (!turno.fecha_inicio || !turno.fecha_fin) return null;
-
-  const ini = new Date(turno.fecha_inicio);
-  const fin = new Date(turno.fecha_fin);
-
-  // Minutos desde el inicio de la grilla (9:00)
-  const minDesdeInicio =
-    (ini.getHours() - HORA_INICIO) * 60 + ini.getMinutes();
-  const duracionMin = (fin.getTime() - ini.getTime()) / 60000;
-
-  // Si el turno cae fuera del rango visible, no lo mostramos
-  if (minDesdeInicio < 0) return null;
-
-  const pxPorMin = ALTO_FRANJA / FRANJA_MIN;
-  return {
-    top: minDesdeInicio * pxPorMin,
-    alto: Math.max(duracionMin * pxPorMin, 24), // mínimo 24px para que se lea
-  };
+/** Ordena los turnos por hora de inicio. */
+function ordenarPorHora(turnos: Turno[]): Turno[] {
+  return [...turnos].sort((a, b) => {
+    const ta = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : 0;
+    const tb = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : 0;
+    return ta - tb;
+  });
 }
 
 export default function AgendaPage() {
@@ -71,12 +48,12 @@ export default function AgendaPage() {
   const [recursoId, setRecursoId] = useState<number | null>(null);
   const [dia, setDia] = useState<Date>(startOfDay(new Date()));
   const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [turnosDia, setTurnosDia] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const franjas = generarFranjas();
+  const hoyEs = isToday(dia);
 
-  // Cargar recursos (selector de barbero)
   const cargarRecursos = useCallback(async () => {
     try {
       const data = await listarRecursos();
@@ -94,7 +71,6 @@ export default function AgendaPage() {
     cargarRecursos();
   }, [cargarRecursos]);
 
-  // Cargar turnos del día/recurso elegido
   const cargarTurnos = useCallback(async () => {
     if (recursoId === null) return;
     setCargando(true);
@@ -102,8 +78,12 @@ export default function AgendaPage() {
     try {
       const desde = startOfDay(dia).toISOString();
       const hasta = endOfDay(dia).toISOString();
-      const data = await listarTurnos(recursoId, desde, hasta);
-      setTurnos(data.items);
+      const [delRecurso, delDia] = await Promise.all([
+        listarTurnos(recursoId, desde, hasta),
+        listarTurnosDelDia(desde, hasta),
+      ]);
+      setTurnos(ordenarPorHora(delRecurso.items));
+      setTurnosDia(delDia.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar turnos");
     } finally {
@@ -119,6 +99,7 @@ export default function AgendaPage() {
 
   return (
     <div className="p-8">
+      {/* Encabezado */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Agenda</h1>
 
@@ -142,21 +123,37 @@ export default function AgendaPage() {
           )}
 
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => setDia((d) => addDays(d, -1))}>
-              ◄
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setDia((d) => addDays(d, -1))}
+              aria-label="Día anterior"
+            >
+              ‹
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setDia(startOfDay(new Date()))}>
+            <Button
+              variant={hoyEs ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDia(startOfDay(new Date()))}
+            >
               Hoy
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setDia((d) => addDays(d, 1))}>
-              ►
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setDia((d) => addDays(d, 1))}
+              aria-label="Día siguiente"
+            >
+              ›
             </Button>
           </div>
         </div>
       </div>
 
-      <p className="mb-4 text-sm capitalize text-muted-foreground">
-        {format(dia, "EEEE d 'de' MMMM yyyy", { locale: es })}
+      <MetricasDia turnos={turnosDia} />
+
+      <p className="mb-4 text-sm font-medium capitalize text-muted-foreground">
+        {format(dia, "EEEE d 'de' MMMM", { locale: es })}
         {recursoActual && ` · ${recursoActual.nombre}`}
         {cargando && " · cargando…"}
       </p>
@@ -167,69 +164,86 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* La grilla, con los turnos posicionados encima */}
-      <div className="overflow-hidden rounded-md border">
-        <div className="relative flex">
-          {/* Columna de horas */}
-          <div className="w-20 shrink-0 border-r bg-muted/20">
-            {franjas.map((hora) => (
+      {/* Lista de turnos: una fila por turno, en orden de horario */}
+      {!cargando && turnos.length === 0 ? (
+        <p className="rounded-lg border bg-background p-8 text-center text-sm text-muted-foreground">
+          {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border bg-background">
+          {turnos.map((turno, i) => {
+            const color = colorEstadoHex(turno.estado);
+            const inactivo = estaInactivo(turno.estado);
+            return (
               <div
-                key={hora}
-                className="px-3 text-sm text-muted-foreground"
-                style={{ height: ALTO_FRANJA, lineHeight: `${ALTO_FRANJA}px` }}
+                key={turno.id}
+                className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/40 ${
+                  i > 0 ? "border-t" : ""
+                }`}
+                style={{ opacity: inactivo ? 0.6 : 1 }}
               >
-                {hora}
-              </div>
-            ))}
-          </div>
-
-          {/* Área de turnos */}
-          <div className="relative flex-1">
-            {/* Líneas de fondo (una por franja) */}
-            {franjas.map((hora) => (
-              <div
-                key={hora}
-                className="border-b last:border-b-0"
-                style={{ height: ALTO_FRANJA }}
-              />
-            ))}
-
-            {/* Los turnos, posicionados de forma absoluta */}
-            {turnos.map((turno) => {
-              const pos = posicionTurno(turno);
-              if (!pos) return null;
-              return (
-                <div
-                  key={turno.id}
-                  className={`absolute left-1 right-1 overflow-hidden rounded border px-2 py-1 text-xs ${colorEstado(
-                    turno.estado,
-                  )}`}
-                  style={{ top: pos.top + 1, height: pos.alto - 2 }}
-                  title={`${turno.cliente_nombre} · ${labelEstado(turno.estado)}`}
-                >
-                  <div className="font-medium">
-                    {turno.fecha_inicio && horaDe(turno.fecha_inicio)}{" "}
-                    {turno.cliente_nombre}
-                  </div>
-                  {turno.servicio_nombre && (
-                    <div className="truncate opacity-80">
-                      {turno.servicio_nombre}
-                      {turno.es_sobreturno && " · sobreturno"}
-                    </div>
-                  )}
+                {/* Hora a la izquierda */}
+                <div className="flex w-24 shrink-0 flex-col items-end justify-center border-r px-3 py-3">
+                  <span className="text-sm font-semibold">
+                    {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {turno.fecha_fin && horaDe(turno.fecha_fin)}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
-      {/* Leyenda de estados */}
-      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                {/* Barra de color (estado) */}
+                <div
+                  className="w-1.5 shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+
+                {/* Contenido */}
+                <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
+                  {/* Avatar */}
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                    style={{ backgroundColor: color }}
+                  >
+                    {inicialDe(turno.cliente_nombre)}
+                  </div>
+                  {/* Cliente + servicio */}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span
+                      className={`truncate text-sm font-semibold ${
+                        inactivo ? "line-through" : ""
+                      }`}
+                    >
+                      {turno.cliente_nombre}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {turno.servicio_nombre ?? "Sin servicio"}
+                      {turno.es_sobreturno && " · sobreturno"}
+                    </span>
+                  </div>
+                  {/* Estado (etiqueta a la derecha) */}
+                  <span
+                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+                    style={{ backgroundColor: `${color}22`, color: color }}
+                  >
+                    {labelEstado(turno.estado)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Leyenda */}
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
         {(["pendiente", "confirmado", "en_curso", "finalizado", "cancelado"] as const).map(
           (e) => (
             <span key={e} className="flex items-center gap-1.5">
-              <span className={`inline-block h-3 w-3 rounded border ${colorEstado(e)}`} />
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: colorEstadoHex(e) }}
+              />
               {labelEstado(e)}
             </span>
           ),
