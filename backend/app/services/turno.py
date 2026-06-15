@@ -58,6 +58,7 @@ def listar(
     empresa_id: int,
     *,
     recurso_id: int | None = None,
+    cliente_id: int | None = None,
     desde: dt.datetime | None = None,
     hasta: dt.datetime | None = None,
     estado: EstadoTurno | None = None,
@@ -69,6 +70,8 @@ def listar(
     condiciones = [Turno.empresa_id == empresa_id]
     if recurso_id is not None:
         condiciones.append(Turno.recurso_id == recurso_id)
+    if cliente_id is not None:
+        condiciones.append(Turno.cliente_id == cliente_id)
     if desde is not None:
         condiciones.append(Turno.fecha_inicio >= desde)
     if hasta is not None:

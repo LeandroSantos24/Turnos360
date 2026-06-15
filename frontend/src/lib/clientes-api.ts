@@ -60,3 +60,8 @@ export function crearCliente(datos: ClienteCrear): Promise<Cliente> {
 export function desactivarCliente(id: number): Promise<void> {
   return api.delete<void>(`/clientes/${id}`);
 }
+
+/** Trae un cliente puntual por su id. */
+export function obtenerCliente(id: number): Promise<Cliente> {
+  return api.get<Cliente>(`/clientes/${id}`);
+}

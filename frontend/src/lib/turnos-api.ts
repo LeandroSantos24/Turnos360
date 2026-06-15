@@ -75,3 +75,9 @@ export function cambiarEstadoTurno(
     motivo_cancelacion: motivo,
   });
 }
+
+/** Lista todos los turnos de un cliente (su historial completo). */
+export function listarTurnosDeCliente(clienteId: number): Promise<TurnosPagina> {
+  const params = new URLSearchParams({ cliente_id: String(clienteId) });
+  return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
+}
