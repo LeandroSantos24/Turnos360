@@ -7,6 +7,16 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // safelist: clases de color que se arman dinámicamente (en colorEstado).
+  // Tailwind no las detecta en el código, así que las incluimos a la fuerza.
+  safelist: [
+    "bg-amber-100", "text-amber-900", "border-amber-300",
+    "bg-blue-100", "text-blue-900", "border-blue-300",
+    "bg-purple-100", "text-purple-900", "border-purple-300",
+    "bg-green-100", "text-green-900", "border-green-300",
+    "bg-gray-100", "text-gray-500", "border-gray-300", "line-through",
+    "bg-red-50", "text-red-700", "border-red-200",
+  ],
   theme: {
     extend: {
       colors: {
