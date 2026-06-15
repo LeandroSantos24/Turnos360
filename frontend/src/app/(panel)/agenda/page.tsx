@@ -3,10 +3,9 @@
 /**
  * Agenda visual (/agenda) — vista de lista (una fila por turno).
  *
- * En vez de posicionar bloques por hora (frágil y se solapan), mostramos los
- * turnos como filas ordenadas por horario, una debajo de la otra. Cada fila:
- * hora a la izquierda + barra de color + avatar + cliente y servicio.
- * Imposible que se descuadre: es flujo natural, no posición absoluta.
+ * Los turnos se muestran como filas ordenadas por horario, una debajo de la
+ * otra. Clic en una fila abre el panel de detalle (TurnoDetalle) para
+ * gestionar el turno y entrar a la ficha del cliente.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -17,6 +16,7 @@ import { es } from "date-fns/locale";
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
 import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
 import { MetricasDia } from "./metricas-dia";
+import { TurnoDetalle } from "./turno-detalle";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -51,6 +51,7 @@ export default function AgendaPage() {
   const [turnosDia, setTurnosDia] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnoSel, setTurnoSel] = useState<Turno | null>(null);
 
   const hoyEs = isToday(dia);
 
@@ -177,6 +178,7 @@ export default function AgendaPage() {
             return (
               <div
                 key={turno.id}
+                onClick={() => setTurnoSel(turno)}
                 className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/40 ${
                   i > 0 ? "border-t" : ""
                 }`}
@@ -249,6 +251,14 @@ export default function AgendaPage() {
           ),
         )}
       </div>
+
+      {/* Panel de detalle del turno (fuera de la leyenda, a nivel raíz) */}
+      <TurnoDetalle
+        turno={turnoSel}
+        abierto={turnoSel !== null}
+        onCerrar={() => setTurnoSel(null)}
+        onCambio={cargarTurnos}
+      />
     </div>
   );
 }

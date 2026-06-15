@@ -63,3 +63,15 @@ export function listarTurnosDelDia(
   const params = new URLSearchParams({ desde, hasta });
   return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
 }
+
+/** Cambia el estado de un turno (confirmar, cancelar, en curso, etc.). */
+export function cambiarEstadoTurno(
+  turnoId: number,
+  estado: EstadoTurno,
+  motivo?: string,
+): Promise<Turno> {
+  return api.patch<Turno>(`/turnos/${turnoId}/estado`, {
+    estado,
+    motivo_cancelacion: motivo,
+  });
+}
