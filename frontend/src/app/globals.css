@@ -89,6 +89,12 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: "Syne", system-ui, sans-serif;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+
+  /* Números parejos (misma altura y ancho) en todo el panel */
+  .nums {
+    font-variant-numeric: lining-nums tabular-nums;
   }
 }
 

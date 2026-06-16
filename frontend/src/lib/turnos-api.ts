@@ -81,3 +81,17 @@ export function listarTurnosDeCliente(clienteId: number): Promise<TurnosPagina> 
   const params = new URLSearchParams({ cliente_id: String(clienteId) });
   return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
 }
+
+/** Datos para crear un turno. */
+export interface TurnoCrear {
+  cliente_id: number;
+  servicio_id: number;
+  recurso_id: number;
+  fecha_inicio: string; // ISO
+  es_sobreturno?: boolean;
+}
+
+/** Crea un turno. El backend valida disponibilidad (409 si choca). */
+export function crearTurno(datos: TurnoCrear): Promise<Turno> {
+  return api.post<Turno>("/turnos", datos);
+}

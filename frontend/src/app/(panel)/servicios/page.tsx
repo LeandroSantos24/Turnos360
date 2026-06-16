@@ -1,11 +1,7 @@
 "use client";
 
 /**
- * Pantalla de Servicios (/servicios).
- * Lista lo que ofrece el negocio, con buscador y orden alfabético por clic.
- *
- * Como los servicios son pocos por negocio, el filtrado y el orden se hacen
- * en el navegador (instantáneo, sin volver a llamar a la API).
+ * Pantalla de Servicios (/servicios). Buscador + orden alfabético. Estilo uniforme.
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -26,8 +22,6 @@ export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Estado del buscador y del orden (asc = A→Z, desc = Z→A)
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
 
@@ -48,8 +42,6 @@ export default function ServiciosPage() {
     cargar();
   }, [cargar]);
 
-  // Lista filtrada + ordenada. useMemo la recalcula solo cuando cambia
-  // algo de lo que depende (los servicios, el texto o el orden), no en cada render.
   const visibles = useMemo(() => {
     const texto = buscar.trim().toLowerCase();
     return servicios
@@ -60,7 +52,6 @@ export default function ServiciosPage() {
       });
   }, [servicios, buscar, orden]);
 
-  // Alterna el orden al hacer clic en el encabezado "Servicio"
   function alternarOrden() {
     setOrden((o) => (o === "asc" ? "desc" : "asc"));
   }
@@ -69,9 +60,10 @@ export default function ServiciosPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Servicios</h1>
+          <h1 className="text-2xl font-bold">Servicios</h1>
           <p className="text-sm text-muted-foreground">
-            {visibles.length} de {servicios.length}{" "}
+            <span className="tabular-nums">{visibles.length}</span> de{" "}
+            <span className="tabular-nums">{servicios.length}</span>{" "}
             {servicios.length === 1 ? "servicio" : "servicios"}
           </p>
         </div>
@@ -87,7 +79,7 @@ export default function ServiciosPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -97,18 +89,20 @@ export default function ServiciosPage() {
       )}
 
       {!cargando && !error && visibles.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {buscar
-            ? "No se encontraron servicios con ese nombre."
-            : "Todavía no hay servicios. Creá el primero."}
-        </p>
+        <div className="rounded-2xl border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {buscar
+              ? "No se encontraron servicios con ese nombre."
+              : "Todavía no hay servicios. Creá el primero."}
+          </p>
+        </div>
       )}
 
       {!cargando && !error && visibles.length > 0 && (
-        <div className="rounded-md border">
+        <div className="overflow-hidden rounded-2xl border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableHead
                   className="cursor-pointer select-none hover:text-foreground"
                   onClick={alternarOrden}
@@ -124,9 +118,13 @@ export default function ServiciosPage() {
               {visibles.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.nombre}</TableCell>
-                  <TableCell>{s.duracion_min} min</TableCell>
-                  <TableCell>{s.paso_turno_min} min</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="tabular-nums">
+                    {s.duracion_min} min
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {s.paso_turno_min} min
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
                     {s.precio != null
                       ? `$${Number(s.precio).toLocaleString("es-AR")}`
                       : "—"}

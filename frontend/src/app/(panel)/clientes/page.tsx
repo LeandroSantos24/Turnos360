@@ -2,7 +2,7 @@
 
 /**
  * Pantalla de Clientes (/clientes).
- * Lista con búsqueda y paginación servidor (de a 10).
+ * Lista con búsqueda y paginación servidor (de a 10). Estilo uniforme.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -48,13 +48,11 @@ export default function ClientesPage() {
     }
   }, []);
 
-  // Carga inicial + cuando cambia la página.
   useEffect(() => {
     cargar(buscar, pagina);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagina]);
 
-  // Búsqueda con debounce. Al buscar, volvemos a la página 0.
   useEffect(() => {
     const t = setTimeout(() => {
       setPagina(0);
@@ -68,9 +66,10 @@ export default function ClientesPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Clientes</h1>
+          <h1 className="text-2xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            {total} {total === 1 ? "cliente" : "clientes"}
+            <span className="tabular-nums">{total}</span>{" "}
+            {total === 1 ? "cliente" : "clientes"}
           </p>
         </div>
         <NuevoClienteDialog onCreado={() => cargar(buscar, pagina)} />
@@ -85,7 +84,7 @@ export default function ClientesPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -95,19 +94,21 @@ export default function ClientesPage() {
       )}
 
       {!cargando && !error && clientes.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {buscar
-            ? "No se encontraron clientes con ese criterio."
-            : "Todavía no hay clientes cargados."}
-        </p>
+        <div className="rounded-2xl border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {buscar
+              ? "No se encontraron clientes con ese criterio."
+              : "Todavía no hay clientes cargados."}
+          </p>
+        </div>
       )}
 
       {!cargando && !error && clientes.length > 0 && (
         <>
-          <div className="rounded-md border">
+          <div className="overflow-hidden rounded-2xl border bg-card">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead>Nombre</TableHead>
                   <TableHead>Teléfono</TableHead>
                   <TableHead>Email</TableHead>
@@ -120,8 +121,12 @@ export default function ClientesPage() {
                     <TableCell className="font-medium">
                       {c.nombre} {c.apellido ?? ""}
                     </TableCell>
-                    <TableCell>{c.telefono ?? "—"}</TableCell>
-                    <TableCell>{c.email ?? "—"}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {c.telefono ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {c.email ?? "—"}
+                    </TableCell>
                     <TableCell>{c.canal_adquisicion ?? "—"}</TableCell>
                   </TableRow>
                 ))}

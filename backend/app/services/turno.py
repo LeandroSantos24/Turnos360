@@ -119,10 +119,13 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
     # 2. El sistema calcula la fecha de fin (no la manda el cliente)
     fecha_fin = datos.fecha_inicio + dt.timedelta(minutes=servicio.duracion_min)
 
-    # 3. Validar disponibilidad con el motor (salvo que sea sobreturno)
+    # 3. Validar disponibilidad con el motor (salvo que sea sobreturno).
+    # Le pasamos el grupo_agenda del servicio: solo bloquea con turnos del
+    # mismo carril (corte vs tintura vs barba conviven a la misma hora).
     if not datos.es_sobreturno:
         libre = disp.esta_disponible(
-            db, empresa_id, datos.recurso_id, datos.fecha_inicio, fecha_fin
+            db, empresa_id, datos.recurso_id, datos.fecha_inicio, fecha_fin,
+            grupo_agenda=servicio.grupo_agenda,
         )
         if not libre:
             raise HTTPException(
@@ -174,11 +177,16 @@ def mover(
     duracion = (turno.fecha_fin - turno.fecha_inicio) if turno.fecha_fin else dt.timedelta(minutes=30)
     nueva_fin = datos.fecha_inicio + duracion
 
+    # grupo de agenda del servicio del turno (para la regla de carriles)
+    serv_turno = db.get(Servicio, turno.servicio_id) if turno.servicio_id else None
+    grupo_turno = serv_turno.grupo_agenda if serv_turno else None
+
     # validar el nuevo hueco, excluyendo este mismo turno
     if not turno.es_sobreturno:
         libre = disp.esta_disponible(
             db, empresa_id, nuevo_recurso_id, datos.fecha_inicio, nueva_fin,
             excluir_turno_id=turno.id,
+            grupo_agenda=grupo_turno,
         )
         if not libre:
             raise HTTPException(

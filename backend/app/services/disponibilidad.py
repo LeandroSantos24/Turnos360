@@ -9,6 +9,10 @@ estas funciones para validar antes de crear un turno.
 
 Regla matemática central (solapamiento de intervalos):
     [ini_a, fin_a) y [ini_b, fin_b) se pisan si  ini_a < fin_b  Y  ini_b < fin_a.
+
+Regla de carriles (grupo_agenda): dos turnos solo se bloquean si se pisan en el
+tiempo Y comparten el mismo grupo_agenda. Servicios de grupos distintos conviven
+a la misma hora (corte + tintura + barba en paralelo).
 """
 
 import datetime as dt
@@ -34,6 +38,26 @@ def hay_solapamiento(
 ) -> bool:
     """True si los intervalos [ini_a, fin_a) y [ini_b, fin_b) se pisan."""
     return ini_a < fin_b and ini_b < fin_a
+
+
+def _bloquean_entre_si(
+    ini_a: dt.datetime, fin_a: dt.datetime, grupo_a: str | None,
+    ini_b: dt.datetime, fin_b: dt.datetime, grupo_b: str | None,
+) -> bool:
+    """True si dos turnos se bloquean: se pisan en el tiempo Y comparten carril.
+
+    Regla de carriles: servicios de grupos distintos conviven a la misma hora
+    (corte + tintura + barba en paralelo). Solo chocan si están en el mismo
+    grupo_agenda. Si alguno no tiene grupo (None), se comporta como antes:
+    bloquea con cualquiera que se pise.
+    """
+    if not hay_solapamiento(ini_a, fin_a, ini_b, fin_b):
+        return False
+    # Si alguno no tiene grupo definido, bloquea (comportamiento conservador)
+    if grupo_a is None or grupo_b is None:
+        return True
+    # Mismo grupo = mismo carril = se bloquean
+    return grupo_a == grupo_b
 
 
 def _fecha_bloqueada(
@@ -82,8 +106,14 @@ def _franjas_del_dia(
 
 def _turnos_ocupados(
     db: Session, empresa_id: int, recurso_id: int, fecha: dt.date
-) -> list[tuple[dt.datetime, dt.datetime]]:
-    """Intervalos [inicio, fin) de los turnos que ocupan al recurso ese día."""
+) -> list[tuple[dt.datetime, dt.datetime, str | None]]:
+    """Intervalos [inicio, fin, grupo_agenda) de los turnos que ocupan al recurso ese día.
+
+    El grupo_agenda viene del servicio del turno: dos turnos solo se bloquean
+    entre sí si comparten el mismo grupo (corte vs tintura vs barba son carriles
+    paralelos que conviven). Un turno cuyo servicio no tiene grupo (None) bloquea
+    con cualquiera (comportamiento clásico).
+    """
     inicio_dia = dt.datetime.combine(fecha, dt.time.min, tzinfo=dt.timezone.utc)
     fin_dia = inicio_dia + dt.timedelta(days=1)
     turnos = db.scalars(
@@ -95,7 +125,17 @@ def _turnos_ocupados(
             Turno.fecha_inicio < fin_dia,
         )
     )
-    return [(t.fecha_inicio, t.fecha_fin) for t in turnos if t.fecha_inicio and t.fecha_fin]
+    resultado = []
+    for t in turnos:
+        if not (t.fecha_inicio and t.fecha_fin):
+            continue
+        # Traer el grupo del servicio de este turno
+        grupo = None
+        if t.servicio_id:
+            serv = db.get(Servicio, t.servicio_id)
+            grupo = serv.grupo_agenda if serv else None
+        resultado.append((t.fecha_inicio, t.fecha_fin, grupo))
+    return resultado
 
 
 def calcular_huecos(
@@ -107,15 +147,18 @@ def calcular_huecos(
     *,
     buffer_min: int = 0,
     paso_min: int = 15,
+    grupo_agenda: str | None = None,
 ) -> list[dt.datetime]:
     """Devuelve los horarios de INICIO posibles para un turno ese día.
 
     Un horario es válido si:
     - cae dentro de una franja de trabajo del recurso,
     - el turno completo (duración + buffer) entra en la franja,
-    - no se pisa con ningún turno ya ocupado.
+    - no se pisa con ningún turno ocupado del MISMO carril (grupo_agenda).
 
     paso_min: cada cuántos minutos se ofrecen turnos (15 = :00, :15, :30, :45).
+    grupo_agenda: el carril del servicio que se está buscando. Solo se bloquea
+    con turnos ocupados del mismo grupo.
     """
     # Día bloqueado por excepción → sin huecos
     if _fecha_bloqueada(db, empresa_id, recurso_id, fecha):
@@ -137,10 +180,10 @@ def calcular_huecos(
         actual = inicio
         while actual + dt.timedelta(minutes=total_min) <= limite:
             fin = actual + dt.timedelta(minutes=duracion_min)
-            # ¿Choca con algún turno ocupado?
+            # ¿Choca con algún turno ocupado del mismo carril?
             choca = any(
-                hay_solapamiento(actual, fin, ini_o, fin_o)
-                for ini_o, fin_o in ocupados
+                _bloquean_entre_si(actual, fin, grupo_agenda, ini_o, fin_o, grupo_o)
+                for ini_o, fin_o, grupo_o in ocupados
             )
             if not choca:
                 huecos.append(actual)
@@ -157,14 +200,17 @@ def esta_disponible(
     fin: dt.datetime,
     *,
     excluir_turno_id: int | None = None,
+    grupo_agenda: str | None = None,
 ) -> bool:
     """¿Puede reservarse un turno [inicio, fin) en este recurso? (validación exacta).
 
     La usa el CRUD de turnos antes de crear/mover. Chequea bloqueos, que entre
-    en una franja de trabajo, y que no se pise con otro turno.
+    en una franja de trabajo, y que no se pise con otro turno del mismo carril.
 
     excluir_turno_id: al MOVER un turno, se excluye a sí mismo del chequeo
     (si no, chocaría consigo mismo).
+    grupo_agenda: el carril del servicio del turno. Solo se bloquea con turnos
+    ocupados del mismo grupo (corte vs tintura vs barba conviven).
     """
     fecha = inicio.date()
 
@@ -183,8 +229,8 @@ def esta_disponible(
     if not dentro_de_franja:
         return False
 
-    # 3. ¿Choca con un turno ya ocupado? (excluyendo el propio si se está moviendo)
-    for ini_o, fin_o in _turnos_ocupados(db, empresa_id, recurso_id, fecha):
+    # 3. ¿Choca con un turno ya ocupado del mismo carril? (excluyendo el propio si se mueve)
+    for ini_o, fin_o, grupo_o in _turnos_ocupados(db, empresa_id, recurso_id, fecha):
         # nota: _turnos_ocupados no filtra por id; el filtro de exclusión va acá
         if excluir_turno_id is not None:
             turno_o = db.scalar(
@@ -196,7 +242,7 @@ def esta_disponible(
             )
             if turno_o and turno_o.id == excluir_turno_id:
                 continue
-        if hay_solapamiento(inicio, fin, ini_o, fin_o):
+        if _bloquean_entre_si(inicio, fin, grupo_agenda, ini_o, fin_o, grupo_o):
             return False
 
     return True

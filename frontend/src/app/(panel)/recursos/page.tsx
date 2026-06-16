@@ -1,9 +1,7 @@
 "use client";
 
 /**
- * Pantalla de Recursos (/recursos).
- * Lo reservable de cada negocio: personas, boxes, equipos.
- * Con buscador y orden alfabético (filtrado en el navegador, son pocos).
+ * Pantalla de Recursos (/recursos). Buscador + orden. Estilo uniforme.
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -20,7 +18,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Etiquetas lindas para cada tipo
 const TIPO_LABEL: Record<string, string> = {
   persona: "Persona",
   box: "Box",
@@ -69,9 +66,10 @@ export default function RecursosPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Recursos</h1>
+          <h1 className="text-2xl font-bold">Recursos</h1>
           <p className="text-sm text-muted-foreground">
-            {visibles.length} de {recursos.length}{" "}
+            <span className="tabular-nums">{visibles.length}</span> de{" "}
+            <span className="tabular-nums">{recursos.length}</span>{" "}
             {recursos.length === 1 ? "recurso" : "recursos"}
           </p>
         </div>
@@ -87,7 +85,7 @@ export default function RecursosPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -97,18 +95,20 @@ export default function RecursosPage() {
       )}
 
       {!cargando && !error && visibles.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {buscar
-            ? "No se encontraron recursos con ese nombre."
-            : "Todavía no hay recursos. Creá el primero."}
-        </p>
+        <div className="rounded-2xl border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {buscar
+              ? "No se encontraron recursos con ese nombre."
+              : "Todavía no hay recursos. Creá el primero."}
+          </p>
+        </div>
       )}
 
       {!cargando && !error && visibles.length > 0 && (
-        <div className="rounded-md border">
+        <div className="overflow-hidden rounded-2xl border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableHead
                   className="cursor-pointer select-none hover:text-foreground"
                   onClick={alternarOrden}
@@ -134,7 +134,7 @@ export default function RecursosPage() {
                     </span>
                   </TableCell>
                   <TableCell>{TIPO_LABEL[r.tipo] ?? r.tipo}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-muted-foreground">
                     {r.especialidades.length > 0
                       ? r.especialidades.map((e) => e.nombre).join(", ")
                       : "—"}

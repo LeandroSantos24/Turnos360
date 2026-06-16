@@ -164,14 +164,15 @@ export default function AgendaPage() {
           {error}
         </div>
       )}
-
       {/* Lista de turnos: una fila por turno, en orden de horario */}
       {!cargando && turnos.length === 0 ? (
-        <p className="rounded-lg border bg-background p-8 text-center text-sm text-muted-foreground">
-          {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
-        </p>
+        <div className="rounded-2xl border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
+          </p>
+        </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-background">
+        <div className="overflow-hidden rounded-2xl border bg-card">
           {turnos.map((turno, i) => {
             const color = colorEstadoHex(turno.estado);
             const inactivo = estaInactivo(turno.estado);
@@ -179,37 +180,44 @@ export default function AgendaPage() {
               <div
                 key={turno.id}
                 onClick={() => setTurnoSel(turno)}
-                className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/40 ${
+                className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/50 ${
                   i > 0 ? "border-t" : ""
                 }`}
                 style={{ opacity: inactivo ? 0.6 : 1 }}
               >
                 {/* Hora a la izquierda */}
-                <div className="flex w-24 shrink-0 flex-col items-end justify-center border-r px-3 py-3">
-                  <span className="text-sm font-semibold">
+                <div className="flex w-24 shrink-0 flex-col items-end justify-center border-r px-4 py-4">
+                  <span
+                    className="text-sm font-bold"
+                    style={{
+                      fontFamily: "Syne, sans-serif",
+                      fontVariantNumeric: "lining-nums tabular-nums",
+                    }}
+                  >
                     {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {turno.fecha_fin && horaDe(turno.fecha_fin)}
                   </span>
                 </div>
 
                 {/* Barra de color (estado) */}
                 <div
-                  className="w-1.5 shrink-0"
+                  className="w-1 shrink-0"
                   style={{ backgroundColor: color }}
                 />
 
                 {/* Contenido */}
-                <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
-                  {/* Avatar */}
+                <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4">
                   <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                    style={{ backgroundColor: color }}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
+                    style={{
+                      backgroundColor: color,
+                      fontFamily: "Syne, sans-serif",
+                    }}
                   >
                     {inicialDe(turno.cliente_nombre)}
                   </div>
-                  {/* Cliente + servicio */}
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span
                       className={`truncate text-sm font-semibold ${
@@ -223,7 +231,6 @@ export default function AgendaPage() {
                       {turno.es_sobreturno && " · sobreturno"}
                     </span>
                   </div>
-                  {/* Estado (etiqueta a la derecha) */}
                   <span
                     className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
                     style={{ backgroundColor: `${color}22`, color: color }}
