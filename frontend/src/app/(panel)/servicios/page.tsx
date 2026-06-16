@@ -111,6 +111,7 @@ export default function ServiciosPage() {
                 </TableHead>
                 <TableHead>Duración</TableHead>
                 <TableHead>Turno cada</TableHead>
+                <TableHead>Grupo</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
               </TableRow>
             </TableHeader>
@@ -119,10 +120,18 @@ export default function ServiciosPage() {
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.nombre}</TableCell>
                   <TableCell className="tabular-nums">
-                    {s.duracion_min} min
-                  </TableCell>
-                  <TableCell className="tabular-nums">
                     {s.paso_turno_min} min
+                  </TableCell>
+                  <TableCell>
+                    {s.grupo_agenda?.startsWith("solo-") ? (
+                      <span className="text-xs text-muted-foreground">
+                        En paralelo
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                        {s.grupo_agenda ?? "—"}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {s.precio != null

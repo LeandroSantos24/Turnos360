@@ -12,6 +12,7 @@ export interface Servicio {
   duracion_min: number;
   buffer_min: number;
   paso_turno_min: number;
+  grupo_agenda: string | null;
   precio: number | null;
   activo: boolean;
 }
@@ -26,6 +27,7 @@ export interface ServicioCrear {
   duracion_min: number;
   buffer_min?: number;
   paso_turno_min?: number;
+  grupo_agenda?: string | null;
   precio?: number;
 }
 
