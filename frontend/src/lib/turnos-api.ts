@@ -28,6 +28,7 @@ export interface Turno {
   cliente_nombre: string | null;
   recurso_nombre: string | null;
   servicio_nombre: string | null;
+  servicio_grupo: string | null;
 }
 
 export interface TurnosPagina {

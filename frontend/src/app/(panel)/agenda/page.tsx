@@ -5,18 +5,21 @@
  *
  * Los turnos se muestran como filas ordenadas por horario, una debajo de la
  * otra. Clic en una fila abre el panel de detalle (TurnoDetalle) para
- * gestionar el turno y entrar a la ficha del cliente.
+ * gestionar el turno y entrar a la ficha del cliente. El botón "Nuevo turno"
+ * abre el diálogo de creación (que respeta los carriles del motor).
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { addDays, format, startOfDay, endOfDay } from "date-fns";
 import { isToday } from "date-fns/isToday";
 import { es } from "date-fns/locale";
+import { Plus } from "lucide-react";
 
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
 import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
 import { MetricasDia } from "./metricas-dia";
 import { TurnoDetalle } from "./turno-detalle";
+import { NuevoTurnoDialog } from "./nuevo-turno-dialog";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -33,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GrillaCarriles } from "./grilla-carriles";
 
 /** Ordena los turnos por hora de inicio. */
 function ordenarPorHora(turnos: Turno[]): Turno[] {
@@ -52,6 +56,7 @@ export default function AgendaPage() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [turnoSel, setTurnoSel] = useState<Turno | null>(null);
+  const [dialogAbierto, setDialogAbierto] = useState(false);
 
   const hoyEs = isToday(dia);
 
@@ -102,7 +107,7 @@ export default function AgendaPage() {
     <div className="p-8">
       {/* Encabezado */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Agenda</h1>
+        <h1 className="text-2xl font-bold">Agenda</h1>
 
         <div className="flex items-center gap-3">
           {recursos.length > 0 && (
@@ -148,6 +153,11 @@ export default function AgendaPage() {
               ›
             </Button>
           </div>
+
+          <Button onClick={() => setDialogAbierto(true)}>
+            <Plus size={16} className="mr-1" />
+            Nuevo turno
+          </Button>
         </div>
       </div>
 
@@ -164,6 +174,14 @@ export default function AgendaPage() {
           {error}
         </div>
       )}
+      {/* Grilla de carriles (nueva) */}
+      <div className="mb-6">
+        <GrillaCarriles
+          turnos={turnos}
+          dia={dia}
+          onClickTurno={(t) => setTurnoSel(t)}
+        />
+      </div>
       {/* Lista de turnos: una fila por turno, en orden de horario */}
       {!cargando && turnos.length === 0 ? (
         <div className="rounded-2xl border bg-card p-12 text-center">
@@ -259,12 +277,21 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {/* Panel de detalle del turno (fuera de la leyenda, a nivel raíz) */}
+      {/* Panel de detalle del turno */}
       <TurnoDetalle
         turno={turnoSel}
         abierto={turnoSel !== null}
         onCerrar={() => setTurnoSel(null)}
         onCambio={cargarTurnos}
+      />
+
+      {/* Diálogo de nuevo turno */}
+      <NuevoTurnoDialog
+        abierto={dialogAbierto}
+        onCerrar={() => setDialogAbierto(false)}
+        onCreado={cargarTurnos}
+        recursoInicial={recursoId}
+        fechaInicial={dia}
       />
     </div>
   );

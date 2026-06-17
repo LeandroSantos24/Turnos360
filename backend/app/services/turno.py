@@ -50,6 +50,7 @@ def _resolver_nombres(db: Session, turno: Turno) -> Turno:
     )
     turno.recurso_nombre = recurso.nombre if recurso else None
     turno.servicio_nombre = servicio.nombre if servicio else None
+    turno.servicio_grupo = servicio.grupo_agenda if servicio else None
     return turno
 
 

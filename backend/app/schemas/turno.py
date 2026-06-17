@@ -67,6 +67,7 @@ class TurnoOut(BaseModel):
     cliente_nombre: str | None = None
     recurso_nombre: str | None = None
     servicio_nombre: str | None = None
+    servicio_grupo: str | None = None  # carril del servicio (corte/tintura/barba)
 
     model_config = {"from_attributes": True}
 
