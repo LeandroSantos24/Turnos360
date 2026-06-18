@@ -19,6 +19,7 @@ import {
   Users,
   Scissors,
   UserCog,
+  CreditCard,
   LogOut,
   ChevronRight,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const NAV = [
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio" },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio" },
+  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio" },
 ];
 
 const GRUPOS = [
