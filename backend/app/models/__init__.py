@@ -25,6 +25,7 @@ from app.models.finanzas import (
 from app.models.mensajeria import Mensaje, PlantillaMensaje
 from app.models.organizacion import Empresa, Rubro, Sucursal, SuperAdmin, Usuario
 from app.models.turno import Turno
+from app.models.modulos.fidelizacion import *  # noqa: F401,F403  -> E11
 
 __all__ = [
     "Base",
@@ -42,8 +43,7 @@ __all__ = [
 # ===== MÓDULOS PREPARADOS =====
 # Para activar un módulo en su etapa, descomentar SU línea
 # y correr: make db-revision m="EXX nombre" && make db-upgrade
-#
-# from app.models.modulos.fidelizacion import *  # noqa: F401,F403  -> E11
+
 # from app.models.modulos.salud import *  # noqa: F401,F403  -> E13
 # from app.models.modulos.taller import *  # noqa: F401,F403  -> E14
 # from app.models.modulos.saas import *  # noqa: F401,F403  -> E16

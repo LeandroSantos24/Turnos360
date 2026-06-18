@@ -19,6 +19,7 @@ const config: Config = {
     "text-blue-600", "text-amber-600", "text-green-600",
     "bg-green-500", "bg-zinc-400", "bg-zinc-600",
     "bg-green-500", "bg-zinc-300", "bg-zinc-600", "bg-red-500",
+    "bg-amber-400/20", "text-amber-600", "text-amber-400",
   ],
   theme: {
     extend: {

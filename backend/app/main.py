@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import agenda, auth, clientes, recursos, servicios, turnos
+from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias
 
 app = FastAPI(
     title="Turnos360 API",
@@ -34,6 +34,7 @@ app.include_router(agenda.horarios_router)
 app.include_router(agenda.excepciones_router)
 app.include_router(turnos.router)
 app.include_router(servicios.router)
+app.include_router(membresias.router)
 
 
 @app.get("/", tags=["meta"])

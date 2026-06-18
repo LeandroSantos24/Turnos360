@@ -27,6 +27,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EditarClienteDialog } from "../editar-cliente-dialog";
+import { membresiaDeCliente, Membresia } from "@/lib/membresias-api";
 
 /** Formatea una fecha ISO como "12 de junio 2026". */
 function fechaCorta(iso: string | null): string {
@@ -51,16 +52,19 @@ export default function FichaClientePage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState(false);
+  const [membresia, setMembresia] = useState<Membresia | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
-      const [c, t] = await Promise.all([
+      const [c, t, m] = await Promise.all([
         obtenerCliente(clienteId),
         listarTurnosDeCliente(clienteId),
+        membresiaDeCliente(clienteId),
       ]);
       setCliente(c);
+      setMembresia(m);
       // Ordenar turnos del más reciente al más antiguo
       const ordenados = [...t.items].sort(
         (a, b) =>
@@ -157,7 +161,7 @@ export default function FichaClientePage() {
       </div>
 
       {/* Datos personales extra (DNI, nacimiento, observaciones) */}
-      {(cliente.dni || cliente.fecha_nacimiento || cliente.observaciones) && (
+      {(cliente.dni || cliente.fecha_nacimiento || cliente.observaciones || membresia) && (
         <div className="mb-8 rounded-2xl border bg-card p-5">
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-3">
             {cliente.dni && (
@@ -189,6 +193,24 @@ export default function FichaClientePage() {
               <p className="mt-1 text-sm">{cliente.observaciones}</p>
             </div>
           )}
+          {/* Membresía / abono */}
+          <div className="mt-4 border-t pt-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Membresía
+            </p>
+            {membresia && membresia.vigente ? (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="inline-block rounded-full bg-amber-400/20 px-2.5 py-0.5 text-sm font-bold text-amber-600 dark:text-amber-400">
+                  {membresia.plan_nombre}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  vigente hasta {fechaCorta(membresia.fecha_hasta)}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">No tiene</p>
+            )}
+          </div>
         </div>
       )}
 
