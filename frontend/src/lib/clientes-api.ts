@@ -35,7 +35,10 @@ export interface ClienteCrear {
   dni?: string;
   email?: string;
   telefono?: string;
+  fecha_nacimiento?: string; // formato yyyy-MM-dd
   canal_adquisicion?: string;
+  etiquetas?: string[];
+  observaciones?: string;
 }
 
 /** Lista clientes con búsqueda y paginación. */
@@ -64,4 +67,17 @@ export function desactivarCliente(id: number): Promise<void> {
 /** Trae un cliente puntual por su id. */
 export function obtenerCliente(id: number): Promise<Cliente> {
   return api.get<Cliente>(`/clientes/${id}`);
+}
+
+/** Edita un cliente (PATCH). */
+export function editarCliente(
+  id: number,
+  datos: Partial<ClienteCrear>,
+): Promise<Cliente> {
+  return api.patch<Cliente>(`/clientes/${id}`, datos);
+}
+
+/** Borra (desactiva) un cliente. */
+export function borrarCliente(id: number): Promise<void> {
+  return api.delete<void>(`/clientes/${id}`);
 }

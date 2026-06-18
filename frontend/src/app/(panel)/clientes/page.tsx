@@ -1,16 +1,21 @@
 "use client";
 
 /**
- * Pantalla de Clientes (/clientes).
- * Lista con búsqueda y paginación servidor (de a 10). Estilo uniforme.
+ * Pantalla de Clientes (/clientes). Búsqueda + paginación + editar/borrar.
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { listarClientes, Cliente } from "@/lib/clientes-api";
+import { listarClientes, borrarCliente, Cliente } from "@/lib/clientes-api";
 import { ApiError } from "@/lib/api";
 import { NuevoClienteDialog } from "./nuevo-cliente-dialog";
+import { EditarClienteDialog } from "./editar-cliente-dialog";
 import { Paginacion } from "@/components/paginacion";
+import { toast } from "sonner";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -19,6 +24,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const POR_PAGINA = 10;
 
@@ -29,6 +50,10 @@ export default function ClientesPage() {
   const [buscar, setBuscar] = useState("");
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [editando, setEditando] = useState<Cliente | null>(null);
+  const [aBorrar, setABorrar] = useState<Cliente | null>(null);
+  const router = useRouter();
 
   const cargar = useCallback(async (texto: string, pag: number) => {
     setCargando(true);
@@ -61,6 +86,18 @@ export default function ClientesPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buscar]);
+
+  async function confirmarBorrar() {
+    if (!aBorrar) return;
+    try {
+      await borrarCliente(aBorrar.id);
+      toast.success("Cliente eliminado");
+      setABorrar(null);
+      cargar(buscar, pagina);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo borrar");
+    }
+  }
 
   return (
     <div className="p-8">
@@ -113,11 +150,16 @@ export default function ClientesPage() {
                   <TableHead>Teléfono</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Canal</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {clientes.map((c) => (
-                  <TableRow key={c.id}>
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/clientes/${c.id}`)}
+                  >
                     <TableCell className="font-medium">
                       {c.nombre} {c.apellido ?? ""}
                     </TableCell>
@@ -128,6 +170,28 @@ export default function ClientesPage() {
                       {c.email ?? "—"}
                     </TableCell>
                     <TableCell>{c.canal_adquisicion ?? "—"}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditando(c)}>
+                            <Pencil size={14} className="mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setABorrar(c)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 size={14} className="mr-2" />
+                            Borrar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -142,6 +206,34 @@ export default function ClientesPage() {
           />
         </>
       )}
+
+      <EditarClienteDialog
+        cliente={editando}
+        abierto={editando !== null}
+        onCerrar={() => setEditando(null)}
+        onEditado={() => cargar(buscar, pagina)}
+      />
+
+      <AlertDialog open={aBorrar !== null} onOpenChange={(o) => !o && setABorrar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar este cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a eliminar a &quot;{aBorrar?.nombre} {aBorrar?.apellido ?? ""}
+              &quot;. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarBorrar}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Borrar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

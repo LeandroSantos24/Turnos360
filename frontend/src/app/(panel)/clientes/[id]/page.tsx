@@ -4,15 +4,16 @@
  * Ficha del cliente (/clientes/[id]).
  *
  * Datos del cliente + resumen (turnos, gasto, servicio favorito) + el
- * historial completo de turnos. Estilo uniforme: títulos Syne, tarjetas
- * rounded-2xl, números tabulares, modo claro/oscuro.
+ * historial completo de turnos. Botón "Editar" que abre el formulario.
+ * Estilo uniforme: títulos Syne, tarjetas rounded-2xl, números tabulares,
+ * modo claro/oscuro.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 
 import { obtenerCliente, Cliente } from "@/lib/clientes-api";
 import { listarTurnosDeCliente, Turno } from "@/lib/turnos-api";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { EditarClienteDialog } from "../editar-cliente-dialog";
 
 /** Formatea una fecha ISO como "12 de junio 2026". */
 function fechaCorta(iso: string | null): string {
@@ -48,6 +50,7 @@ export default function FichaClientePage() {
   const [resumen, setResumen] = useState<ResumenCliente | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editando, setEditando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -103,15 +106,20 @@ export default function FichaClientePage() {
 
   return (
     <div className="p-8">
-      {/* Volver */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mb-4 -ml-2"
-        onClick={() => router.back()}
-      >
-        <ArrowLeft size={16} className="mr-1" /> Volver
-      </Button>
+      {/* Barra superior: volver + editar */}
+      <div className="mb-4 flex items-center justify-between">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2"
+          onClick={() => router.back()}
+        >
+          <ArrowLeft size={16} className="mr-1" /> Volver
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+          <Pencil size={14} className="mr-1.5" /> Editar
+        </Button>
+      </div>
 
       {/* Cabecera: datos del cliente */}
       <div className="mb-6 flex items-start gap-4">
@@ -132,8 +140,57 @@ export default function FichaClientePage() {
               <span>Llegó por {cliente.canal_adquisicion}</span>
             )}
           </div>
+          {/* Etiquetas del cliente */}
+          {cliente.etiquetas && cliente.etiquetas.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {cliente.etiquetas.map((etiqueta) => (
+                <span
+                  key={etiqueta}
+                  className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
+                >
+                  {etiqueta}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Datos personales extra (DNI, nacimiento, observaciones) */}
+      {(cliente.dni || cliente.fecha_nacimiento || cliente.observaciones) && (
+        <div className="mb-8 rounded-2xl border bg-card p-5">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-3">
+            {cliente.dni && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  DNI
+                </p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums">
+                  {cliente.dni}
+                </p>
+              </div>
+            )}
+            {cliente.fecha_nacimiento && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Nacimiento
+                </p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums">
+                  {fechaCorta(cliente.fecha_nacimiento)}
+                </p>
+              </div>
+            )}
+          </div>
+          {cliente.observaciones && (
+            <div className="mt-4 border-t pt-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Observaciones
+              </p>
+              <p className="mt-1 text-sm">{cliente.observaciones}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Resumen (tarjetas) */}
       {resumen && (
@@ -233,6 +290,17 @@ export default function FichaClientePage() {
           })}
         </div>
       )}
+
+      {/* Diálogo de editar */}
+      <EditarClienteDialog
+        cliente={cliente}
+        abierto={editando}
+        onCerrar={() => setEditando(false)}
+        onEditado={() => {
+          setEditando(false);
+          cargar();
+        }}
+      />
     </div>
   );
 }
