@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Agenda visual (/agenda) — vista de lista (una fila por turno).
+ * Agenda visual (/agenda).
  *
- * Los turnos se muestran como filas ordenadas por horario, una debajo de la
- * otra. Clic en una fila abre el panel de detalle (TurnoDetalle) para
- * gestionar el turno y entrar a la ficha del cliente. El botón "Nuevo turno"
- * abre el diálogo de creación (que respeta los carriles del motor).
+ * Vista principal: la GRILLA DE CARRILES (Corte/Tintura/Barba) donde se ven los
+ * turnos en sus columnas y se crea con clic en un hueco. Debajo, la lista de
+ * turnos (vista alternativa, por ahora). El botón "Nuevo turno" y el clic en
+ * hueco abren el mismo diálogo (con sobreturno inteligente).
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -20,6 +20,7 @@ import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
 import { MetricasDia } from "./metricas-dia";
 import { TurnoDetalle } from "./turno-detalle";
 import { NuevoTurnoDialog } from "./nuevo-turno-dialog";
+import { GrillaCarriles } from "./grilla-carriles";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -36,7 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GrillaCarriles } from "./grilla-carriles";
 
 /** Ordena los turnos por hora de inicio. */
 function ordenarPorHora(turnos: Turno[]): Turno[] {
@@ -56,7 +56,11 @@ export default function AgendaPage() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [turnoSel, setTurnoSel] = useState<Turno | null>(null);
+
+  // Diálogo de nuevo turno + datos del hueco clickeado
   const [dialogAbierto, setDialogAbierto] = useState(false);
+  const [huecoCarril, setHuecoCarril] = useState<string | null>(null);
+  const [huecoFecha, setHuecoFecha] = useState<Date | null>(null);
 
   const hoyEs = isToday(dia);
 
@@ -102,6 +106,13 @@ export default function AgendaPage() {
   }, [cargarTurnos]);
 
   const recursoActual = recursos.find((r) => r.id === recursoId);
+
+  /** Cierra el diálogo y limpia los datos del hueco. */
+  function cerrarDialogo() {
+    setDialogAbierto(false);
+    setHuecoCarril(null);
+    setHuecoFecha(null);
+  }
 
   return (
     <div className="p-8">
@@ -154,7 +165,13 @@ export default function AgendaPage() {
             </Button>
           </div>
 
-          <Button onClick={() => setDialogAbierto(true)}>
+          <Button
+            onClick={() => {
+              setHuecoCarril(null);
+              setHuecoFecha(null);
+              setDialogAbierto(true);
+            }}
+          >
             <Plus size={16} className="mr-1" />
             Nuevo turno
           </Button>
@@ -174,15 +191,25 @@ export default function AgendaPage() {
           {error}
         </div>
       )}
-      {/* Grilla de carriles (nueva) */}
-      <div className="mb-6">
+
+      {/* Grilla de carriles (vista principal) */}
+      <div className="mb-8">
         <GrillaCarriles
           turnos={turnos}
           dia={dia}
           onClickTurno={(t) => setTurnoSel(t)}
+          onClickHueco={(carril, fecha) => {
+            setHuecoCarril(carril);
+            setHuecoFecha(fecha);
+            setDialogAbierto(true);
+          }}
         />
       </div>
-      {/* Lista de turnos: una fila por turno, en orden de horario */}
+
+      {/* Lista de turnos (vista alternativa, por ahora) */}
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        Listado del día
+      </h2>
       {!cargando && turnos.length === 0 ? (
         <div className="rounded-2xl border bg-card p-12 text-center">
           <p className="text-sm text-muted-foreground">
@@ -285,13 +312,14 @@ export default function AgendaPage() {
         onCambio={cargarTurnos}
       />
 
-      {/* Diálogo de nuevo turno */}
+      {/* Diálogo de nuevo turno (con sobreturno inteligente) */}
       <NuevoTurnoDialog
         abierto={dialogAbierto}
-        onCerrar={() => setDialogAbierto(false)}
+        onCerrar={cerrarDialogo}
         onCreado={cargarTurnos}
         recursoInicial={recursoId}
-        fechaInicial={dia}
+        fechaInicial={huecoFecha ?? dia}
+        carrilInicial={huecoCarril}
       />
     </div>
   );

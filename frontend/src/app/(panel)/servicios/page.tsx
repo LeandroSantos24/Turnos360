@@ -1,14 +1,23 @@
 "use client";
 
 /**
- * Pantalla de Servicios (/servicios). Buscador + orden alfabético. Estilo uniforme.
+ * Pantalla de Servicios (/servicios). Buscador + orden + editar/borrar.
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { listarServicios, Servicio } from "@/lib/servicios-api";
+import {
+  listarServicios,
+  borrarServicio,
+  Servicio,
+} from "@/lib/servicios-api";
 import { ApiError } from "@/lib/api";
 import { NuevoServicioDialog } from "./nuevo-servicio-dialog";
+import { EditarServicioDialog } from "./editar-servicio-dialog";
+import { toast } from "sonner";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,6 +26,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
@@ -24,6 +49,10 @@ export default function ServiciosPage() {
   const [error, setError] = useState<string | null>(null);
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
+
+  // Estados para editar y borrar
+  const [editando, setEditando] = useState<Servicio | null>(null);
+  const [aBorrar, setABorrar] = useState<Servicio | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -54,6 +83,18 @@ export default function ServiciosPage() {
 
   function alternarOrden() {
     setOrden((o) => (o === "asc" ? "desc" : "asc"));
+  }
+
+  async function confirmarBorrar() {
+    if (!aBorrar) return;
+    try {
+      await borrarServicio(aBorrar.id);
+      toast.success(`"${aBorrar.nombre}" eliminado`);
+      setABorrar(null);
+      cargar();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo borrar");
+    }
   }
 
   return (
@@ -113,12 +154,16 @@ export default function ServiciosPage() {
                 <TableHead>Turno cada</TableHead>
                 <TableHead>Grupo</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibles.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.nombre}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {s.duracion_min} min
+                  </TableCell>
                   <TableCell className="tabular-nums">
                     {s.paso_turno_min} min
                   </TableCell>
@@ -138,12 +183,64 @@ export default function ServiciosPage() {
                       ? `$${Number(s.precio).toLocaleString("es-AR")}`
                       : "—"}
                   </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical size={16} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setEditando(s)}>
+                          <Pencil size={14} className="mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setABorrar(s)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 size={14} className="mr-2" />
+                          Borrar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      {/* Diálogo de editar */}
+      <EditarServicioDialog
+        servicio={editando}
+        abierto={editando !== null}
+        onCerrar={() => setEditando(null)}
+        onEditado={cargar}
+      />
+
+      {/* Confirmación de borrado */}
+      <AlertDialog open={aBorrar !== null} onOpenChange={(o) => !o && setABorrar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar este servicio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a eliminar &quot;{aBorrar?.nombre}&quot;. Esta acción no se
+              puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarBorrar}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Borrar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

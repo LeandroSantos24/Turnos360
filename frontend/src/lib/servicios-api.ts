@@ -42,3 +42,16 @@ export function crearServicio(datos: ServicioCrear): Promise<Servicio> {
 export function desactivarServicio(id: number): Promise<void> {
   return api.delete<void>(`/servicios/${id}`);
 }
+
+/** Edita un servicio (PATCH). Solo manda los campos que cambian. */
+export function editarServicio(
+  id: number,
+  datos: Partial<ServicioCrear>,
+): Promise<Servicio> {
+  return api.patch<Servicio>(`/servicios/${id}`, datos);
+}
+
+/** Borra (desactiva) un servicio. */
+export function borrarServicio(id: number): Promise<void> {
+  return api.delete<void>(`/servicios/${id}`);
+}

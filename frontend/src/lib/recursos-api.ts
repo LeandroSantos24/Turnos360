@@ -47,3 +47,16 @@ export function crearRecurso(datos: RecursoCrear): Promise<Recurso> {
 export function desactivarRecurso(id: number): Promise<void> {
   return api.delete<void>(`/recursos/${id}`);
 }
+
+/** Edita un recurso (PATCH). */
+export function editarRecurso(
+  id: number,
+  datos: Partial<RecursoCrear>,
+): Promise<Recurso> {
+  return api.patch<Recurso>(`/recursos/${id}`, datos);
+}
+
+/** Borra (desactiva) un recurso. */
+export function borrarRecurso(id: number): Promise<void> {
+  return api.delete<void>(`/recursos/${id}`);
+}

@@ -3,17 +3,18 @@
 /**
  * Diálogo para crear un turno desde la agenda.
  *
- * Junta: selector de cliente (buscar/crear) + servicio + barbero + fecha/hora.
- * Al guardar llama a POST /turnos, que valida disponibilidad en el backend.
+ * Cliente (buscar/crear) + servicio + barbero + fecha/hora.
+ * Sobreturno inteligente: si el backend rechaza por choque (409), aparece
+ * el switch "Forzar como sobreturno" para crearlo igual.
  *
- * Puede abrirse de dos formas:
- * - Botón "Nuevo turno": campos vacíos (o con el barbero/fecha actual).
- * - Clic en un hueco: viene con recurso y hora precargados (prefill).
+ * Puede abrirse desde el botón "Nuevo turno" (vacío) o desde un hueco de la
+ * grilla (con carril y hora precargados).
  */
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AlertTriangle } from "lucide-react";
 
 import { Cliente } from "@/lib/clientes-api";
 import { listarServicios, Servicio } from "@/lib/servicios-api";
@@ -25,6 +26,7 @@ import { SelectorCliente } from "./selector-cliente";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -45,9 +47,10 @@ interface NuevoTurnoDialogProps {
   abierto: boolean;
   onCerrar: () => void;
   onCreado: () => void;
-  // Prefill opcional (cuando se abre desde un hueco de la agenda)
   recursoInicial?: number | null;
-  fechaInicial?: Date | null; // fecha + hora del hueco
+  fechaInicial?: Date | null;
+  // Carril precargado (cuando se abre desde un hueco de la grilla)
+  carrilInicial?: string | null;
 }
 
 export function NuevoTurnoDialog({
@@ -56,6 +59,7 @@ export function NuevoTurnoDialog({
   onCreado,
   recursoInicial = null,
   fechaInicial = null,
+  carrilInicial = null,
 }: NuevoTurnoDialogProps) {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
@@ -63,9 +67,13 @@ export function NuevoTurnoDialog({
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [servicioId, setServicioId] = useState<string>("");
   const [recursoId, setRecursoId] = useState<string>("");
-  const [fecha, setFecha] = useState<string>(""); // yyyy-MM-dd
-  const [hora, setHora] = useState<string>(""); // HH:mm
+  const [fecha, setFecha] = useState<string>("");
+  const [hora, setHora] = useState<string>("");
   const [guardando, setGuardando] = useState(false);
+
+  // Sobreturno: arranca oculto, aparece si hay choque
+  const [hayChoque, setHayChoque] = useState(false);
+  const [forzar, setForzar] = useState(false);
 
   // Cargar servicios y recursos al abrir
   useEffect(() => {
@@ -76,15 +84,29 @@ export function NuevoTurnoDialog({
       .catch(() => {});
   }, [abierto]);
 
-  // Aplicar prefill cuando se abre desde un hueco
+  // Prefill al abrir desde un hueco
   useEffect(() => {
     if (!abierto) return;
     if (recursoInicial != null) setRecursoId(String(recursoInicial));
     if (fechaInicial) {
       setFecha(format(fechaInicial, "yyyy-MM-dd"));
-      setHora(format(fechaInicial, "HH:mm"));
+      setHora(
+        `${String(fechaInicial.getUTCHours()).padStart(2, "0")}:${String(
+          fechaInicial.getUTCMinutes(),
+        ).padStart(2, "0")}`,
+      );
     }
   }, [abierto, recursoInicial, fechaInicial]);
+
+  // Preseleccionar un servicio del carril clickeado
+  useEffect(() => {
+    if (!abierto || !carrilInicial || servicios.length === 0) return;
+    const delCarril = servicios.find((s) => {
+      const g = s.grupo_agenda ?? "";
+      return g === carrilInicial || g === `solo-${carrilInicial}`;
+    });
+    if (delCarril) setServicioId(String(delCarril.id));
+  }, [abierto, carrilInicial, servicios]);
 
   function limpiar() {
     setCliente(null);
@@ -92,6 +114,8 @@ export function NuevoTurnoDialog({
     setRecursoId("");
     setFecha("");
     setHora("");
+    setHayChoque(false);
+    setForzar(false);
   }
 
   function cerrar() {
@@ -99,27 +123,20 @@ export function NuevoTurnoDialog({
     onCerrar();
   }
 
-  async function guardar() {
-    // Validaciones simples antes de mandar
-    if (!cliente) {
-      toast.error("Elegí un cliente");
-      return;
+  // Si cambian datos clave, reseteamos el estado de choque
+  function resetChoque() {
+    if (hayChoque) {
+      setHayChoque(false);
+      setForzar(false);
     }
-    if (!servicioId) {
-      toast.error("Elegí un servicio");
-      return;
-    }
-    if (!recursoId) {
-      toast.error("Elegí un profesional");
-      return;
-    }
-    if (!fecha || !hora) {
-      toast.error("Elegí fecha y hora");
-      return;
-    }
+  }
 
-    // Construir la fecha de inicio. La guardamos "tal cual" en UTC para que
-    // coincida con cómo la lee la agenda (hora de pared del local).
+  async function guardar() {
+    if (!cliente) return toast.error("Elegí un cliente");
+    if (!servicioId) return toast.error("Elegí un servicio");
+    if (!recursoId) return toast.error("Elegí un profesional");
+    if (!fecha || !hora) return toast.error("Elegí fecha y hora");
+
     const fechaInicio = `${fecha}T${hora}:00Z`;
 
     setGuardando(true);
@@ -129,16 +146,20 @@ export function NuevoTurnoDialog({
         servicio_id: Number(servicioId),
         recurso_id: Number(recursoId),
         fecha_inicio: fechaInicio,
+        es_sobreturno: forzar, // true solo si activó el switch
       });
-      toast.success("Turno creado");
+      toast.success(forzar ? "Sobreturno creado" : "Turno creado");
       limpiar();
       onCreado();
       onCerrar();
     } catch (err) {
-      // El backend devuelve 409 si el horario no está disponible
-      toast.error(
-        err instanceof ApiError ? err.message : "No se pudo crear el turno",
-      );
+      // 409 = choque de horario → ofrecer sobreturno
+      if (err instanceof ApiError && err.status === 409) {
+        setHayChoque(true);
+        toast.error("Ese horario está ocupado. Podés forzarlo como sobreturno.");
+      } else {
+        toast.error(err instanceof ApiError ? err.message : "No se pudo crear");
+      }
     } finally {
       setGuardando(false);
     }
@@ -155,19 +176,22 @@ export function NuevoTurnoDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Cliente (buscar o crear) */}
+          {/* Cliente */}
           <div className="space-y-2">
             <Label>Cliente *</Label>
-            <SelectorCliente
-              clienteElegido={cliente}
-              onSeleccion={setCliente}
-            />
+            <SelectorCliente clienteElegido={cliente} onSeleccion={setCliente} />
           </div>
 
           {/* Servicio */}
           <div className="space-y-2">
             <Label>Servicio *</Label>
-            <Select value={servicioId} onValueChange={setServicioId}>
+            <Select
+              value={servicioId}
+              onValueChange={(v) => {
+                setServicioId(v);
+                resetChoque();
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Elegí un servicio" />
               </SelectTrigger>
@@ -186,7 +210,13 @@ export function NuevoTurnoDialog({
           {/* Profesional */}
           <div className="space-y-2">
             <Label>Profesional *</Label>
-            <Select value={recursoId} onValueChange={setRecursoId}>
+            <Select
+              value={recursoId}
+              onValueChange={(v) => {
+                setRecursoId(v);
+                resetChoque();
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Elegí un profesional" />
               </SelectTrigger>
@@ -208,7 +238,10 @@ export function NuevoTurnoDialog({
                 id="fecha"
                 type="date"
                 value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
+                onChange={(e) => {
+                  setFecha(e.target.value);
+                  resetChoque();
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -217,18 +250,52 @@ export function NuevoTurnoDialog({
                 id="hora"
                 type="time"
                 value={hora}
-                onChange={(e) => setHora(e.target.value)}
+                onChange={(e) => {
+                  setHora(e.target.value);
+                  resetChoque();
+                }}
               />
             </div>
           </div>
+
+          {/* Bloque de sobreturno: solo aparece si hubo choque */}
+          {hayChoque && (
+            <div className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  size={18}
+                  className="mt-0.5 shrink-0 text-amber-600"
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                    Horario ocupado
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Ya hay un turno en ese carril y horario. Podés forzarlo como
+                    sobreturno si vas a poder atenderlo igual.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-amber-500/20 pt-3">
+                <Label htmlFor="forzar" className="cursor-pointer">
+                  Forzar como sobreturno
+                </Label>
+                <Switch id="forzar" checked={forzar} onCheckedChange={setForzar} />
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={cerrar} disabled={guardando}>
             Cancelar
           </Button>
-          <Button onClick={guardar} disabled={guardando}>
-            {guardando ? "Creando…" : "Crear turno"}
+          <Button onClick={guardar} disabled={guardando || (hayChoque && !forzar)}>
+            {guardando
+              ? "Creando…"
+              : hayChoque
+                ? "Crear igual (sobreturno)"
+                : "Crear turno"}
           </Button>
         </DialogFooter>
       </DialogContent>

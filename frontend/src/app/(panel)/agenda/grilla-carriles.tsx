@@ -5,7 +5,9 @@
  *
  * 3 columnas fijas (Corte / Tintura / Barba) × filas cada 30 min.
  * Cada turno se posiciona en su columna (según servicio_grupo) y a su hora,
- * con alto proporcional a la duración. Los huecos libres son clickeables.
+ * con alto proporcional a la duración. Los turnos que se solapan en el tiempo
+ * (ej. original + sobreturno) se reparten el ancho lado a lado.
+ * Los huecos libres son clickeables para crear.
  */
 
 import { Turno } from "@/lib/turnos-api";
@@ -28,8 +30,17 @@ interface GrillaCarrilesProps {
   dia: Date;
 }
 
-const ALTO_FRANJA = 56; // px por franja de 30 min
+const ALTO_FRANJA = 60; // px por franja de 30 min (un poco más de aire)
 const MIN_POR_FRANJA = 30;
+
+/** Un turno con su posición calculada (para repartir solapados). */
+interface TurnoUbicado {
+  turno: Turno;
+  top: number;
+  alto: number;
+  columna: number; // índice dentro del grupo de solapados
+  totalColumnas: number; // cuántos solapados hay en su grupo
+}
 
 export function GrillaCarriles({
   turnos,
@@ -39,7 +50,6 @@ export function GrillaCarriles({
   onClickHueco,
   dia,
 }: GrillaCarrilesProps) {
-  // Generar las franjas de 30 min (las filas)
   const franjas: { label: string; hora: number; minuto: number }[] = [];
   for (let h = horaInicio; h < horaFin; h++) {
     franjas.push({ label: `${String(h).padStart(2, "0")}:00`, hora: h, minuto: 0 });
@@ -48,27 +58,69 @@ export function GrillaCarriles({
 
   const pxPorMin = ALTO_FRANJA / MIN_POR_FRANJA;
 
-  /** Posición (top) y alto de un turno en píxeles, dentro de su columna. */
-  function posicion(turno: Turno): { top: number; alto: number } | null {
+  /** Minutos desde el inicio de la grilla y duración de un turno. */
+  function rango(turno: Turno): { ini: number; fin: number } | null {
     if (!turno.fecha_inicio || !turno.fecha_fin) return null;
-    const ini = new Date(turno.fecha_inicio);
-    const fin = new Date(turno.fecha_fin);
-    const minDesdeInicio =
-      (ini.getUTCHours() - horaInicio) * 60 + ini.getUTCMinutes();
-    if (minDesdeInicio < 0) return null;
-    const duracionMin = (fin.getTime() - ini.getTime()) / 60000;
-    return {
-      top: minDesdeInicio * pxPorMin,
-      alto: Math.max(duracionMin * pxPorMin, 24),
-    };
+    const i = new Date(turno.fecha_inicio);
+    const f = new Date(turno.fecha_fin);
+    const ini = (i.getUTCHours() - horaInicio) * 60 + i.getUTCMinutes();
+    const fin = (f.getUTCHours() - horaInicio) * 60 + f.getUTCMinutes();
+    if (ini < 0) return null;
+    return { ini, fin };
   }
 
-  /** Turnos que van en una columna (carril) dada. */
+  /**
+   * Ubica los turnos de un carril, repartiendo en columnas los que se solapan.
+   * Algoritmo: agrupa turnos que se pisan en el tiempo, y dentro de cada grupo
+   * les asigna una columna (0, 1, 2…) para que se dibujen lado a lado.
+   */
+  function ubicarTurnos(turnosCarril: Turno[]): TurnoUbicado[] {
+    const conRango = turnosCarril
+      .map((t) => ({ turno: t, r: rango(t) }))
+      .filter((x) => x.r !== null) as { turno: Turno; r: { ini: number; fin: number } }[];
+
+    // Ordenar por inicio
+    conRango.sort((a, b) => a.r.ini - b.r.ini);
+
+    // Agrupar en "clusters" de turnos que se solapan entre sí
+    const clusters: (typeof conRango)[] = [];
+    for (const item of conRango) {
+      // ¿Entra en algún cluster existente? (se pisa con alguno de sus miembros)
+      let metido = false;
+      for (const cluster of clusters) {
+        const seSolapa = cluster.some(
+          (c) => item.r.ini < c.r.fin && c.r.ini < item.r.fin,
+        );
+        if (seSolapa) {
+          cluster.push(item);
+          metido = true;
+          break;
+        }
+      }
+      if (!metido) clusters.push([item]);
+    }
+
+    // Para cada cluster, asignar columnas
+    const resultado: TurnoUbicado[] = [];
+    for (const cluster of clusters) {
+      const totalColumnas = cluster.length;
+      cluster.forEach((item, idx) => {
+        resultado.push({
+          turno: item.turno,
+          top: item.r.ini * pxPorMin,
+          alto: Math.max((item.r.fin - item.r.ini) * pxPorMin, 26),
+          columna: idx,
+          totalColumnas,
+        });
+      });
+    }
+    return resultado;
+  }
+
   function turnosDeCarril(carrilId: string): Turno[] {
     return turnos.filter((t) => carrilDeTurno(t.servicio_grupo) === carrilId);
   }
 
-  /** Maneja el clic en una celda vacía. */
   function clickHueco(carrilId: string, hora: number, minuto: number) {
     if (!onClickHueco) return;
     const fecha = new Date(dia);
@@ -80,7 +132,7 @@ export function GrillaCarriles({
     <div className="overflow-hidden rounded-2xl border bg-card">
       {/* Encabezado: las 3 columnas */}
       <div className="flex border-b bg-muted/30">
-        <div className="w-16 shrink-0 border-r" />
+        <div className="w-14 shrink-0 border-r" />
         {CARRILES.map((carril) => (
           <div
             key={carril.id}
@@ -95,14 +147,14 @@ export function GrillaCarriles({
       {/* Cuerpo */}
       <div className="flex">
         {/* Columna de horas */}
-        <div className="w-16 shrink-0 border-r">
+        <div className="w-14 shrink-0 border-r">
           {franjas.map((f) => (
             <div
               key={f.label}
-              className="flex items-start justify-end border-b px-2 py-1 last:border-b-0"
+              className="flex items-start justify-end border-b px-2 pt-1 last:border-b-0"
               style={{ height: ALTO_FRANJA }}
             >
-              <span className="text-xs font-medium text-muted-foreground tabular-nums">
+              <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
                 {f.label}
               </span>
             </div>
@@ -111,13 +163,13 @@ export function GrillaCarriles({
 
         {/* Las 3 columnas de carriles */}
         {CARRILES.map((carril) => {
-          const turnosCarril = turnosDeCarril(carril.id);
+          const ubicados = ubicarTurnos(turnosDeCarril(carril.id));
           return (
             <div
               key={carril.id}
               className="relative flex-1 border-r last:border-r-0"
             >
-              {/* Celdas de fondo (clickeables para crear) */}
+              {/* Celdas de fondo (clickeables) */}
               {franjas.map((f) => (
                 <div
                   key={f.label}
@@ -127,56 +179,73 @@ export function GrillaCarriles({
                 />
               ))}
 
-              {/* Turnos posicionados encima */}
-              {turnosCarril.map((turno) => {
-                const pos = posicion(turno);
-                if (!pos) return null;
+              {/* Turnos ubicados (con reparto lado a lado) */}
+              {ubicados.map(({ turno, top, alto, columna, totalColumnas }) => {
                 const color = colorEstadoHex(turno.estado);
                 const inactivo = estaInactivo(turno.estado);
+                // Ancho y posición horizontal según la columna del cluster
+                const gap = 3; // separación entre solapados
+                const anchoPct = 100 / totalColumnas;
+                const left = `calc(${columna * anchoPct}% + ${columna === 0 ? 3 : gap}px)`;
+                const width = `calc(${anchoPct}% - ${totalColumnas === 1 ? 6 : gap + 3}px)`;
+                const compacto = alto < 44 || totalColumnas > 1;
+
                 return (
                   <div
                     key={turno.id}
-                    onClick={() => onClickTurno?.(turno)}
-                    className="absolute left-1 right-1 cursor-pointer overflow-hidden rounded-lg border-l-4 px-2 py-1 shadow-sm transition-shadow hover:shadow-md"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClickTurno?.(turno);
+                    }}
+                    className="absolute overflow-hidden rounded-lg shadow-sm transition-all hover:z-10 hover:shadow-md"
                     style={{
-                      top: pos.top + 1,
-                      height: pos.alto - 2,
-                      borderLeftColor: color,
-                      backgroundColor: `${color}18`,
-                      opacity: inactivo ? 0.55 : 1,
-                      // borde extra para sobreturnos
-                      outline: turno.es_sobreturno
-                        ? `2px dashed ${color}`
-                        : "none",
+                      top: top + 2,
+                      height: alto - 4,
+                      left,
+                      width,
+                      backgroundColor: inactivo ? `${color}12` : `${color}1f`,
+                      borderLeft: `3px solid ${color}`,
+                      opacity: inactivo ? 0.6 : 1,
+                      outline: turno.es_sobreturno ? `2px dashed ${color}` : "none",
                       outlineOffset: "-2px",
                     }}
-                    title={`${turno.cliente_nombre} · ${labelEstado(turno.estado)}`}
+                    title={`${turno.cliente_nombre} · ${turno.servicio_nombre ?? ""} · ${labelEstado(turno.estado)}${turno.es_sobreturno ? " · sobreturno" : ""}`}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white"
-                        style={{ backgroundColor: color }}
-                      >
-                        {inicialDe(turno.cliente_nombre)}
+                    <div className="flex h-full flex-col gap-0.5 px-2 py-1.5">
+                      {/* Línea 1: avatar + nombre */}
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+                          style={{
+                            backgroundColor: color,
+                            fontFamily: "Syne, sans-serif",
+                          }}
+                        >
+                          {inicialDe(turno.cliente_nombre)}
+                        </div>
+                        <span
+                          className={`truncate text-xs font-semibold leading-none ${
+                            inactivo ? "line-through" : ""
+                          }`}
+                        >
+                          {turno.cliente_nombre}
+                        </span>
+                        {turno.es_sobreturno && (
+                          <Zap
+                            size={11}
+                            className="ml-auto shrink-0"
+                            style={{ color }}
+                          />
+                        )}
                       </div>
-                      <span
-                        className={`truncate text-xs font-semibold ${
-                          inactivo ? "line-through" : ""
-                        }`}
-                        style={{ color }}
-                      >
-                        {turno.cliente_nombre}
-                      </span>
-                      {turno.es_sobreturno && (
-                        <Zap size={11} style={{ color }} className="shrink-0" />
+                      {/* Línea 2: hora + servicio (si hay espacio) */}
+                      {!compacto && (
+                        <p className="truncate pl-6 text-[11px] leading-tight text-muted-foreground">
+                          {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
+                          {turno.servicio_nombre && ` · ${turno.servicio_nombre}`}
+                        </p>
                       )}
                     </div>
-                    {pos.alto > 38 && (
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                        {turno.fecha_inicio && horaDe(turno.fecha_inicio)} ·{" "}
-                        {turno.servicio_nombre}
-                      </p>
-                    )}
                   </div>
                 );
               })}
