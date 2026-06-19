@@ -43,6 +43,9 @@ class Turno(TenantMixin, Base):
     es_sobreturno: Mapped[bool] = mapped_column(Boolean, default=False)
 
     importe_previsto: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    # True si el turno lo cubrió un abono activo del cliente (importe queda en 0).
+    # Sirve para finanzas: distinguir "$0 por abono" de "$0 por otra razón".
+    cubierto_por_abono: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_cancelacion: Mapped[str | None] = mapped_column(String(300))
     notas: Mapped[str | None] = mapped_column(Text)
     creado_por: Mapped[int | None] = mapped_column(

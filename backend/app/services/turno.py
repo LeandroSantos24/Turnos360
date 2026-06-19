@@ -17,6 +17,7 @@ from app.models import Cliente, Recurso, Servicio, Turno
 from app.models.enums import EstadoTurno
 from app.schemas.turno import TurnoCambiarEstado, TurnoCrear, TurnoMover
 from app.services import disponibilidad as disp
+from app.services import membresia as svc_membresia
 
 # Transiciones de estado permitidas. Desde cada estado, a cuáles se puede pasar.
 TRANSICIONES = {
@@ -134,6 +135,18 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
                 "El horario no está disponible (fuera de agenda, bloqueado o ya ocupado)",
             )
 
+    # 3.5. ¿El cliente tiene un abono activo que cubre este servicio?
+    # Si sí: el turno queda en $0 y se marca como cubierto (para finanzas).
+    cubierto = _abono_cubre_servicio(db, empresa_id, datos.cliente_id, servicio.id)
+
+    # Importe: si está cubierto por abono → 0. Si no, el que vino o el del servicio.
+    if cubierto:
+        importe = 0
+    elif datos.importe_previsto is not None:
+        importe = datos.importe_previsto
+    else:
+        importe = servicio.precio
+
     # 4. Crear el turno
     turno = Turno(
         empresa_id=empresa_id,
@@ -146,9 +159,11 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
         fecha_inicio=datos.fecha_inicio,
         fecha_fin=fecha_fin,
         es_sobreturno=datos.es_sobreturno,
-        importe_previsto=datos.importe_previsto if datos.importe_previsto is not None else servicio.precio,
+        importe_previsto=importe,
+        cubierto_por_abono=cubierto,
         notas=datos.notas,
     )
+
     db.add(turno)
     db.commit()
     db.refresh(turno)
@@ -227,3 +242,21 @@ def cambiar_estado(
     db.commit()
     db.refresh(turno)
     return _resolver_nombres(db, turno)
+
+def _abono_cubre_servicio(
+    db: Session, empresa_id: int, cliente_id: int, servicio_id: int
+) -> bool:
+    """¿El cliente tiene un abono activo que cubre este servicio?
+
+    Devuelve True si: tiene membresía vigente Y el servicio está en la lista
+    de servicios cubiertos del plan. Si la lista está vacía, NO cubre (el dueño
+    debe marcar explícitamente qué servicios incluye el abono).
+    """
+    membresia = svc_membresia.membresia_activa_de(db, empresa_id, cliente_id)
+    if not membresia:
+        return False
+    plan = membresia.plan
+    if not plan:
+        return False
+    cubiertos = plan.servicios_cubiertos or []
+    return servicio_id in cubiertos
