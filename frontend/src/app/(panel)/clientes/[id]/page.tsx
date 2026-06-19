@@ -5,8 +5,8 @@
  *
  * Datos del cliente + resumen (turnos, gasto, servicio favorito) + el
  * historial completo de turnos. Botón "Editar", asignar/cancelar membresía.
- * Estilo uniforme: títulos Syne, tarjetas rounded-2xl, números tabulares,
- * modo claro/oscuro.
+ * Clic en un turno del historial abre su panel de detalle (ver + gestionar).
+ * Estilo uniforme: títulos Syne, tarjetas rounded-2xl, números tabulares.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -34,6 +34,7 @@ import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EditarClienteDialog } from "../editar-cliente-dialog";
 import { AsignarMembresiaDialog } from "../asignar-membresia-dialog";
+import { TurnoDetalle } from "../../agenda/turno-detalle";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,6 +72,7 @@ export default function FichaClientePage() {
   const [membresia, setMembresia] = useState<Membresia | null>(null);
   const [asignando, setAsignando] = useState(false);
   const [cancelandoMembresia, setCancelandoMembresia] = useState(false);
+  const [turnoSel, setTurnoSel] = useState<Turno | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -321,7 +323,8 @@ export default function FichaClientePage() {
             return (
               <div
                 key={turno.id}
-                className={`flex items-center gap-4 px-4 py-3 ${
+                onClick={() => setTurnoSel(turno)}
+                className={`flex cursor-pointer items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/50 ${
                   i > 0 ? "border-t" : ""
                 }`}
               >
@@ -364,7 +367,7 @@ export default function FichaClientePage() {
         </div>
       )}
 
-      {/* Diálogo de editar */}
+      {/* Diálogo de editar cliente */}
       <EditarClienteDialog
         cliente={cliente}
         abierto={editando}
@@ -381,6 +384,14 @@ export default function FichaClientePage() {
         abierto={asignando}
         onCerrar={() => setAsignando(false)}
         onAsignada={cargar}
+      />
+
+      {/* Panel de detalle del turno (desde el historial) */}
+      <TurnoDetalle
+        turno={turnoSel}
+        abierto={turnoSel !== null}
+        onCerrar={() => setTurnoSel(null)}
+        onCambio={cargar}
       />
 
       {/* Confirmación de cancelar membresía */}
