@@ -24,8 +24,10 @@ TRANSICIONES = {
     EstadoTurno.PENDIENTE: {EstadoTurno.CONFIRMADO, EstadoTurno.CANCELADO, EstadoTurno.AUSENTE},
     EstadoTurno.CONFIRMADO: {EstadoTurno.EN_CURSO, EstadoTurno.CANCELADO, EstadoTurno.AUSENTE},
     EstadoTurno.EN_CURSO: {EstadoTurno.FINALIZADO, EstadoTurno.CANCELADO},
-    EstadoTurno.FINALIZADO: set(),   # estado terminal
-    EstadoTurno.CANCELADO: set(),    # estado terminal
+    # Reapertura flexible (para corregir errores). Cuando haya roles, se
+    # restringirá a que solo el dueño pueda hacer estas transiciones.
+    EstadoTurno.FINALIZADO: {EstadoTurno.EN_CURSO, EstadoTurno.CONFIRMADO},
+    EstadoTurno.CANCELADO: {EstadoTurno.CONFIRMADO, EstadoTurno.PENDIENTE},
     EstadoTurno.AUSENTE: set(),      # estado terminal
 }
 

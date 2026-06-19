@@ -10,7 +10,7 @@
 
 import { useRouter } from "next/navigation";
 import { Turno, EstadoTurno, cambiarEstadoTurno } from "@/lib/turnos-api";
-import { TRANSICIONES, ACCION_LABEL } from "@/lib/turno-estados";
+import { TRANSICIONES, ACCION_LABEL, labelAccion, esReapertura } from "@/lib/turno-estados";
 import { colorEstadoHex, labelEstado, horaDe, inicialDe } from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -63,13 +63,9 @@ export function TurnoDetalle({
   /** Ejecuta el cambio de estado (ya confirmado si era peligroso). */
   async function ejecutarAccion(destino: EstadoTurno) {
     if (!turno) return;
-    let motivo: string | undefined;
-    if (destino === "cancelado") {
-      motivo = window.prompt("Motivo de la cancelación (opcional):") || undefined;
-    }
     setProcesando(true);
     try {
-      await cambiarEstadoTurno(turno.id, destino, motivo);
+      await cambiarEstadoTurno(turno.id, destino);
       toast.success(`Turno ${labelEstado(destino).toLowerCase()}`);
       onCambio();
       onCerrar();
@@ -83,7 +79,8 @@ export function TurnoDetalle({
 
   /** Maneja el clic en un botón de acción: si es peligrosa, pide confirmar. */
   function onAccion(destino: EstadoTurno) {
-    if (ESTADOS_PELIGROSOS.includes(destino)) {
+    // Las acciones peligrosas (finalizar/cancelar) y las reaperturas confirman.
+    if (ESTADOS_PELIGROSOS.includes(destino) || esReapertura(turno.estado)) {
       setConfirmar(destino);
     } else {
       ejecutarAccion(destino);
@@ -177,7 +174,7 @@ export function TurnoDetalle({
                       disabled={procesando}
                       onClick={() => onAccion(destino)}
                     >
-                      {ACCION_LABEL[destino]}
+                      {labelAccion(turno.estado, destino)}
                     </Button>
                   ))}
                 </div>
@@ -201,14 +198,18 @@ export function TurnoDetalle({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirmar === "cancelado"
-                ? "¿Cancelar el turno?"
-                : "¿Finalizar el turno?"}
+              {esReapertura(turno.estado)
+                ? "¿Reabrir el turno?"
+                : confirmar === "cancelado"
+                  ? "¿Cancelar el turno?"
+                  : "¿Finalizar el turno?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmar === "cancelado"
-                ? "El turno se cancelará y el horario quedará libre. Esta acción no se puede deshacer."
-                : "El turno se marcará como finalizado. Esta acción no se puede deshacer."}
+              {esReapertura(turno.estado)
+                ? "El turno volverá a estar activo. Usalo para corregir un error."
+                : confirmar === "cancelado"
+                  ? "El turno se cancelará y el horario quedará libre. Esta acción no se puede deshacer."
+                  : "El turno se marcará como finalizado. Esta acción no se puede deshacer."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -222,7 +223,11 @@ export function TurnoDetalle({
                   : ""
               }
             >
-              {confirmar === "cancelado" ? "Sí, cancelar" : "Sí, finalizar"}
+              {esReapertura(turno.estado)
+                ? "Sí, reabrir"
+                : confirmar === "cancelado"
+                  ? "Sí, cancelar"
+                  : "Sí, finalizar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
