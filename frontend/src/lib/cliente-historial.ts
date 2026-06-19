@@ -2,7 +2,6 @@
  * Cálculos sobre el historial de turnos de un cliente:
  * resumen (total, gastado, servicio favorito) para la ficha.
  */
-
 import { Turno } from "./turnos-api";
 
 export interface ResumenCliente {
@@ -15,9 +14,13 @@ export interface ResumenCliente {
 
 /** Calcula el resumen a partir de la lista de turnos del cliente. */
 export function calcularResumen(turnos: Turno[]): ResumenCliente {
+  // Solo los turnos finalizados cuentan como plata realmente gastada.
+  // Un turno confirmado (futuro) todavía no se cobró.
   const completados = turnos.filter((t) => t.estado === "finalizado");
 
   // Gasto total: suma de importes de los turnos finalizados.
+  // Los cubiertos por abono ya tienen importe 0, así que no suman plata
+  // (el cliente no pagó ese turno puntual; pagó el abono por separado).
   const gastoTotal = completados.reduce(
     (acc, t) => acc + (t.importe_previsto ? Number(t.importe_previsto) : 0),
     0,

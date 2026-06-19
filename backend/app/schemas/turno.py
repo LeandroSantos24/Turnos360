@@ -60,6 +60,7 @@ class TurnoOut(BaseModel):
     fecha_fin: dt.datetime | None
     es_sobreturno: bool
     importe_previsto: float | None
+    cubierto_por_abono: bool
     notas: str | None
     motivo_cancelacion: str | None
 

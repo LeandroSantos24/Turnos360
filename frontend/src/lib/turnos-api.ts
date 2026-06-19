@@ -24,6 +24,7 @@ export interface Turno {
   fecha_fin: string | null;
   es_sobreturno: boolean;
   importe_previsto: number | null;
+  cubierto_por_abono: boolean;
   notas: string | null;
   cliente_nombre: string | null;
   recurso_nombre: string | null;
