@@ -5,7 +5,7 @@ Dos recursos:
 - /membresias   : asignar/cancelar membresías a clientes + ver la activa
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from app.api.deps import DB, EmpresaActual
 from app.schemas.membresia import (
@@ -45,6 +45,14 @@ def borrar_plan(plan_id: int, empresa_id: EmpresaActual, db: DB) -> None:
 
 
 # ===== MEMBRESÍAS =====
+
+# OJO: esta ruta va ANTES de las que usan /membresias/{id} para que
+# FastAPI no confunda "estadisticas" con un id de membresía.
+@router.get("/membresias/estadisticas")
+def estadisticas(empresa_id: EmpresaActual, db: DB) -> dict:
+    """Estadísticas de rentabilidad de los planes de abono."""
+    return svc.estadisticas_planes(db, empresa_id)
+
 
 @router.post("/membresias", response_model=MembresiaOut, status_code=status.HTTP_201_CREATED)
 def crear_membresia(datos: MembresiaCrear, empresa_id: EmpresaActual, db: DB) -> MembresiaOut:

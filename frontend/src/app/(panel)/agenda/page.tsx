@@ -16,6 +16,7 @@ import { es } from "date-fns/locale";
 import { Plus } from "lucide-react";
 
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
+import { listarHorarios, Horario } from "@/lib/horarios-api";
 import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
 import { MetricasDia } from "./metricas-dia";
 import { TurnoDetalle } from "./turno-detalle";
@@ -49,6 +50,7 @@ function ordenarPorHora(turnos: Turno[]): Turno[] {
 
 export default function AgendaPage() {
   const [recursos, setRecursos] = useState<Recurso[]>([]);
+  const [horarios, setHorarios] = useState<Horario[]>([]);
   const [recursoId, setRecursoId] = useState<number | null>(null);
   const [dia, setDia] = useState<Date>(startOfDay(new Date()));
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -105,7 +107,43 @@ export default function AgendaPage() {
     cargarTurnos();
   }, [cargarTurnos]);
 
+  // Carga el horario del barbero elegido (para dibujar la grilla a su medida).
+  useEffect(() => {
+    if (recursoId === null) {
+      setHorarios([]);
+      return;
+    }
+    listarHorarios(recursoId)
+      .then(setHorarios)
+      .catch(() => setHorarios([]));
+  }, [recursoId]);
+
   const recursoActual = recursos.find((r) => r.id === recursoId);
+
+  // --- Horario del barbero para el día mostrado ---
+  /** "09:00:00" → minutos desde medianoche (540). */
+  function aMinutos(hhmmss: string): number {
+    const [h, m] = hhmmss.split(":");
+    return Number(h) * 60 + Number(m);
+  }
+
+  // JS: 0=domingo…6=sábado. Backend: 0=lunes…6=domingo.
+  const diaSemana = (dia.getDay() + 6) % 7;
+  const franjasDia = horarios
+    .filter((h) => h.dia_semana === diaSemana)
+    .map((h) => ({
+      desdeMin: aMinutos(h.hora_desde),
+      hastaMin: aMinutos(h.hora_hasta),
+    }))
+    .sort((a, b) => a.desdeMin - b.desdeMin);
+
+  const atiendeHoy = franjasDia.length > 0;
+  const horaInicio = atiendeHoy
+    ? Math.floor(Math.min(...franjasDia.map((f) => f.desdeMin)) / 60)
+    : 9;
+  const horaFin = atiendeHoy
+    ? Math.ceil(Math.max(...franjasDia.map((f) => f.hastaMin)) / 60)
+    : 19;
 
   /** Cierra el diálogo y limpia los datos del hueco. */
   function cerrarDialogo() {
@@ -194,9 +232,18 @@ export default function AgendaPage() {
 
       {/* Grilla de carriles (vista principal) */}
       <div className="mb-8">
+        {!atiendeHoy && (
+          <div className="mb-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+            {recursoActual?.nombre ?? "Este recurso"} no atiende este día. Podés
+            anotar igual si hace falta (queda como sobreturno).
+          </div>
+        )}
         <GrillaCarriles
           turnos={turnos}
           dia={dia}
+          horaInicio={horaInicio}
+          horaFin={horaFin}
+          franjasTrabajo={franjasDia}
           onClickTurno={(t) => setTurnoSel(t)}
           onClickHueco={(carril, fecha) => {
             setHuecoCarril(carril);

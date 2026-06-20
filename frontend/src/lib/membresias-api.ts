@@ -86,3 +86,31 @@ export function crearMembresia(datos: MembresiaCrear): Promise<Membresia> {
 export function cancelarMembresia(membresiaId: number): Promise<void> {
   return api.delete<void>(`/membresias/${membresiaId}`);
 }
+
+// ===== ESTADÍSTICAS =====
+
+export interface EstadisticaPlan {
+  plan_id: number;
+  nombre: string;
+  precio: number;
+  abonados_activos: number;
+  cortes_realizados: number;
+  ingreso: number;
+  precio_efectivo_por_corte: number | null;
+}
+
+export interface ResumenMembresias {
+  total_abonados: number;
+  total_ingreso: number;
+  total_cortes: number;
+  precio_efectivo_promedio: number | null;
+}
+
+export interface EstadisticasMembresias {
+  planes: EstadisticaPlan[];
+  resumen: ResumenMembresias;
+}
+
+export function estadisticasMembresias(): Promise<EstadisticasMembresias> {
+  return api.get<EstadisticasMembresias>("/membresias/estadisticas");
+}

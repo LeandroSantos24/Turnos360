@@ -8,12 +8,12 @@ del rango fecha_desde..fecha_hasta.
 import datetime as dt
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from app.models import Cliente
+from app.models import Cliente, Turno
 from app.models.modulos.fidelizacion import PlanAbono, Membresia
-from app.models.enums import EstadoMembresia
+from app.models.enums import EstadoMembresia, EstadoTurno
 
 
 # ===== PLANES =====
@@ -136,4 +136,86 @@ def resolver_salida(membresia: Membresia) -> dict:
         "plan_precio": float(membresia.plan.precio) if membresia.plan else None,
         "plan_ilimitado": membresia.plan.ilimitado if membresia.plan else None,
         "vigente": vigente,
+    }
+
+def estadisticas_planes(db: Session, empresa_id: int) -> dict:
+    """Calcula la rentabilidad de cada plan de abono y un resumen general.
+
+    Por cada plan: abonados activos, cortes finalizados cubiertos por ese abono,
+    ingreso (precio × abonados) y precio efectivo por corte (ingreso ÷ cortes).
+    El "precio efectivo" es la métrica clave: cuánto te queda por corte realmente.
+    """
+    hoy = dt.date.today()
+    planes = listar_planes(db, empresa_id)
+
+    # Membresías activas (vigentes hoy) con su plan
+    membresias_activas = list(
+        db.scalars(
+            select(Membresia).where(
+                Membresia.empresa_id == empresa_id,
+                Membresia.estado == EstadoMembresia.ACTIVA,
+                Membresia.fecha_desde <= hoy,
+                Membresia.fecha_hasta >= hoy,
+            )
+        )
+    )
+
+    # Contar abonados activos por plan
+    abonados_por_plan: dict[int, int] = {}
+    cliente_ids_por_plan: dict[int, list[int]] = {}
+    for m in membresias_activas:
+        abonados_por_plan[m.plan_id] = abonados_por_plan.get(m.plan_id, 0) + 1
+        cliente_ids_por_plan.setdefault(m.plan_id, []).append(m.cliente_id)
+
+    detalle = []
+    total_abonados = 0
+    total_ingreso = 0.0
+    total_cortes = 0
+
+    for plan in planes:
+        abonados = abonados_por_plan.get(plan.id, 0)
+        clientes_del_plan = cliente_ids_por_plan.get(plan.id, [])
+
+        # Cortes finalizados cubiertos por abono, de los clientes de este plan
+        cortes = 0
+        if clientes_del_plan:
+            cortes = (
+                db.scalar(
+                    select(func.count(Turno.id)).where(
+                        Turno.empresa_id == empresa_id,
+                        Turno.cliente_id.in_(clientes_del_plan),
+                        Turno.cubierto_por_abono == True,  # noqa: E712
+                        Turno.estado == EstadoTurno.FINALIZADO,
+                    )
+                )
+                or 0
+            )
+
+        ingreso = float(plan.precio) * abonados
+        precio_efectivo = (ingreso / cortes) if cortes > 0 else None
+
+        detalle.append({
+            "plan_id": plan.id,
+            "nombre": plan.nombre,
+            "precio": float(plan.precio),
+            "abonados_activos": abonados,
+            "cortes_realizados": cortes,
+            "ingreso": ingreso,
+            "precio_efectivo_por_corte": precio_efectivo,
+        })
+
+        total_abonados += abonados
+        total_ingreso += ingreso
+        total_cortes += cortes
+
+    return {
+        "planes": detalle,
+        "resumen": {
+            "total_abonados": total_abonados,
+            "total_ingreso": total_ingreso,
+            "total_cortes": total_cortes,
+            "precio_efectivo_promedio": (
+                total_ingreso / total_cortes if total_cortes > 0 else None
+            ),
+        },
     }

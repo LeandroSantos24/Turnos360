@@ -10,7 +10,8 @@ import { ApiError } from "@/lib/api";
 import { NuevoRecursoDialog } from "./nuevo-recurso-dialog";
 import { EditarRecursoDialog } from "./editar-recurso-dialog";
 import { toast } from "sonner";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Clock, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -184,6 +185,12 @@ export default function RecursosPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/recursos/${r.id}/horarios`}>
+                            <Clock size={14} className="mr-2" />
+                            Horarios
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setEditando(r)}>
                           <Pencil size={14} className="mr-2" />
                           Editar

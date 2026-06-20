@@ -7,7 +7,8 @@
  * Cada turno se posiciona en su columna (según servicio_grupo) y a su hora,
  * con alto proporcional a la duración. Los turnos que se solapan en el tiempo
  * (ej. original + sobreturno) se reparten el ancho lado a lado.
- * Los huecos libres son clickeables para crear.
+ * Los huecos libres son clickeables para crear. Las franjas fuera del horario
+ * del barbero se ven grisadas, pero siguen siendo clickeables (flexibilidad).
  */
 
 import { Turno } from "@/lib/turnos-api";
@@ -25,6 +26,8 @@ interface GrillaCarrilesProps {
   turnos: Turno[];
   horaInicio?: number;
   horaFin?: number;
+  /** Franjas de trabajo del barbero ese día (en minutos). Fuera de ellas, gris. */
+  franjasTrabajo?: { desdeMin: number; hastaMin: number }[];
   onClickTurno?: (turno: Turno) => void;
   onClickHueco?: (carrilId: string, hora: Date) => void;
   dia: Date;
@@ -46,6 +49,7 @@ export function GrillaCarriles({
   turnos,
   horaInicio = 9,
   horaFin = 19,
+  franjasTrabajo,
   onClickTurno,
   onClickHueco,
   dia,
@@ -57,6 +61,13 @@ export function GrillaCarriles({
   }
 
   const pxPorMin = ALTO_FRANJA / MIN_POR_FRANJA;
+
+  /** ¿La franja de 30 min que arranca a esta hora cae dentro del horario de trabajo? */
+  function dentroDeHorario(hora: number, minuto: number): boolean {
+    if (franjasTrabajo === undefined) return true; // sin info → todo habilitado
+    const min = hora * 60 + minuto;
+    return franjasTrabajo.some((f) => min >= f.desdeMin && min < f.hastaMin);
+  }
 
   /** Minutos desde el inicio de la grilla y duración de un turno. */
   function rango(turno: Turno): { ini: number; fin: number } | null {
@@ -169,15 +180,22 @@ export function GrillaCarriles({
               key={carril.id}
               className="relative flex-1 border-r last:border-r-0"
             >
-              {/* Celdas de fondo (clickeables) */}
-              {franjas.map((f) => (
-                <div
-                  key={f.label}
-                  onClick={() => clickHueco(carril.id, f.hora, f.minuto)}
-                  className="cursor-pointer border-b transition-colors last:border-b-0 hover:bg-primary/5"
-                  style={{ height: ALTO_FRANJA }}
-                />
-              ))}
+              {/* Celdas de fondo (clickeables; grisadas si están fuera de horario) */}
+              {franjas.map((f) => {
+                const dentro = dentroDeHorario(f.hora, f.minuto);
+                return (
+                  <div
+                    key={f.label}
+                    onClick={() => clickHueco(carril.id, f.hora, f.minuto)}
+                    className={`cursor-pointer border-b transition-colors last:border-b-0 ${
+                      dentro
+                        ? "hover:bg-primary/5"
+                        : "bg-muted/40 hover:bg-muted/60"
+                    }`}
+                    style={{ height: ALTO_FRANJA }}
+                  />
+                );
+              })}
 
               {/* Turnos ubicados (con reparto lado a lado) */}
               {ubicados.map(({ turno, top, alto, columna, totalColumnas }) => {

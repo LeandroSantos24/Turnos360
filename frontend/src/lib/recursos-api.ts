@@ -60,3 +60,8 @@ export function editarRecurso(
 export function borrarRecurso(id: number): Promise<void> {
   return api.delete<void>(`/recursos/${id}`);
 }
+
+/** Trae un recurso por id (GET /recursos/{id}). */
+export function obtenerRecurso(id: number): Promise<Recurso> {
+  return api.get<Recurso>(`/recursos/${id}`);
+}
