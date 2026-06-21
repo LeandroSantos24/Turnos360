@@ -3,14 +3,15 @@
 /**
  * Agenda visual (/agenda).
  *
- * Vista principal: la GRILLA DE CARRILES (Corte/Tintura/Barba) donde se ven los
- * turnos en sus columnas y se crea con clic en un hueco. Debajo, la lista de
- * turnos (vista alternativa, por ahora). El botón "Nuevo turno" y el clic en
- * hueco abren el mismo diálogo (con sobreturno inteligente).
+ * Tres vistas (toggle en la cabecera):
+ *  - Día: grilla de carriles (Corte/Tintura/Barba) + listado del día.
+ *  - Semana: grilla horaria de 7 días (se ven los huecos de toda la semana).
+ *  - Mes: calendario con el resumen de turnos de cada día.
+ * El botón "Nuevo turno" y el clic en un hueco abren el mismo diálogo.
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { addDays, format, startOfDay, endOfDay } from "date-fns";
+import { addDays, format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { isToday } from "date-fns/isToday";
 import { es } from "date-fns/locale";
 import { Plus } from "lucide-react";
@@ -22,6 +23,8 @@ import { MetricasDia } from "./metricas-dia";
 import { TurnoDetalle } from "./turno-detalle";
 import { NuevoTurnoDialog } from "./nuevo-turno-dialog";
 import { GrillaCarriles } from "./grilla-carriles";
+import { GrillaSemana } from "./grilla-semana";
+import { CalendarioMes } from "./calendario-mes";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -53,6 +56,7 @@ export default function AgendaPage() {
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [recursoId, setRecursoId] = useState<number | null>(null);
   const [dia, setDia] = useState<Date>(startOfDay(new Date()));
+  const [vista, setVista] = useState<"dia" | "semana" | "mes">("dia");
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosDia, setTurnosDia] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -88,11 +92,26 @@ export default function AgendaPage() {
     setCargando(true);
     setError(null);
     try {
-      const desde = startOfDay(dia).toISOString();
-      const hasta = endOfDay(dia).toISOString();
+      // El recurso se carga según la vista; las métricas, siempre del día.
+      let inicioRango: Date;
+      let finRango: Date;
+      if (vista === "mes") {
+        inicioRango = startOfWeek(startOfMonth(dia), { weekStartsOn: 1 });
+        finRango = endOfWeek(endOfMonth(dia), { weekStartsOn: 1 });
+      } else if (vista === "semana") {
+        inicioRango = startOfWeek(dia, { weekStartsOn: 1 });
+        finRango = endOfWeek(dia, { weekStartsOn: 1 });
+      } else {
+        inicioRango = startOfDay(dia);
+        finRango = endOfDay(dia);
+      }
+      const desde = inicioRango.toISOString();
+      const hasta = finRango.toISOString();
+      const desdeDia = startOfDay(dia).toISOString();
+      const hastaDia = endOfDay(dia).toISOString();
       const [delRecurso, delDia] = await Promise.all([
         listarTurnos(recursoId, desde, hasta),
-        listarTurnosDelDia(desde, hasta),
+        listarTurnosDelDia(desdeDia, hastaDia),
       ]);
       setTurnos(ordenarPorHora(delRecurso.items));
       setTurnosDia(delDia.items);
@@ -101,7 +120,7 @@ export default function AgendaPage() {
     } finally {
       setCargando(false);
     }
-  }, [recursoId, dia]);
+  }, [recursoId, dia, vista]);
 
   useEffect(() => {
     cargarTurnos();
@@ -145,6 +164,28 @@ export default function AgendaPage() {
     ? Math.ceil(Math.max(...franjasDia.map((f) => f.hastaMin)) / 60)
     : 19;
 
+  // Rango horario para la vista semanal (min/max de todos los días con horario)
+  const todasFranjas = horarios.map((h) => ({
+    desdeMin: aMinutos(h.hora_desde),
+    hastaMin: aMinutos(h.hora_hasta),
+  }));
+  const horaInicioSemana = todasFranjas.length
+    ? Math.floor(Math.min(...todasFranjas.map((f) => f.desdeMin)) / 60)
+    : 9;
+  const horaFinSemana = todasFranjas.length
+    ? Math.ceil(Math.max(...todasFranjas.map((f) => f.hastaMin)) / 60)
+    : 19;
+
+  // Etiqueta del período según la vista
+  const inicioSem = startOfWeek(dia, { weekStartsOn: 1 });
+  const finSem = endOfWeek(dia, { weekStartsOn: 1 });
+  const etiquetaPeriodo =
+    vista === "mes"
+      ? format(dia, "MMMM yyyy", { locale: es })
+      : vista === "semana"
+        ? `${format(inicioSem, "d", { locale: es })} – ${format(finSem, "d 'de' MMMM", { locale: es })}`
+        : format(dia, "EEEE d 'de' MMMM", { locale: es });
+
   /** Cierra el diálogo y limpia los datos del hueco. */
   function cerrarDialogo() {
     setDialogAbierto(false);
@@ -177,12 +218,53 @@ export default function AgendaPage() {
             </Select>
           )}
 
+          {/* Selector de vista */}
+          <div className="flex items-center rounded-lg border p-0.5">
+            <button
+              onClick={() => setVista("dia")}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                vista === "dia"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Día
+            </button>
+            <button
+              onClick={() => setVista("semana")}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                vista === "semana"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              onClick={() => setVista("mes")}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                vista === "mes"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Mes
+            </button>
+          </div>
+
+          {/* Navegación (día / semana / mes según la vista) */}
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setDia((d) => addDays(d, -1))}
-              aria-label="Día anterior"
+              onClick={() =>
+                setDia((d) =>
+                  vista === "mes"
+                    ? addMonths(d, -1)
+                    : addDays(d, vista === "semana" ? -7 : -1),
+                )
+              }
+              aria-label="Anterior"
             >
               ‹
             </Button>
@@ -196,8 +278,14 @@ export default function AgendaPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setDia((d) => addDays(d, 1))}
-              aria-label="Día siguiente"
+              onClick={() =>
+                setDia((d) =>
+                  vista === "mes"
+                    ? addMonths(d, 1)
+                    : addDays(d, vista === "semana" ? 7 : 1),
+                )
+              }
+              aria-label="Siguiente"
             >
               ›
             </Button>
@@ -216,10 +304,10 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      <MetricasDia turnos={turnosDia} />
+      {vista === "dia" && <MetricasDia turnos={turnosDia} />}
 
       <p className="mb-4 text-sm font-medium capitalize text-muted-foreground">
-        {format(dia, "EEEE d 'de' MMMM", { locale: es })}
+        {etiquetaPeriodo}
         {recursoActual && ` · ${recursoActual.nombre}`}
         {cargando && " · cargando…"}
       </p>
@@ -230,126 +318,163 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Grilla de carriles (vista principal) */}
-      <div className="mb-8">
-        {!atiendeHoy && (
-          <div className="mb-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-            {recursoActual?.nombre ?? "Este recurso"} no atiende este día. Podés
-            anotar igual si hace falta (queda como sobreturno).
-          </div>
-        )}
-        <GrillaCarriles
-          turnos={turnos}
-          dia={dia}
-          horaInicio={horaInicio}
-          horaFin={horaFin}
-          franjasTrabajo={franjasDia}
-          onClickTurno={(t) => setTurnoSel(t)}
-          onClickHueco={(carril, fecha) => {
-            setHuecoCarril(carril);
-            setHuecoFecha(fecha);
-            setDialogAbierto(true);
-          }}
-        />
-      </div>
-
-      {/* Lista de turnos (vista alternativa, por ahora) */}
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        Listado del día
-      </h2>
-      {!cargando && turnos.length === 0 ? (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {turnos.map((turno, i) => {
-            const color = colorEstadoHex(turno.estado);
-            const inactivo = estaInactivo(turno.estado);
-            return (
-              <div
-                key={turno.id}
-                onClick={() => setTurnoSel(turno)}
-                className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/50 ${
-                  i > 0 ? "border-t" : ""
-                }`}
-                style={{ opacity: inactivo ? 0.6 : 1 }}
-              >
-                {/* Hora a la izquierda */}
-                <div className="flex w-24 shrink-0 flex-col items-end justify-center border-r px-4 py-4">
-                  <span
-                    className="text-sm font-bold"
-                    style={{
-                      fontFamily: "Syne, sans-serif",
-                      fontVariantNumeric: "lining-nums tabular-nums",
-                    }}
-                  >
-                    {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
-                  </span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {turno.fecha_fin && horaDe(turno.fecha_fin)}
-                  </span>
-                </div>
-
-                {/* Barra de color (estado) */}
-                <div
-                  className="w-1 shrink-0"
-                  style={{ backgroundColor: color }}
-                />
-
-                {/* Contenido */}
-                <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4">
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
-                    style={{
-                      backgroundColor: color,
-                      fontFamily: "Syne, sans-serif",
-                    }}
-                  >
-                    {inicialDe(turno.cliente_nombre)}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span
-                      className={`truncate text-sm font-semibold ${
-                        inactivo ? "line-through" : ""
-                      }`}
-                    >
-                      {turno.cliente_nombre}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {turno.servicio_nombre ?? "Sin servicio"}
-                      {turno.es_sobreturno && " · sobreturno"}
-                    </span>
-                  </div>
-                  <span
-                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
-                    style={{ backgroundColor: `${color}22`, color: color }}
-                  >
-                    {labelEstado(turno.estado)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+      {/* Vista semanal: grilla horaria de 7 días */}
+      {vista === "semana" && (
+        <div className="mb-8">
+          <GrillaSemana
+            turnos={turnos}
+            dia={dia}
+            horaInicio={horaInicioSemana}
+            horaFin={horaFinSemana}
+            horarios={horarios}
+            onClickTurno={(t) => setTurnoSel(t)}
+            onClickHueco={(fecha) => {
+              setHuecoCarril(null);
+              setHuecoFecha(fecha);
+              setDialogAbierto(true);
+            }}
+          />
         </div>
       )}
 
-      {/* Leyenda */}
-      <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-        {(["pendiente", "confirmado", "en_curso", "finalizado", "cancelado"] as const).map(
-          (e) => (
-            <span key={e} className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: colorEstadoHex(e) }}
-              />
-              {labelEstado(e)}
-            </span>
-          ),
-        )}
-      </div>
+      {/* Vista mensual: calendario con resumen por día */}
+      {vista === "mes" && (
+        <div className="mb-8">
+          <CalendarioMes
+            turnos={turnos}
+            dia={dia}
+            onClickDia={(d) => {
+              setDia(startOfDay(d));
+              setVista("dia");
+            }}
+          />
+        </div>
+      )}
+
+      {/* Vista diaria: grilla de carriles + listado */}
+      {vista === "dia" && (
+        <>
+          <div className="mb-8">
+            {!atiendeHoy && (
+              <div className="mb-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+                {recursoActual?.nombre ?? "Este recurso"} no atiende este día.
+                Podés anotar igual si hace falta (queda como sobreturno).
+              </div>
+            )}
+            <GrillaCarriles
+              turnos={turnos}
+              dia={dia}
+              horaInicio={horaInicio}
+              horaFin={horaFin}
+              franjasTrabajo={franjasDia}
+              onClickTurno={(t) => setTurnoSel(t)}
+              onClickHueco={(carril, fecha) => {
+                setHuecoCarril(carril);
+                setHuecoFecha(fecha);
+                setDialogAbierto(true);
+              }}
+            />
+          </div>
+
+          {/* Lista de turnos del día */}
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Listado del día
+          </h2>
+          {!cargando && turnos.length === 0 ? (
+            <div className="rounded-2xl border bg-card p-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border bg-card">
+              {turnos.map((turno, i) => {
+                const color = colorEstadoHex(turno.estado);
+                const inactivo = estaInactivo(turno.estado);
+                return (
+                  <div
+                    key={turno.id}
+                    onClick={() => setTurnoSel(turno)}
+                    className={`flex cursor-pointer items-stretch transition-colors hover:bg-muted/50 ${
+                      i > 0 ? "border-t" : ""
+                    }`}
+                    style={{ opacity: inactivo ? 0.6 : 1 }}
+                  >
+                    {/* Hora a la izquierda */}
+                    <div className="flex w-24 shrink-0 flex-col items-end justify-center border-r px-4 py-4">
+                      <span
+                        className="text-sm font-bold"
+                        style={{
+                          fontFamily: "Syne, sans-serif",
+                          fontVariantNumeric: "lining-nums tabular-nums",
+                        }}
+                      >
+                        {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
+                      </span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {turno.fecha_fin && horaDe(turno.fecha_fin)}
+                      </span>
+                    </div>
+
+                    {/* Barra de color (estado) */}
+                    <div
+                      className="w-1 shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+
+                    {/* Contenido */}
+                    <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4">
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
+                        style={{
+                          backgroundColor: color,
+                          fontFamily: "Syne, sans-serif",
+                        }}
+                      >
+                        {inicialDe(turno.cliente_nombre)}
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span
+                          className={`truncate text-sm font-semibold ${
+                            inactivo ? "line-through" : ""
+                          }`}
+                        >
+                          {turno.cliente_nombre}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {turno.servicio_nombre ?? "Sin servicio"}
+                          {turno.es_sobreturno && " · sobreturno"}
+                        </span>
+                      </div>
+                      <span
+                        className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+                        style={{ backgroundColor: `${color}22`, color: color }}
+                      >
+                        {labelEstado(turno.estado)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Leyenda */}
+          <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
+            {(["pendiente", "confirmado", "en_curso", "finalizado", "cancelado"] as const).map(
+              (e) => (
+                <span key={e} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: colorEstadoHex(e) }}
+                  />
+                  {labelEstado(e)}
+                </span>
+              ),
+            )}
+          </div>
+        </>
+      )}
 
       {/* Panel de detalle del turno */}
       <TurnoDetalle
