@@ -1,5 +1,5 @@
 "use client";
-
+ 
 /**
  * Grilla de carriles de la agenda.
  *
@@ -7,12 +7,11 @@
  * Cada turno se posiciona en su columna (según servicio_grupo) y a su hora,
  * con alto proporcional a la duración. Los turnos que se solapan en el tiempo
  * (ej. original + sobreturno) se reparten el ancho lado a lado.
- * Los huecos libres son clickeables para crear. Las franjas fuera del horario
- * del barbero se ven grisadas, pero siguen siendo clickeables (flexibilidad).
+ * Los huecos libres son clickeables para crear.
  */
-
+ 
 import { Turno } from "@/lib/turnos-api";
-import { CARRILES, carrilDeTurno } from "@/lib/carriles";
+import { Carril, carrilDeTurno } from "@/lib/carriles";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -21,9 +20,11 @@ import {
   inicialDe,
 } from "@/lib/turno-visual";
 import { Zap } from "lucide-react";
-
+ 
 interface GrillaCarrilesProps {
   turnos: Turno[];
+  /** Columnas a mostrar (generadas desde los grupos de los servicios). */
+  carriles: Carril[];
   horaInicio?: number;
   horaFin?: number;
   /** Franjas de trabajo del barbero ese día (en minutos). Fuera de ellas, gris. */
@@ -32,10 +33,10 @@ interface GrillaCarrilesProps {
   onClickHueco?: (carrilId: string, hora: Date) => void;
   dia: Date;
 }
-
+ 
 const ALTO_FRANJA = 60; // px por franja de 30 min (un poco más de aire)
 const MIN_POR_FRANJA = 30;
-
+ 
 /** Un turno con su posición calculada (para repartir solapados). */
 interface TurnoUbicado {
   turno: Turno;
@@ -44,9 +45,10 @@ interface TurnoUbicado {
   columna: number; // índice dentro del grupo de solapados
   totalColumnas: number; // cuántos solapados hay en su grupo
 }
-
+ 
 export function GrillaCarriles({
   turnos,
+  carriles,
   horaInicio = 9,
   horaFin = 19,
   franjasTrabajo,
@@ -59,16 +61,16 @@ export function GrillaCarriles({
     franjas.push({ label: `${String(h).padStart(2, "0")}:00`, hora: h, minuto: 0 });
     franjas.push({ label: `${String(h).padStart(2, "0")}:30`, hora: h, minuto: 30 });
   }
-
+ 
   const pxPorMin = ALTO_FRANJA / MIN_POR_FRANJA;
-
+ 
   /** ¿La franja de 30 min que arranca a esta hora cae dentro del horario de trabajo? */
   function dentroDeHorario(hora: number, minuto: number): boolean {
     if (franjasTrabajo === undefined) return true; // sin info → todo habilitado
     const min = hora * 60 + minuto;
     return franjasTrabajo.some((f) => min >= f.desdeMin && min < f.hastaMin);
   }
-
+ 
   /** Minutos desde el inicio de la grilla y duración de un turno. */
   function rango(turno: Turno): { ini: number; fin: number } | null {
     if (!turno.fecha_inicio || !turno.fecha_fin) return null;
@@ -79,7 +81,7 @@ export function GrillaCarriles({
     if (ini < 0) return null;
     return { ini, fin };
   }
-
+ 
   /**
    * Ubica los turnos de un carril, repartiendo en columnas los que se solapan.
    * Algoritmo: agrupa turnos que se pisan en el tiempo, y dentro de cada grupo
@@ -89,10 +91,10 @@ export function GrillaCarriles({
     const conRango = turnosCarril
       .map((t) => ({ turno: t, r: rango(t) }))
       .filter((x) => x.r !== null) as { turno: Turno; r: { ini: number; fin: number } }[];
-
+ 
     // Ordenar por inicio
     conRango.sort((a, b) => a.r.ini - b.r.ini);
-
+ 
     // Agrupar en "clusters" de turnos que se solapan entre sí
     const clusters: (typeof conRango)[] = [];
     for (const item of conRango) {
@@ -110,7 +112,7 @@ export function GrillaCarriles({
       }
       if (!metido) clusters.push([item]);
     }
-
+ 
     // Para cada cluster, asignar columnas
     const resultado: TurnoUbicado[] = [];
     for (const cluster of clusters) {
@@ -127,24 +129,24 @@ export function GrillaCarriles({
     }
     return resultado;
   }
-
+ 
   function turnosDeCarril(carrilId: string): Turno[] {
     return turnos.filter((t) => carrilDeTurno(t.servicio_grupo) === carrilId);
   }
-
+ 
   function clickHueco(carrilId: string, hora: number, minuto: number) {
     if (!onClickHueco) return;
     const fecha = new Date(dia);
     fecha.setUTCHours(hora, minuto, 0, 0);
     onClickHueco(carrilId, fecha);
   }
-
+ 
   return (
     <div className="overflow-hidden rounded-2xl border bg-card">
       {/* Encabezado: las 3 columnas */}
       <div className="flex border-b bg-muted/30">
         <div className="w-14 shrink-0 border-r" />
-        {CARRILES.map((carril) => (
+        {carriles.map((carril) => (
           <div
             key={carril.id}
             className="flex-1 border-r px-4 py-3 text-center text-sm font-bold last:border-r-0"
@@ -154,7 +156,7 @@ export function GrillaCarriles({
           </div>
         ))}
       </div>
-
+ 
       {/* Cuerpo */}
       <div className="flex">
         {/* Columna de horas */}
@@ -171,9 +173,9 @@ export function GrillaCarriles({
             </div>
           ))}
         </div>
-
+ 
         {/* Las 3 columnas de carriles */}
-        {CARRILES.map((carril) => {
+        {carriles.map((carril) => {
           const ubicados = ubicarTurnos(turnosDeCarril(carril.id));
           return (
             <div
@@ -196,7 +198,7 @@ export function GrillaCarriles({
                   />
                 );
               })}
-
+ 
               {/* Turnos ubicados (con reparto lado a lado) */}
               {ubicados.map(({ turno, top, alto, columna, totalColumnas }) => {
                 const color = colorEstadoHex(turno.estado);
@@ -207,7 +209,7 @@ export function GrillaCarriles({
                 const left = `calc(${columna * anchoPct}% + ${columna === 0 ? 3 : gap}px)`;
                 const width = `calc(${anchoPct}% - ${totalColumnas === 1 ? 6 : gap + 3}px)`;
                 const compacto = alto < 44 || totalColumnas > 1;
-
+ 
                 return (
                   <div
                     key={turno.id}
