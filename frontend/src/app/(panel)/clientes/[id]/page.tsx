@@ -1,24 +1,25 @@
 "use client";
 
 /**
- * Ficha del cliente (/clientes/[id]).
+ * Ficha del cliente/paciente (/clientes/[id]).
  *
- * Datos del cliente + resumen (turnos, gasto, servicio favorito) + el
- * historial completo de turnos. Botón "Editar", asignar/cancelar membresía.
- * Clic en un turno del historial abre su panel de detalle (ver + gestionar).
- * Estilo uniforme: títulos Syne, tarjetas rounded-2xl, números tabulares.
+ * Datos + resumen (turnos, gasto, servicio favorito) + historial completo.
+ * Botón "Editar", asignar/cancelar membresía, y "Ficha clínica" SOLO si el
+ * rubro tiene ese módulo activo. La terminología (cliente/paciente) sale del
+ * preset del rubro. Estilo uniforme: Syne, rounded-2xl, números tabulares.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { ArrowLeft, Pencil, FileText } from "lucide-react";
 
 import { obtenerCliente, Cliente } from "@/lib/clientes-api";
 import { listarTurnosDeCliente, Turno } from "@/lib/turnos-api";
 import { calcularResumen, ResumenCliente } from "@/lib/cliente-historial";
+import { useModulo, useTermino } from "@/lib/config-rubro";
 import {
   membresiaDeCliente,
   cancelarMembresia,
@@ -62,6 +63,8 @@ export default function FichaClientePage() {
   const params = useParams();
   const router = useRouter();
   const clienteId = Number(params.id);
+  const mostrarFicha = useModulo("ficha_clinica");
+  const termino = useTermino();
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -133,18 +136,18 @@ export default function FichaClientePage() {
           <ArrowLeft size={16} className="mr-1" /> Volver
         </Button>
         <p className="mt-4 text-sm text-destructive">
-          {error ?? "Cliente no encontrado"}
+          {error ?? `${termino("cliente", "Cliente")} no encontrado`}
         </p>
       </div>
     );
   }
 
-  const color = "#00d4aa"; // teal de la marca para el avatar del cliente
+  const color = "#00d4aa"; // teal de la marca para el avatar
   const nombreCompleto = `${cliente.nombre} ${cliente.apellido ?? ""}`.trim();
 
   return (
     <div className="p-8">
-      {/* Barra superior: volver + editar */}
+      {/* Barra superior: volver + ficha (según rubro) + editar */}
       <div className="mb-4 flex items-center justify-between">
         <Button
           variant="ghost"
@@ -154,12 +157,23 @@ export default function FichaClientePage() {
         >
           <ArrowLeft size={16} className="mr-1" /> Volver
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
-          <Pencil size={14} className="mr-1.5" /> Editar
-        </Button>
+        <div className="flex items-center gap-2">
+          {mostrarFicha && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/clientes/${clienteId}/ficha`)}
+            >
+              <FileText size={14} className="mr-1.5" /> Ficha clínica
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+            <Pencil size={14} className="mr-1.5" /> Editar
+          </Button>
+        </div>
       </div>
 
-      {/* Cabecera: datos del cliente */}
+      {/* Cabecera: datos del cliente/paciente */}
       <div className="mb-6 flex items-start gap-4">
         <div
           className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white"
@@ -178,7 +192,7 @@ export default function FichaClientePage() {
               <span>Llegó por {cliente.canal_adquisicion}</span>
             )}
           </div>
-          {/* Etiquetas del cliente */}
+          {/* Etiquetas */}
           {cliente.etiquetas && cliente.etiquetas.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {cliente.etiquetas.map((etiqueta) => (
@@ -313,7 +327,7 @@ export default function FichaClientePage() {
       {turnos.length === 0 ? (
         <div className="rounded-2xl border bg-card p-12 text-center">
           <p className="text-sm text-muted-foreground">
-            Este cliente todavía no tiene turnos.
+            Este {termino("cliente", "cliente")} todavía no tiene turnos.
           </p>
         </div>
       ) : (
@@ -403,7 +417,7 @@ export default function FichaClientePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Cancelar la membresía?</AlertDialogTitle>
             <AlertDialogDescription>
-              El cliente dejará de tener el abono{" "}
+              El {termino("cliente", "cliente")} dejará de tener el abono{" "}
               <span className="font-medium">{membresia?.plan_nombre}</span> activo.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>

@@ -100,3 +100,5 @@ make down
   "email": "dueno@lacueva.com",
   "clave": "demo1234"
 }
+
+curl -s -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d '{"email":"giuliana@nutricion.com","clave":"demo1234"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"

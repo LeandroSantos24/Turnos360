@@ -20,6 +20,7 @@ dependencies = [
     "python-multipart>=0.0.18",
     "pytest>=8.3",
     "httpx>=0.28",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

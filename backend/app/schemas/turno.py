@@ -45,6 +45,12 @@ class TurnoCambiarEstado(BaseModel):
     motivo_cancelacion: str | None = Field(default=None, max_length=300)
 
 
+class TurnoDescuento(BaseModel):
+    """Aplicar un descuento al turno (porcentaje 0-100)."""
+
+    descuento_pct: float = Field(ge=0, le=100)
+
+
 class TurnoOut(BaseModel):
     """Lo que devuelve la API. Incluye nombres relacionados para la agenda."""
 
@@ -61,6 +67,7 @@ class TurnoOut(BaseModel):
     es_sobreturno: bool
     importe_previsto: float | None
     cubierto_por_abono: bool
+    descuento_pct: float
     notas: str | None
     motivo_cancelacion: str | None
 

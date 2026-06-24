@@ -26,6 +26,8 @@ import {
 
 import { isLoggedIn, clearToken } from "@/lib/auth";
 import { getMe, UsuarioMe } from "@/lib/auth-api";
+import { obtenerConfigEmpresa, ConfigEmpresa } from "@/lib/empresa-api";
+import { ConfigRubroProvider } from "@/lib/config-rubro";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 // Ítems del menú, agrupados como en TurnosPro.
@@ -51,14 +53,18 @@ export default function PanelLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<UsuarioMe | null>(null);
+  const [config, setConfig] = useState<ConfigEmpresa | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn()) {
       router.push("/login");
       return;
     }
-    getMe()
-      .then(setUsuario)
+    Promise.all([getMe(), obtenerConfigEmpresa()])
+      .then(([u, c]) => {
+        setUsuario(u);
+        setConfig(c);
+      })
       .catch(() => router.push("/login"));
   }, [router]);
 
@@ -67,7 +73,7 @@ export default function PanelLayout({
     router.push("/login");
   }
 
-  if (!usuario) {
+  if (!usuario || !config) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Cargando…</p>
@@ -76,6 +82,7 @@ export default function PanelLayout({
   }
 
   return (
+    <ConfigRubroProvider value={config}>
     <div className="flex min-h-screen">
       {/* Sidebar navy */}
       <aside
@@ -242,5 +249,6 @@ export default function PanelLayout({
       {/* Contenido */}
       <main className="flex-1 overflow-auto bg-background">{children}</main>
     </div>
+    </ConfigRubroProvider>
   );
 }

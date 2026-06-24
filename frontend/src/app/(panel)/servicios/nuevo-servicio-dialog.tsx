@@ -49,6 +49,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
   const [duracion, setDuracion] = useState("30");
   const [paso, setPaso] = useState("15");
   const [precio, setPrecio] = useState("");
+  const [agendable, setAgendable] = useState(true); // ¿ocupa turno?
 
   // Carril de agenda
   const [enParalelo, setEnParalelo] = useState(false); // ¿convive con todo?
@@ -59,6 +60,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
     setDuracion("30");
     setPaso("15");
     setPrecio("");
+    setAgendable(true);
     setEnParalelo(false);
     setGrupo("");
   }
@@ -80,10 +82,11 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
     try {
       await crearServicio({
         nombre,
-        duracion_min: Number(duracion),
-        paso_turno_min: Number(paso),
+        duracion_min: agendable ? Number(duracion) : 1,
+        paso_turno_min: agendable ? Number(paso) : 1,
         precio: precio ? Number(precio) : undefined,
-        grupo_agenda: grupoAgenda,
+        grupo_agenda: agendable ? grupoAgenda : null,
+        agendable,
       });
       toast.success("Servicio creado");
       limpiar();
@@ -122,29 +125,43 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="duracion">Duración (min) *</Label>
-              <Input
-                id="duracion"
-                type="number"
-                min="1"
-                value={duracion}
-                onChange={(e) => setDuracion(e.target.value)}
-                required
-              />
+          {/* ¿Ocupa un turno o es solo para vender? */}
+          <div className="flex items-start justify-between gap-3 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="agendable">¿Ocupa un turno en la agenda?</Label>
+              <p className="text-xs text-muted-foreground">
+                Activado: se reserva como turno (corte, color). Desactivado: solo
+                se vende como adicional (perfilado, productos) y no aparece al agendar.
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="paso">Turno cada (min)</Label>
-              <Input
-                id="paso"
-                type="number"
-                min="1"
-                value={paso}
-                onChange={(e) => setPaso(e.target.value)}
-              />
-            </div>
+            <Switch id="agendable" checked={agendable} onCheckedChange={setAgendable} />
           </div>
+
+          {agendable && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="duracion">Duración (min) *</Label>
+                <Input
+                  id="duracion"
+                  type="number"
+                  min="1"
+                  value={duracion}
+                  onChange={(e) => setDuracion(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="paso">Turno cada (min)</Label>
+                <Input
+                  id="paso"
+                  type="number"
+                  min="1"
+                  value={paso}
+                  onChange={(e) => setPaso(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="precio">Precio</Label>
@@ -158,8 +175,9 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
             />
           </div>
 
-          {/* Configuración de carril de agenda */}
-          <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+          {/* Carril de agenda (solo si ocupa turno) */}
+          {agendable && (
+            <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-0.5">
                 <Label htmlFor="paralelo">
@@ -193,8 +211,9 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
                   grupo <span className="font-medium">corte</span>.
                 </p>
               </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="submit" disabled={guardando}>

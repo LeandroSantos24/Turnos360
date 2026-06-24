@@ -112,5 +112,8 @@ class Servicio(TenantMixin, Base):
     grupo_agenda: Mapped[str | None] = mapped_column(String(40), default=None)
     precio: Mapped[float | None] = mapped_column(Numeric(12, 2))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Si NO ocupa turno (perfilado, lavado, productos): no aparece al agendar,
+    # solo se puede sumar como adicional. server_default cubre las filas ya creadas.
+    agendable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     recursos: Mapped[list["Recurso"]] = relationship(secondary=servicio_recurso)

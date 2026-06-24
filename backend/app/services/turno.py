@@ -245,6 +245,22 @@ def cambiar_estado(
     db.refresh(turno)
     return _resolver_nombres(db, turno)
 
+
+def aplicar_descuento(
+    db: Session, empresa_id: int, turno_id: int, pct: float
+) -> Turno | None:
+    """Guarda el % de descuento del turno. None si no es de esta empresa."""
+    turno = db.scalar(
+        select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+    )
+    if turno is None:
+        return None
+    turno.descuento_pct = pct
+    db.commit()
+    db.refresh(turno)
+    return _resolver_nombres(db, turno)
+
+
 def _abono_cubre_servicio(
     db: Session, empresa_id: int, cliente_id: int, servicio_id: int
 ) -> bool:

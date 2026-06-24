@@ -12,15 +12,45 @@ from app.api.deps import DB, EmpresaActual
 from app.models.enums import EstadoTurno
 from app.schemas.turno import (
     TurnoCambiarEstado,
+    TurnoDescuento,
     TurnoCrear,
     TurnoMover,
     TurnoOut,
     TurnosPagina,
 )
 from app.services import turno as svc
+from app.services import servicio as svc_servicio
+from app.services.disponibilidad import calcular_huecos
 
 router = APIRouter(prefix="/turnos", tags=["turnos"])
 
+@router.get("/huecos", response_model=list[dt.datetime])
+def buscar_huecos(
+    empresa_id: EmpresaActual,
+    db: DB,
+    recurso_id: int = Query(..., description="Barbero a consultar"),
+    fecha: dt.date = Query(..., description="Día a consultar (YYYY-MM-DD)"),
+    servicio_id: int = Query(..., description="Servicio: define duración y carril"),
+) -> list[dt.datetime]:
+    """Horarios de inicio libres para ese servicio, ese día y ese barbero.
+
+    Reutiliza el motor de disponibilidad: respeta franjas de trabajo,
+    excepciones, buffer y el carril (grupo_agenda) del servicio.
+    """
+    servicio = svc_servicio.obtener(db, empresa_id, servicio_id)
+    if servicio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado"
+        )
+    return calcular_huecos(
+        db,
+        empresa_id,
+        recurso_id,
+        fecha,
+        duracion_min=servicio.duracion_min,
+        paso_min=servicio.paso_turno_min,
+        grupo_agenda=servicio.grupo_agenda,
+    )
 
 @router.get("", response_model=TurnosPagina)
 def listar_turnos(
@@ -79,6 +109,17 @@ def cambiar_estado_turno(
     409 si la transición no es válida (p. ej. finalizar un turno cancelado).
     """
     turno = svc.cambiar_estado(db, empresa_id, turno_id, datos)
+    if turno is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
+    return turno
+
+
+@router.patch("/{turno_id}/descuento", response_model=TurnoOut)
+def aplicar_descuento_turno(
+    turno_id: int, datos: TurnoDescuento, empresa_id: EmpresaActual, db: DB
+) -> TurnoOut:
+    """Aplica un % de descuento al turno (0-100)."""
+    turno = svc.aplicar_descuento(db, empresa_id, turno_id, datos.descuento_pct)
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
     return turno

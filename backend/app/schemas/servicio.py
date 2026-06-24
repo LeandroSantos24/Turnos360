@@ -10,6 +10,7 @@ class ServicioBase(BaseModel):
     paso_turno_min: int = Field(default=15, gt=0, le=240, description="Cada cuánto se ofrecen turnos")
     grupo_agenda: str | None = Field(default=None, max_length=40, description="Carril de agenda: servicios del mismo grupo se bloquean entre sí")
     precio: float | None = Field(default=None, ge=0)
+    agendable: bool = Field(default=True, description="Si ocupa turno (corte) o es solo para vender (perfilado, productos)")
 
 
 class ServicioCrear(ServicioBase):
@@ -23,6 +24,7 @@ class ServicioEditar(BaseModel):
     paso_turno_min: int | None = Field(default=None, gt=0, le=240)
     grupo_agenda: str | None = Field(default=None, max_length=40)
     precio: float | None = Field(default=None, ge=0)
+    agendable: bool | None = None
     activo: bool | None = None
 
 

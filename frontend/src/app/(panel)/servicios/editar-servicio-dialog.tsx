@@ -54,6 +54,7 @@ export function EditarServicioDialog({
   const [duracion, setDuracion] = useState("30");
   const [paso, setPaso] = useState("15");
   const [precio, setPrecio] = useState("");
+  const [agendable, setAgendable] = useState(true);
   const [enParalelo, setEnParalelo] = useState(false);
   const [grupo, setGrupo] = useState("");
 
@@ -64,6 +65,7 @@ export function EditarServicioDialog({
     setDuracion(String(servicio.duracion_min));
     setPaso(String(servicio.paso_turno_min));
     setPrecio(servicio.precio != null ? String(servicio.precio) : "");
+    setAgendable(servicio.agendable);
     // Deducir el estado del carril desde grupo_agenda
     const g = servicio.grupo_agenda ?? "";
     if (g.startsWith("solo-")) {
@@ -90,10 +92,11 @@ export function EditarServicioDialog({
     try {
       await editarServicio(servicio.id, {
         nombre,
-        duracion_min: Number(duracion),
-        paso_turno_min: Number(paso),
+        duracion_min: agendable ? Number(duracion) : 1,
+        paso_turno_min: agendable ? Number(paso) : 1,
         precio: precio ? Number(precio) : undefined,
-        grupo_agenda: grupoAgenda,
+        grupo_agenda: agendable ? grupoAgenda : null,
+        agendable,
       });
       toast.success("Servicio actualizado");
       onEditado();
@@ -125,29 +128,43 @@ export function EditarServicioDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="e-duracion">Duración (min) *</Label>
-              <Input
-                id="e-duracion"
-                type="number"
-                min="1"
-                value={duracion}
-                onChange={(e) => setDuracion(e.target.value)}
-                required
-              />
+          {/* ¿Ocupa un turno o es solo para vender? */}
+          <div className="flex items-start justify-between gap-3 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="e-agendable">¿Ocupa un turno en la agenda?</Label>
+              <p className="text-xs text-muted-foreground">
+                Activado: se reserva como turno (corte, color). Desactivado: solo
+                se vende como adicional (perfilado, productos) y no aparece al agendar.
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="e-paso">Turno cada (min)</Label>
-              <Input
-                id="e-paso"
-                type="number"
-                min="1"
-                value={paso}
-                onChange={(e) => setPaso(e.target.value)}
-              />
-            </div>
+            <Switch id="e-agendable" checked={agendable} onCheckedChange={setAgendable} />
           </div>
+
+          {agendable && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="e-duracion">Duración (min) *</Label>
+                <Input
+                  id="e-duracion"
+                  type="number"
+                  min="1"
+                  value={duracion}
+                  onChange={(e) => setDuracion(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e-paso">Turno cada (min)</Label>
+                <Input
+                  id="e-paso"
+                  type="number"
+                  min="1"
+                  value={paso}
+                  onChange={(e) => setPaso(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="e-precio">Precio</Label>
@@ -160,7 +177,8 @@ export function EditarServicioDialog({
             />
           </div>
 
-          <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+          {agendable && (
+            <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-0.5">
                 <Label htmlFor="e-paralelo">
@@ -191,8 +209,9 @@ export function EditarServicioDialog({
                   Servicios con el mismo grupo no pueden coincidir en horario.
                 </p>
               </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onCerrar}>

@@ -10,6 +10,7 @@
  * Los huecos libres son clickeables para crear.
  */
  
+import { useState } from "react";
 import { Turno } from "@/lib/turnos-api";
 import { Carril, carrilDeTurno } from "@/lib/carriles";
 import {
@@ -31,6 +32,8 @@ interface GrillaCarrilesProps {
   franjasTrabajo?: { desdeMin: number; hastaMin: number }[];
   onClickTurno?: (turno: Turno) => void;
   onClickHueco?: (carrilId: string, hora: Date) => void;
+  /** Reprograma un turno al soltarlo en otra franja (drag & drop). */
+  onMoverTurno?: (turno: Turno, nuevaFecha: Date) => void;
   dia: Date;
 }
  
@@ -54,8 +57,11 @@ export function GrillaCarriles({
   franjasTrabajo,
   onClickTurno,
   onClickHueco,
+  onMoverTurno,
   dia,
 }: GrillaCarrilesProps) {
+  const [arrastrando, setArrastrando] = useState<Turno | null>(null);
+  const [celdaActiva, setCeldaActiva] = useState<string | null>(null);
   const franjas: { label: string; hora: number; minuto: number }[] = [];
   for (let h = horaInicio; h < horaFin; h++) {
     franjas.push({ label: `${String(h).padStart(2, "0")}:00`, hora: h, minuto: 0 });
@@ -182,17 +188,39 @@ export function GrillaCarriles({
               key={carril.id}
               className="relative flex-1 border-r last:border-r-0"
             >
-              {/* Celdas de fondo (clickeables; grisadas si están fuera de horario) */}
+              {/* Celdas de fondo (clickeables; zona de drop para mover turnos) */}
               {franjas.map((f) => {
                 const dentro = dentroDeHorario(f.hora, f.minuto);
+                const idCelda = `${carril.id}-${f.label}`;
+                const activa = celdaActiva === idCelda;
                 return (
                   <div
                     key={f.label}
                     onClick={() => clickHueco(carril.id, f.hora, f.minuto)}
+                    onDragOver={(e) => {
+                      if (!arrastrando) return;
+                      e.preventDefault();
+                      setCeldaActiva(idCelda);
+                    }}
+                    onDragLeave={() => {
+                      if (celdaActiva === idCelda) setCeldaActiva(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (arrastrando) {
+                        const nueva = new Date(dia);
+                        nueva.setUTCHours(f.hora, f.minuto, 0, 0);
+                        onMoverTurno?.(arrastrando, nueva);
+                      }
+                      setArrastrando(null);
+                      setCeldaActiva(null);
+                    }}
                     className={`cursor-pointer border-b transition-colors last:border-b-0 ${
-                      dentro
-                        ? "hover:bg-primary/5"
-                        : "bg-muted/40 hover:bg-muted/60"
+                      activa
+                        ? "bg-primary/20 ring-1 ring-inset ring-primary"
+                        : dentro
+                          ? "hover:bg-primary/5"
+                          : "bg-muted/40 hover:bg-muted/60"
                     }`}
                     style={{ height: ALTO_FRANJA }}
                   />
@@ -213,11 +241,19 @@ export function GrillaCarriles({
                 return (
                   <div
                     key={turno.id}
+                    draggable={!inactivo}
+                    onDragStart={() => setArrastrando(turno)}
+                    onDragEnd={() => {
+                      setArrastrando(null);
+                      setCeldaActiva(null);
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       onClickTurno?.(turno);
                     }}
-                    className="absolute overflow-hidden rounded-lg shadow-sm transition-all hover:z-10 hover:shadow-md"
+                    className={`absolute overflow-hidden rounded-lg shadow-sm transition-all hover:z-10 hover:shadow-md ${
+                      inactivo ? "" : "cursor-grab active:cursor-grabbing"
+                    }`}
                     style={{
                       top: top + 2,
                       height: alto - 4,

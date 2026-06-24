@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 
@@ -13,6 +13,7 @@ from app.core.seguridad import (
     decodificar_token,
 )
 from app.core.crypto import verificar_clave
+from app.core.rate_limit import limiter
 from app.models import Usuario
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
@@ -20,7 +21,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(datos: LoginRequest, db: DB) -> TokenResponse:
+@limiter.limit("10/minute")
+def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     """Valida email + clave y devuelve un par de tokens (access + refresh).
 
     El login NO filtra por empresa: el email es único dentro de cada empresa,

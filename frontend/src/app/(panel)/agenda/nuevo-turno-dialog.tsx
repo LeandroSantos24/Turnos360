@@ -196,7 +196,7 @@ export function NuevoTurnoDialog({
                 <SelectValue placeholder="Elegí un servicio" />
               </SelectTrigger>
               <SelectContent>
-                {servicios.map((s) => (
+                {servicios.filter((s) => s.agendable).map((s) => (
                   <SelectItem key={s.id} value={String(s.id)}>
                     {s.nombre} · {s.duracion_min} min
                     {s.precio != null &&

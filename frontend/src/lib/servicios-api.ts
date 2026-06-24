@@ -15,6 +15,7 @@ export interface Servicio {
   grupo_agenda: string | null;
   precio: number | null;
   activo: boolean;
+  agendable: boolean;
 }
 
 export interface ServiciosPagina {
@@ -29,6 +30,7 @@ export interface ServicioCrear {
   paso_turno_min?: number;
   grupo_agenda?: string | null;
   precio?: number;
+  agendable?: boolean;
 }
 
 export function listarServicios(): Promise<ServiciosPagina> {

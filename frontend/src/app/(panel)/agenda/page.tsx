@@ -13,20 +13,22 @@ import { useEffect, useState, useCallback } from "react";
 import { addDays, format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { isToday } from "date-fns/isToday";
 import { es } from "date-fns/locale";
-import { Plus, Printer } from "lucide-react";
+import { Plus, Printer, Search } from "lucide-react";
  
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
 import { listarHorarios, Horario } from "@/lib/horarios-api";
 import { listarServicios, Servicio } from "@/lib/servicios-api";
-import { listarTurnos, listarTurnosDelDia, Turno } from "@/lib/turnos-api";
+import { listarTurnos, listarTurnosDelDia, moverTurno, Turno } from "@/lib/turnos-api";
 import { carrilesDeGrupos } from "@/lib/carriles";
 import { MetricasDia } from "./metricas-dia";
 import { TurnoDetalle } from "./turno-detalle";
 import { NuevoTurnoDialog } from "./nuevo-turno-dialog";
 import { GrillaCarriles } from "./grilla-carriles";
 import { imprimirDia } from "./imprimir-dia";
+import { BuscarHuecoDialog } from "./buscar-hueco-dialog";
 import { GrillaSemana } from "./grilla-semana";
 import { CalendarioMes } from "./calendario-mes";
+import { GrillaEquipo } from "./grilla-equipo";
 import {
   colorEstadoHex,
   estaInactivo,
@@ -35,6 +37,7 @@ import {
   inicialDe,
 } from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -59,7 +62,7 @@ export default function AgendaPage() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [recursoId, setRecursoId] = useState<number | null>(null);
   const [dia, setDia] = useState<Date>(startOfDay(new Date()));
-  const [vista, setVista] = useState<"dia" | "semana" | "mes">("dia");
+  const [vista, setVista] = useState<"dia" | "semana" | "mes" | "equipo">("dia");
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosDia, setTurnosDia] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -68,6 +71,7 @@ export default function AgendaPage() {
  
   // Diálogo de nuevo turno + datos del hueco clickeado
   const [dialogAbierto, setDialogAbierto] = useState(false);
+  const [buscarAbierto, setBuscarAbierto] = useState(false);
   const [huecoCarril, setHuecoCarril] = useState<string | null>(null);
   const [huecoFecha, setHuecoFecha] = useState<Date | null>(null);
  
@@ -119,12 +123,20 @@ export default function AgendaPage() {
       const hasta = finRango.toISOString();
       const desdeDia = startOfDay(dia).toISOString();
       const hastaDia = endOfDay(dia).toISOString();
-      const [delRecurso, delDia] = await Promise.all([
-        listarTurnos(recursoId, desde, hasta),
-        listarTurnosDelDia(desdeDia, hastaDia),
-      ]);
-      setTurnos(ordenarPorHora(delRecurso.items));
-      setTurnosDia(delDia.items);
+ 
+      if (vista === "equipo") {
+        // Equipo: todos los barberos del día (sin filtrar por recurso)
+        const data = await listarTurnosDelDia(desdeDia, hastaDia);
+        setTurnos(ordenarPorHora(data.items));
+        setTurnosDia(data.items);
+      } else {
+        const [delRecurso, delDia] = await Promise.all([
+          listarTurnos(recursoId, desde, hasta),
+          listarTurnosDelDia(desdeDia, hastaDia),
+        ]);
+        setTurnos(ordenarPorHora(delRecurso.items));
+        setTurnosDia(delDia.items);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar turnos");
     } finally {
@@ -150,7 +162,7 @@ export default function AgendaPage() {
   const recursoActual = recursos.find((r) => r.id === recursoId);
  
   // Columnas de la grilla, generadas desde los grupos de los servicios.
-  const carriles = carrilesDeGrupos(servicios.map((s) => s.grupo_agenda));
+  const carriles = carrilesDeGrupos(servicios.filter((s) => s.agendable).map((s) => s.grupo_agenda));
  
   // --- Horario del barbero para el día mostrado ---
   /** "09:00:00" → minutos desde medianoche (540). */
@@ -197,7 +209,22 @@ export default function AgendaPage() {
       ? format(dia, "MMMM yyyy", { locale: es })
       : vista === "semana"
         ? `${format(inicioSem, "d", { locale: es })} – ${format(finSem, "d 'de' MMMM", { locale: es })}`
-        : format(dia, "EEEE d 'de' MMMM", { locale: es });
+        : vista === "equipo"
+          ? `${format(dia, "EEEE d 'de' MMMM", { locale: es })} · equipo`
+          : format(dia, "EEEE d 'de' MMMM", { locale: es });
+ 
+  /** Reprograma un turno al soltarlo en otra franja (drag & drop). */
+  async function manejarMover(turno: Turno, nuevaFecha: Date) {
+    try {
+      await moverTurno(turno.id, nuevaFecha.toISOString());
+      toast.success("Turno reprogramado");
+      cargarTurnos();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "No se pudo mover el turno",
+      );
+    }
+  }
  
   /** Cierra el diálogo y limpia los datos del hueco. */
   function cerrarDialogo() {
@@ -213,7 +240,7 @@ export default function AgendaPage() {
         <h1 className="text-2xl font-bold">Agenda</h1>
  
         <div className="flex items-center gap-3">
-          {recursos.length > 0 && (
+          {recursos.length > 0 && vista !== "equipo" && (
             <Select
               value={recursoId ? String(recursoId) : undefined}
               onValueChange={(v) => setRecursoId(Number(v))}
@@ -263,6 +290,16 @@ export default function AgendaPage() {
             >
               Mes
             </button>
+            <button
+              onClick={() => setVista("equipo")}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                vista === "equipo"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Equipo
+            </button>
           </div>
  
           {/* Navegación (se mueve de a un día o una semana) */}
@@ -303,6 +340,11 @@ export default function AgendaPage() {
               ›
             </Button>
           </div>
+ 
+          <Button variant="outline" onClick={() => setBuscarAbierto(true)}>
+            <Search size={16} className="mr-1" />
+            Buscar hueco
+          </Button>
  
           {vista === "dia" && (
             <Button
@@ -373,6 +415,26 @@ export default function AgendaPage() {
         </div>
       )}
  
+      {/* Vista de equipo: una columna por barbero */}
+      {vista === "equipo" && (
+        <div className="mb-8">
+          <GrillaEquipo
+            turnos={turnos}
+            recursos={recursos}
+            dia={dia}
+            horaInicio={horaInicioSemana}
+            horaFin={horaFinSemana}
+            onClickTurno={(t) => setTurnoSel(t)}
+            onClickHueco={(rid, fecha) => {
+              setRecursoId(rid);
+              setHuecoCarril(null);
+              setHuecoFecha(fecha);
+              setDialogAbierto(true);
+            }}
+          />
+        </div>
+      )}
+ 
       {/* Vista mensual: calendario con resumen por día */}
       {vista === "mes" && (
         <div className="mb-8">
@@ -404,6 +466,7 @@ export default function AgendaPage() {
           horaInicio={horaInicio}
           horaFin={horaFin}
           franjasTrabajo={franjasDia}
+          onMoverTurno={manejarMover}
           onClickTurno={(t) => setTurnoSel(t)}
           onClickHueco={(carril, fecha) => {
             setHuecoCarril(carril);
@@ -529,6 +592,21 @@ export default function AgendaPage() {
         recursoInicial={recursoId}
         fechaInicial={huecoFecha ?? dia}
         carrilInicial={huecoCarril}
+      />
+ 
+      {/* Diálogo de búsqueda de hueco libre */}
+      <BuscarHuecoDialog
+        abierto={buscarAbierto}
+        onCerrar={() => setBuscarAbierto(false)}
+        recursos={recursos}
+        servicios={servicios}
+        recursoInicial={recursoId}
+        onElegir={(rid, fecha) => {
+          setRecursoId(rid);
+          setHuecoCarril(null);
+          setHuecoFecha(fecha);
+          setDialogAbierto(true);
+        }}
       />
     </div>
   );
