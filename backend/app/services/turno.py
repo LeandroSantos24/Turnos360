@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Cliente, Recurso, Servicio, Turno
+from app.models.items import ItemTurno
 from app.models.enums import EstadoTurno
 from app.schemas.turno import TurnoCambiarEstado, TurnoCrear, TurnoMover
 from app.services import disponibilidad as disp
@@ -57,6 +58,28 @@ def _resolver_nombres(db: Session, turno: Turno) -> Turno:
     return turno
 
 
+def _total_con_items(turno: Turno, items_sum: float) -> float:
+    """Total real del turno: (servicio + adicionales) con el descuento aplicado."""
+    base = float(turno.importe_previsto or 0) + items_sum
+    pct = float(turno.descuento_pct or 0)
+    return round(base * (1 - pct / 100), 2)
+
+
+def _setear_totales(db: Session, turnos: list[Turno]) -> None:
+    """Suma los adicionales de cada turno en UNA query y setea turno.total."""
+    if not turnos:
+        return
+    ids = [t.id for t in turnos]
+    filas = db.execute(
+        select(ItemTurno.turno_id, func.coalesce(func.sum(ItemTurno.precio * ItemTurno.cantidad), 0))
+        .where(ItemTurno.turno_id.in_(ids))
+        .group_by(ItemTurno.turno_id)
+    ).all()
+    sumas = {tid: float(s) for tid, s in filas}
+    for t in turnos:
+        t.total = _total_con_items(t, sumas.get(t.id, 0.0))
+
+
 def listar(
     db: Session,
     empresa_id: int,
@@ -91,6 +114,7 @@ def listar(
     )
     for t in turnos:
         _resolver_nombres(db, t)
+    _setear_totales(db, turnos)
     return total or 0, turnos
 
 
@@ -99,7 +123,11 @@ def obtener(db: Session, empresa_id: int, turno_id: int) -> Turno | None:
     turno = db.scalar(
         select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
     )
-    return _resolver_nombres(db, turno) if turno else None
+    if turno is None:
+        return None
+    _resolver_nombres(db, turno)
+    _setear_totales(db, [turno])
+    return turno
 
 
 def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
@@ -259,7 +287,6 @@ def aplicar_descuento(
     db.commit()
     db.refresh(turno)
     return _resolver_nombres(db, turno)
-
 
 def _abono_cubre_servicio(
     db: Session, empresa_id: int, cliente_id: int, servicio_id: int

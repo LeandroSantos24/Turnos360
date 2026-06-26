@@ -48,6 +48,8 @@ class Turno(TenantMixin, Base):
     cubierto_por_abono: Mapped[bool] = mapped_column(Boolean, default=False)
     # Descuento aplicado al turno (%). Total = (servicio + adicionales) − este %.
     descuento_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    # ¿Ya se cobró este turno? Lo marca el registro de cobro (N-52).
+    cobrado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     motivo_cancelacion: Mapped[str | None] = mapped_column(String(300))
     notas: Mapped[str | None] = mapped_column(Text)
     creado_por: Mapped[int | None] = mapped_column(

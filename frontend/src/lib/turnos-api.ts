@@ -26,6 +26,8 @@ export interface Turno {
   importe_previsto: number | null;
   cubierto_por_abono: boolean;
   descuento_pct: number;
+  cobrado: boolean;
+  total: number;
   notas: string | null;
   cliente_nombre: string | null;
   recurso_nombre: string | null;

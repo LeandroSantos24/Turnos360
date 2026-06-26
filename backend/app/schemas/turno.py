@@ -42,13 +42,13 @@ class TurnoCambiarEstado(BaseModel):
     """Cambiar el estado del turno (confirmar, atender, cancelar...)."""
 
     estado: EstadoTurno
-    motivo_cancelacion: str | None = Field(default=None, max_length=300)
 
 
 class TurnoDescuento(BaseModel):
     """Aplicar un descuento al turno (porcentaje 0-100)."""
 
     descuento_pct: float = Field(ge=0, le=100)
+    motivo_cancelacion: str | None = Field(default=None, max_length=300)
 
 
 class TurnoOut(BaseModel):
@@ -68,6 +68,8 @@ class TurnoOut(BaseModel):
     importe_previsto: float | None
     cubierto_por_abono: bool
     descuento_pct: float
+    cobrado: bool
+    total: float = 0  # servicio + adicionales − descuento (lo calcula el service)
     notas: str | None
     motivo_cancelacion: str | None
 

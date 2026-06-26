@@ -22,6 +22,9 @@ import {
   CreditCard,
   LogOut,
   ChevronRight,
+  Wallet,
+  Banknote,
+  BarChart3,
 } from "lucide-react";
 
 import { isLoggedIn, clearToken } from "@/lib/auth";
@@ -38,11 +41,15 @@ const NAV = [
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio" },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio" },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio" },
+  { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas" },
+  { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas" },
+  { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas" },
 ];
 
 const GRUPOS = [
   { id: "principal", label: "Principal" },
   { id: "negocio", label: "Negocio" },
+  { id: "finanzas", label: "Finanzas" },
 ];
 
 export default function PanelLayout({

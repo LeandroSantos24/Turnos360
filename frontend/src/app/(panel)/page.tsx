@@ -181,7 +181,7 @@ export default function InicioPage() {
   );
   const confirmados = visibles.filter((t) => t.estado === "confirmado").length;
   const ingresos = activos.reduce(
-    (acc, t) => acc + (t.importe_previsto ? Number(t.importe_previsto) : 0),
+    (acc, t) => acc + (t.total ? Number(t.total) : 0),
     0,
   );
   const ausentes = visibles.filter((t) => t.estado === "ausente").length;
@@ -352,7 +352,13 @@ export default function InicioPage() {
             }
           >
             <SelectTrigger className="w-44">
-              <SelectValue />
+              <SelectValue>
+                {(v) =>
+                  v === "todos"
+                    ? "Todos los barberos"
+                    : recursos.find((r) => String(r.id) === String(v))?.nombre ?? v
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los barberos</SelectItem>

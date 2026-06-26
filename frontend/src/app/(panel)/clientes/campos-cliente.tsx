@@ -84,7 +84,7 @@ export function CamposCliente({ datos, onCambio }: CamposClienteProps) {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Datos personales
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="c-nombre">Nombre *</Label>
             <Input
@@ -129,7 +129,7 @@ export function CamposCliente({ datos, onCambio }: CamposClienteProps) {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Contacto
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="c-telefono">Teléfono</Label>
             <Input

@@ -14,11 +14,12 @@ import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, FileText } from "lucide-react";
+import { ArrowLeft, Pencil, FileText, MessageCircle, Mail } from "lucide-react";
 
 import { obtenerCliente, Cliente } from "@/lib/clientes-api";
 import { listarTurnosDeCliente, Turno } from "@/lib/turnos-api";
 import { calcularResumen, ResumenCliente } from "@/lib/cliente-historial";
+import { cobradoDeCliente } from "@/lib/finanzas-api";
 import { useModulo, useTermino } from "@/lib/config-rubro";
 import {
   membresiaDeCliente,
@@ -76,18 +77,21 @@ export default function FichaClientePage() {
   const [asignando, setAsignando] = useState(false);
   const [cancelandoMembresia, setCancelandoMembresia] = useState(false);
   const [turnoSel, setTurnoSel] = useState<Turno | null>(null);
+  const [gastadoReal, setGastadoReal] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
-      const [c, t, m] = await Promise.all([
+      const [c, t, m, cob] = await Promise.all([
         obtenerCliente(clienteId),
         listarTurnosDeCliente(clienteId),
         membresiaDeCliente(clienteId),
+        cobradoDeCliente(clienteId),
       ]);
       setCliente(c);
       setMembresia(m);
+      setGastadoReal(cob.total_cobrado);
       // Ordenar turnos del más reciente al más antiguo
       const ordenados = [...t.items].sort(
         (a, b) =>
@@ -185,9 +189,27 @@ export default function FichaClientePage() {
           <h1 className="text-2xl font-bold">{nombreCompleto}</h1>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {cliente.telefono && (
-              <span className="tabular-nums">{cliente.telefono}</span>
+              <a
+                href={`https://wa.me/${cliente.telefono.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 tabular-nums transition-colors hover:text-emerald-500"
+                title="Abrir chat de WhatsApp"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                {cliente.telefono}
+              </a>
             )}
-            {cliente.email && <span>{cliente.email}</span>}
+            {cliente.email && (
+              <a
+                href={`mailto:${cliente.email}`}
+                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+                title="Enviar correo"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {cliente.email}
+              </a>
+            )}
             {cliente.canal_adquisicion && (
               <span>Llegó por {cliente.canal_adquisicion}</span>
             )}
@@ -308,7 +330,7 @@ export default function FichaClientePage() {
               className="mt-1 text-2xl font-bold"
               style={{ ...NUM_STYLE, color: "#10b981" }}
             >
-              ${resumen.gastoTotal.toLocaleString("es-AR")}
+              ${(gastadoReal ?? resumen.gastoTotal).toLocaleString("es-AR")}
             </p>
           </div>
           <div className="rounded-2xl border bg-card p-5">

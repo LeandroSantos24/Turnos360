@@ -110,7 +110,7 @@ export function EditarServicioDialog({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Editar servicio</DialogTitle>
           <DialogDescription>Modificá los datos del servicio.</DialogDescription>
@@ -141,7 +141,7 @@ export function EditarServicioDialog({
           </div>
 
           {agendable && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="e-duracion">Duración (min) *</Label>
                 <Input

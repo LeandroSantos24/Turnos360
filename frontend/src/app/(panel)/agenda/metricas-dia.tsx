@@ -20,7 +20,7 @@ export function MetricasDia({ turnos }: MetricasProps) {
   const confirmados = turnos.filter((t) => t.estado === "confirmado").length;
   const pendientes = turnos.filter((t) => t.estado === "pendiente").length;
   const ingresos = activos.reduce(
-    (acc, t) => acc + (t.importe_previsto ? Number(t.importe_previsto) : 0),
+    (acc, t) => acc + (t.total ? Number(t.total) : 0),
     0,
   );
 

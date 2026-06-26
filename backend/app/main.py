@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items
+from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas
 
 app = FastAPI(
     title="Turnos360 API",
@@ -58,6 +58,8 @@ app.include_router(membresias.router)
 app.include_router(salud.router)
 app.include_router(empresa.router)
 app.include_router(items.router)
+app.include_router(finanzas.router)
+app.include_router(estadisticas.router)
 
 
 @app.get("/", tags=["meta"])

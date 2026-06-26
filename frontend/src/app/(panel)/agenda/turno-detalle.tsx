@@ -10,7 +10,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Plus, X } from "lucide-react";
+import { ArrowRight, Check, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Turno, EstadoTurno, cambiarEstadoTurno, aplicarDescuento } from "@/lib/turnos-api";
@@ -21,6 +21,8 @@ import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { CobroDialog } from "./cobro-dialog";
+import { pagosDeTurno, listarMetodos, MetodoPago, Pago } from "@/lib/finanzas-api";
 import {
   Select,
   SelectContent,
@@ -76,6 +78,9 @@ export function TurnoDetalle({
   const [servicioSel, setServicioSel] = useState("");
   const [descuentoActivo, setDescuentoActivo] = useState(false);
   const [descuentoPct, setDescuentoPct] = useState("");
+  const [cobrando, setCobrando] = useState(false);
+  const [pagos, setPagos] = useState<Pago[]>([]);
+  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
 
   // Al abrir el panel, traer los adicionales del turno.
   useEffect(() => {
@@ -89,6 +94,9 @@ export function TurnoDetalle({
     const pct = Number(turno.descuento_pct ?? 0);
     setDescuentoActivo(pct > 0);
     setDescuentoPct(pct > 0 ? String(pct) : "");
+    pagosDeTurno(turno.id)
+      .then(setPagos)
+      .catch(() => setPagos([]));
   }, [abierto, turno]);
 
   // Catálogo de servicios (para precargar adicionales sin escribir).
@@ -96,6 +104,9 @@ export function TurnoDetalle({
     listarServicios()
       .then((r) => setServicios(r.items))
       .catch(() => setServicios([]));
+    listarMetodos()
+      .then(setMetodosPago)
+      .catch(() => setMetodosPago([]));
   }, []);
 
   if (!turno) return null;
@@ -111,6 +122,13 @@ export function TurnoDetalle({
     : 0;
   const montoDescuento = baseTurno * (pctDescuento / 100);
   const totalTurno = baseTurno - montoDescuento;
+  const totalCobrado = pagos.reduce((acc, p) => acc + p.monto, 0);
+
+  function nombreMetodo(id: number | null): string {
+    if (id == null) return "Sin método";
+    const m = metodosPago.find((x) => x.id === id);
+    return m ? m.nombre : "Pago";
+  }
 
   async function ejecutarAccion(destino: EstadoTurno) {
     if (!turno) return;
@@ -423,6 +441,40 @@ export function TurnoDetalle({
               )}
             </div>
 
+            {/* Cobro: estado o botón */}
+            {pagos.length > 0 ? (
+              <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    <Check className="h-4 w-4" /> Cobrado
+                  </span>
+                  <span
+                    className="font-bold tabular-nums"
+                    style={{ fontFamily: "Syne, sans-serif" }}
+                  >
+                    ${totalCobrado.toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  {pagos.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex justify-between text-xs text-muted-foreground"
+                    >
+                      <span>{nombreMetodo(p.metodo_pago_id)}</span>
+                      <span className="tabular-nums">
+                        ${p.monto.toLocaleString("es-AR")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Button className="w-full" onClick={() => setCobrando(true)}>
+                Cobrar ${totalTurno.toLocaleString("es-AR")}
+              </Button>
+            )}
+
             {/* Acciones de estado */}
             {acciones.length > 0 && (
               <div className="space-y-2.5">
@@ -497,6 +549,17 @@ export function TurnoDetalle({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CobroDialog
+        turnoId={turno.id}
+        total={totalTurno}
+        abierto={cobrando}
+        onCerrar={() => setCobrando(false)}
+        onCobrado={() => {
+          if (turno) pagosDeTurno(turno.id).then(setPagos).catch(() => {});
+          onCambio();
+        }}
+      />
     </>
   );
 }
