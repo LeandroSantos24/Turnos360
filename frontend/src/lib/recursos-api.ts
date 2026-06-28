@@ -8,6 +8,9 @@ import { api } from "./api";
 /** Los tres tipos de recurso (coincide con el enum TipoRecurso del backend). */
 export type TipoRecurso = "persona" | "box" | "equipo";
 
+/** Roles de usuario (coincide con el enum RolUsuario del backend). */
+export type Rol = "dueno" | "recepcion" | "profesional" | "admin";
+
 export interface EspecialidadEmbebida {
   id: number;
   nombre: string;
@@ -34,10 +37,33 @@ export interface RecursoCrear {
   nombre: string;
   tipo: TipoRecurso;
   color?: string;
+  /** Usuario con login que opera este recurso (1-a-1). null = sin vincular. */
+  usuario_id?: number | null;
+}
+
+/** Un usuario de la empresa que se puede vincular a un recurso. */
+export interface UsuarioVinculable {
+  id: number;
+  nombre: string;
+  email: string;
+  rol: Rol;
+  /** Recurso al que YA está vinculado, si lo hay (para respetar el 1-a-1). */
+  recurso_id: number | null;
+  recurso_nombre: string | null;
 }
 
 export function listarRecursos(): Promise<RecursosPagina> {
   return api.get<RecursosPagina>("/recursos");
+}
+
+/** Usuarios de la empresa para el selector "Usuario vinculado" (solo dueño). */
+export function listarUsuariosVinculables(): Promise<UsuarioVinculable[]> {
+  return api.get<UsuarioVinculable[]>("/recursos/usuarios-disponibles");
+}
+
+/** El recurso vinculado al usuario logueado (para "Mi día"). null si no tiene. */
+export function miRecurso(): Promise<Recurso | null> {
+  return api.get<Recurso | null>("/recursos/mi-recurso");
 }
 
 export function crearRecurso(datos: RecursoCrear): Promise<Recurso> {

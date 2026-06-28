@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SelectorUsuarioVinculado } from "./selector-usuario-vinculado";
 
 export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
   const [abierto, setAbierto] = useState(false);
@@ -33,17 +34,30 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
 
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState<TipoRecurso>("persona");
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
 
   function limpiar() {
     setNombre("");
     setTipo("persona");
+    setUsuarioId(null);
+  }
+
+  function cambiarTipo(v: string) {
+    const t = v as TipoRecurso;
+    setTipo(t);
+    // un box o equipo no tiene login: limpiamos el vínculo
+    if (t !== "persona") setUsuarioId(null);
   }
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setGuardando(true);
     try {
-      await crearRecurso({ nombre, tipo });
+      await crearRecurso({
+        nombre,
+        tipo,
+        usuario_id: tipo === "persona" ? usuarioId : null,
+      });
       toast.success("Recurso creado");
       limpiar();
       setAbierto(false);
@@ -82,10 +96,7 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
           </div>
           <div className="space-y-2">
             <Label>Tipo *</Label>
-            <Select
-              value={tipo}
-              onValueChange={(v) => setTipo(v as TipoRecurso)}
-            >
+            <Select value={tipo} onValueChange={cambiarTipo}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -96,6 +107,10 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
               </SelectContent>
             </Select>
           </div>
+
+          {tipo === "persona" && (
+            <SelectorUsuarioVinculado value={usuarioId} onChange={setUsuarioId} />
+          )}
 
           <DialogFooter>
             <Button type="submit" disabled={guardando}>

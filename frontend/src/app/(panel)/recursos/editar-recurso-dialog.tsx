@@ -1,6 +1,6 @@
 "use client";
 
-/** Diálogo para editar un recurso existente (nombre + tipo). */
+/** Diálogo para editar un recurso existente (nombre + tipo + usuario vinculado). */
 
 import { useState, useEffect } from "react";
 import { editarRecurso, Recurso, TipoRecurso } from "@/lib/recursos-api";
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SelectorUsuarioVinculado } from "./selector-usuario-vinculado";
 
 interface EditarRecursoDialogProps {
   recurso: Recurso | null;
@@ -42,19 +43,31 @@ export function EditarRecursoDialog({
   const [guardando, setGuardando] = useState(false);
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState<TipoRecurso>("persona");
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!recurso) return;
     setNombre(recurso.nombre);
     setTipo(recurso.tipo);
+    setUsuarioId(recurso.usuario_id);
   }, [recurso]);
+
+  function cambiarTipo(v: string) {
+    const t = v as TipoRecurso;
+    setTipo(t);
+    if (t !== "persona") setUsuarioId(null);
+  }
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     if (!recurso) return;
     setGuardando(true);
     try {
-      await editarRecurso(recurso.id, { nombre, tipo });
+      await editarRecurso(recurso.id, {
+        nombre,
+        tipo,
+        usuario_id: tipo === "persona" ? usuarioId : null,
+      });
       toast.success("Recurso actualizado");
       onEditado();
       onCerrar();
@@ -86,7 +99,7 @@ export function EditarRecursoDialog({
           </div>
           <div className="space-y-2">
             <Label>Tipo *</Label>
-            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoRecurso)}>
+            <Select value={tipo} onValueChange={cambiarTipo}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -97,6 +110,14 @@ export function EditarRecursoDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {tipo === "persona" && (
+            <SelectorUsuarioVinculado
+              value={usuarioId}
+              onChange={setUsuarioId}
+              recursoActualId={recurso?.id ?? null}
+            />
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onCerrar}>

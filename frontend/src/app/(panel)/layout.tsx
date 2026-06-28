@@ -3,10 +3,11 @@
 /**
  * Layout del panel: sidebar navy estilo TurnosPro + protección de sesión.
  *
- * - Ítems agrupados (Principal / Negocio / Sistema), íconos lucide-react.
+ * - Ítems agrupados (Principal / Negocio / Finanzas), íconos lucide-react.
  * - "Pill" teal animado que se desliza al ítem activo (framer-motion).
  * - Toggle de tema claro/oscuro integrado.
- * - Sidebar navy oscuro siempre; el contenido respeta el tema.
+ * - Gateo por rol: el profesional ve solo "Mi día" + "Clientes" y se lo
+ *   redirige fuera de las pantallas de gestión/finanzas.
  */
 
 import { useEffect, useState } from "react";
@@ -25,6 +26,7 @@ import {
   Wallet,
   Banknote,
   BarChart3,
+  Sun,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,19 +43,24 @@ type NavItem = {
   icon: LucideIcon;
   grupo: string;
   soloDueno?: boolean;
+  soloProfesional?: boolean;
+  ocultarProfesional?: boolean;
 };
 
 // Ítems del menú, agrupados como en TurnosPro.
-// soloDueno: la entrada se oculta para recepción/profesional (finanzas sensibles).
+// soloDueno: solo el dueño (finanzas sensibles).
+// soloProfesional: solo el profesional (su pantalla "Mi día").
+// ocultarProfesional: gestión del negocio que el profesional no ve.
 const NAV: NavItem[] = [
-  { href: "/", label: "Inicio", icon: LayoutDashboard, grupo: "principal" },
-  { href: "/agenda", label: "Agenda", icon: Calendar, grupo: "principal" },
+  { href: "/mi-dia", label: "Mi día", icon: Sun, grupo: "principal", soloProfesional: true },
+  { href: "/", label: "Inicio", icon: LayoutDashboard, grupo: "principal", ocultarProfesional: true },
+  { href: "/agenda", label: "Agenda", icon: Calendar, grupo: "principal", ocultarProfesional: true },
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
-  { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio" },
-  { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio" },
-  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio" },
+  { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
+  { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
+  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
   { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
-  { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas" },
+  { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas", ocultarProfesional: true },
   { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas", soloDueno: true },
 ];
 
@@ -62,6 +69,11 @@ const GRUPOS = [
   { id: "negocio", label: "Negocio" },
   { id: "finanzas", label: "Finanzas" },
 ];
+
+/** Rutas que el profesional SÍ puede ver. El resto lo redirige a "Mi día". */
+function profesionalPuedeVer(pathname: string): boolean {
+  return pathname === "/mi-dia" || pathname.startsWith("/clientes");
+}
 
 export default function PanelLayout({
   children,
@@ -86,6 +98,15 @@ export default function PanelLayout({
       .catch(() => router.push("/login"));
   }, [router]);
 
+  // Gateo de rutas del profesional: si entra (o lo mandan) a una pantalla de
+  // gestión, lo devolvemos a "Mi día".
+  useEffect(() => {
+    if (!usuario) return;
+    if (usuario.rol === "profesional" && !profesionalPuedeVer(pathname)) {
+      router.replace("/mi-dia");
+    }
+  }, [usuario, pathname, router]);
+
   function salir() {
     clearToken();
     router.push("/login");
@@ -99,8 +120,15 @@ export default function PanelLayout({
     );
   }
 
-  // El menú de finanzas sensibles (Estadísticas, Métodos de pago) solo lo ve el dueño.
   const dueno = esDueno(usuario.rol as Rol);
+  const esProfesional = usuario.rol === "profesional";
+
+  // Mientras se concreta la redirección, no mostramos contenido de gestión
+  // (evita el flash del dashboard del dueño antes de saltar a "Mi día").
+  const bloquearContenido = esProfesional && !profesionalPuedeVer(pathname);
+
+  // El logo lleva al "home" de cada rol.
+  const inicioHref = esProfesional ? "/mi-dia" : "/";
 
   return (
     <ConfigRubroProvider value={config}>
@@ -118,7 +146,7 @@ export default function PanelLayout({
           className="px-5 pb-5 pt-6"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
-          <Link href="/" className="group flex items-center gap-3">
+          <Link href={inicioHref} className="group flex items-center gap-3">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base font-bold transition-transform group-hover:scale-105"
               style={{
@@ -149,9 +177,13 @@ export default function PanelLayout({
         {/* Navegación agrupada */}
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
           {GRUPOS.map((grupo) => {
-            const items = NAV.filter(
-              (n) => n.grupo === grupo.id && (!n.soloDueno || dueno),
-            );
+            const items = NAV.filter((n) => {
+              if (n.grupo !== grupo.id) return false;
+              if (n.soloProfesional) return esProfesional;
+              if (n.soloDueno && !dueno) return false;
+              if (n.ocultarProfesional && esProfesional) return false;
+              return true;
+            });
             if (items.length === 0) return null;
             return (
               <div key={grupo.id}>
@@ -271,7 +303,13 @@ export default function PanelLayout({
       </aside>
 
       {/* Contenido */}
-      <main className="flex-1 overflow-auto bg-background">{children}</main>
+      <main className="flex-1 overflow-auto bg-background">
+        {bloquearContenido ? (
+          <div className="p-8 text-sm text-muted-foreground">Redirigiendo…</div>
+        ) : (
+          children
+        )}
+      </main>
     </div>
     </ConfigRubroProvider>
   );

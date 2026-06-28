@@ -1,16 +1,17 @@
 """Lógica de negocio de Recurso (E2).
 
-Regla 1 aplicada en DOS lugares:
+Regla 1 aplicada en VARIOS lugares:
 1. El recurso se filtra siempre por empresa_id (como clientes).
-2. Las especialidades que se le asignan DEBEN ser de la misma empresa:
-   resolvemos los ids contra la base filtrando por empresa_id, así nadie
-   puede asignarle a su recurso una especialidad de otra empresa.
+2. Las especialidades que se le asignan DEBEN ser de la misma empresa.
+3. El usuario que se vincula (usuario_id) DEBE ser de la misma empresa y no
+   puede estar ya vinculado a otro recurso (relación 1-a-1 con el profesional).
 """
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Especialidad, Recurso
+from app.models import Especialidad, Recurso, Usuario
 from app.schemas.recurso import RecursoCrear, RecursoEditar
 
 
@@ -32,6 +33,91 @@ def _especialidades_de_empresa(
             )
         )
     )
+
+
+def _validar_usuario_vinculable(
+    db: Session,
+    empresa_id: int,
+    usuario_id: int | None,
+    *,
+    recurso_id_actual: int | None = None,
+) -> None:
+    """Valida el vínculo recurso→usuario antes de guardarlo.
+
+    - usuario_id None: desvincular o sin vínculo → nada que validar.
+    - El usuario debe existir y ser de ESTA empresa (Regla 1: nadie vincula un
+      usuario de otra empresa).
+    - El usuario no puede estar ya vinculado a OTRO recurso (1-a-1). Al editar,
+      se excluye el propio recurso del chequeo.
+    """
+    if usuario_id is None:
+        return
+
+    usuario = db.scalar(
+        select(Usuario).where(
+            Usuario.id == usuario_id, Usuario.empresa_id == empresa_id
+        )
+    )
+    if usuario is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "El usuario a vincular no existe o no es de esta empresa",
+        )
+
+    condiciones = [
+        Recurso.usuario_id == usuario_id,
+        Recurso.empresa_id == empresa_id,
+    ]
+    if recurso_id_actual is not None:
+        condiciones.append(Recurso.id != recurso_id_actual)
+    ya_vinculado = db.scalar(select(Recurso).where(*condiciones))
+    if ya_vinculado is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Ese usuario ya está vinculado al recurso '{ya_vinculado.nombre}'. "
+            "Desvinculalo primero de ese recurso.",
+        )
+
+
+def usuarios_vinculables(db: Session, empresa_id: int) -> list[dict]:
+    """Usuarios activos de la empresa, con el recurso al que ya están vinculados.
+
+    Alimenta el selector "Usuario vinculado" del formulario de recurso. Marca
+    cuáles están libres (recurso_id None) y cuáles ya tienen recurso, para que
+    la UI respete el 1-a-1.
+    """
+    usuarios = list(
+        db.scalars(
+            select(Usuario)
+            .where(Usuario.empresa_id == empresa_id, Usuario.activo.is_(True))
+            .order_by(Usuario.nombre)
+        )
+    )
+    # Vínculos existentes: usuario_id -> recurso
+    recursos_vinculados = list(
+        db.scalars(
+            select(Recurso).where(
+                Recurso.empresa_id == empresa_id,
+                Recurso.usuario_id.is_not(None),
+            )
+        )
+    )
+    por_usuario = {r.usuario_id: r for r in recursos_vinculados}
+
+    salida: list[dict] = []
+    for u in usuarios:
+        r = por_usuario.get(u.id)
+        salida.append(
+            {
+                "id": u.id,
+                "nombre": u.nombre,
+                "email": u.email,
+                "rol": u.rol,
+                "recurso_id": r.id if r else None,
+                "recurso_nombre": r.nombre if r else None,
+            }
+        )
+    return salida
 
 
 def listar(
@@ -77,6 +163,7 @@ def obtener(db: Session, empresa_id: int, recurso_id: int) -> Recurso | None:
 
 def crear(db: Session, empresa_id: int, datos: RecursoCrear) -> Recurso:
     """Crea un recurso y le asigna sus especialidades (validadas por empresa)."""
+    _validar_usuario_vinculable(db, empresa_id, datos.usuario_id)
     payload = datos.model_dump(exclude={"especialidad_ids"})
     recurso = Recurso(empresa_id=empresa_id, **payload)
     recurso.especialidades = _especialidades_de_empresa(
@@ -97,6 +184,12 @@ def editar(
         return None
 
     cambios = datos.model_dump(exclude_unset=True)
+
+    # Si se toca el vínculo con un usuario, validarlo (empresa + 1-a-1).
+    if "usuario_id" in cambios:
+        _validar_usuario_vinculable(
+            db, empresa_id, cambios["usuario_id"], recurso_id_actual=recurso_id
+        )
 
     # Las especialidades se manejan aparte (no es una columna simple)
     if "especialidad_ids" in cambios:

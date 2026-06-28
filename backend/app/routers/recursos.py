@@ -6,13 +6,14 @@ Roles: leer es libre para cualquier usuario logueado; crear / editar / baja
 del catálogo de recursos es configuración del negocio -> solo el dueño.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from app.api.deps import DB, EmpresaActual, gate_dueno
+from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.models.enums import TipoRecurso
 from app.schemas.recurso import (
     RecursoCrear,
     RecursoEditar,
     RecursoOut,
     RecursosPagina,
+    UsuarioVinculable,
 )
 from app.services import recurso as svc
 
@@ -31,6 +32,38 @@ def listar_recursos(
         db, empresa_id, solo_activos=solo_activos, tipo=tipo.value if tipo else None
     )
     return RecursosPagina(total=total, items=items)
+
+
+# IMPORTANTE: las rutas estáticas (usuarios-disponibles, mi-recurso) van ANTES
+# de "/{recurso_id}", si no FastAPI las tomaría como un id de recurso.
+@router.get(
+    "/usuarios-disponibles",
+    response_model=list[UsuarioVinculable],
+    dependencies=[Depends(gate_dueno)],
+)
+def listar_usuarios_vinculables(
+    empresa_id: EmpresaActual, db: DB
+) -> list[UsuarioVinculable]:
+    """Usuarios activos de la empresa para el selector "Usuario vinculado".
+
+    Solo el dueño (configura el negocio). Cada usuario trae el recurso al que
+    ya está vinculado, si lo hay, para respetar el 1-a-1 desde la UI.
+    """
+    return svc.usuarios_vinculables(db, empresa_id)
+
+
+@router.get("/mi-recurso", response_model=RecursoOut | None)
+def mi_recurso(usuario: UsuarioActual, db: DB) -> RecursoOut | None:
+    """El recurso vinculado al usuario logueado (para el panel del profesional).
+
+    Devuelve null si el usuario no está vinculado a ningún recurso. Lo usa la
+    pantalla "Mi día" para saber si mostrar la agenda o el cartel de "pedile al
+    dueño que te vincule". Abierto a cualquier usuario logueado: cada uno ve
+    solo lo suyo (sale de su propio token).
+    """
+    if usuario.recurso is None:
+        return None
+    return svc.obtener(db, usuario.empresa_id, usuario.recurso.id)
 
 
 @router.get("/{recurso_id}", response_model=RecursoOut)

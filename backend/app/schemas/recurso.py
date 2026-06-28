@@ -6,7 +6,7 @@ Las especialidades se manejan como una lista de ids (puente N:M con especialidad
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import TipoRecurso
+from app.models.enums import RolUsuario, TipoRecurso
 
 
 class RecursoBase(BaseModel):
@@ -66,3 +66,20 @@ class RecursosPagina(BaseModel):
 
     total: int
     items: list[RecursoOut]
+
+
+class UsuarioVinculable(BaseModel):
+    """Un usuario de la empresa que el dueño puede vincular a un recurso.
+
+    recurso_id/recurso_nombre indican si YA está vinculado a algún recurso
+    (para que la UI lo muestre y respete el 1-a-1). None = está libre.
+    """
+
+    id: int
+    nombre: str
+    email: str
+    rol: RolUsuario
+    recurso_id: int | None = None
+    recurso_nombre: str | None = None
+
+    model_config = {"from_attributes": True}
