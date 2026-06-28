@@ -1,11 +1,15 @@
 """Endpoints de los ítems adicionales de un turno (E10).
 
 Sub-recurso de turno: /turnos/{turno_id}/items. El empresa_id sale del token.
+
+Roles: el adicional al cobrar es operación del mostrador -> dueño + recepción
+(gate_gestion). Listar queda abierto. NO es lo mismo que el catálogo de
+servicios (eso es config del dueño): acá se suma un ítem suelto a ESA venta.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, gate_gestion
 from app.schemas.items import ItemCrear, ItemOut
 from app.services import items as svc
 
@@ -21,7 +25,12 @@ def listar_items(turno_id: int, empresa_id: EmpresaActual, db: DB) -> list[ItemO
     return items
 
 
-@router.post("/{turno_id}/items", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{turno_id}/items",
+    response_model=ItemOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def crear_item(
     turno_id: int, datos: ItemCrear, empresa_id: EmpresaActual, db: DB
 ) -> ItemOut:
@@ -32,7 +41,11 @@ def crear_item(
     return item
 
 
-@router.delete("/{turno_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{turno_id}/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_gestion)],
+)
 def borrar_item(turno_id: int, item_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     """Quita un ítem del turno."""
     if not svc.borrar_item(db, empresa_id, turno_id, item_id):

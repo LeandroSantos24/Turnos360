@@ -3,11 +3,15 @@
 Todas las rutas exigen un token válido (vía EmpresaActual, que invoca al
 guardián). El empresa_id sale del token y se le pasa al service: el cliente
 nunca elige sobre qué empresa opera (Regla 1).
+
+Roles: ver clientes es libre (todo el equipo, incluido el profesional, ve la
+ficha y el historial). Crear / editar / baja = dueño + recepción (gate_gestion);
+el profesional no administra el padrón.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, gate_gestion
 from app.schemas.cliente import (
     ClienteCrear,
     ClienteEditar,
@@ -45,13 +49,22 @@ def obtener_cliente(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> Clien
     return cliente
 
 
-@router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ClienteOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def crear_cliente(datos: ClienteCrear, empresa_id: EmpresaActual, db: DB) -> ClienteOut:
     """Crea un cliente en la empresa del usuario autenticado."""
     return svc.crear(db, empresa_id, datos)
 
 
-@router.patch("/{cliente_id}", response_model=ClienteOut)
+@router.patch(
+    "/{cliente_id}",
+    response_model=ClienteOut,
+    dependencies=[Depends(gate_gestion)],
+)
 def editar_cliente(
     cliente_id: int, datos: ClienteEditar, empresa_id: EmpresaActual, db: DB
 ) -> ClienteOut:
@@ -62,7 +75,11 @@ def editar_cliente(
     return cliente
 
 
-@router.delete("/{cliente_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{cliente_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_gestion)],
+)
 def desactivar_cliente(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     """Baja lógica del cliente (activo=False). 404 si no es de esta empresa."""
     if not svc.desactivar(db, empresa_id, cliente_id):
