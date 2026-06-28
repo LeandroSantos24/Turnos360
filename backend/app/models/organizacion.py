@@ -4,6 +4,7 @@ Regla 1: TODA tabla de negocio hereda TenantMixin → empresa_id NOT NULL + índ
 """
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
@@ -12,6 +13,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.models.enums import RolUsuario
 from app.models.tipos import enum_pg
+
+if TYPE_CHECKING:
+    # Solo para el type checker; en runtime SQLAlchemy resuelve "Recurso" por el
+    # registro de clases mapeadas. Evita el import circular con agenda.py
+    # (agenda.py importa TenantMixin desde acá).
+    from app.models.agenda import Recurso
 
 
 class TenantMixin:
@@ -78,6 +85,18 @@ class Usuario(TenantMixin, Base):
     hash_clave: Mapped[str] = mapped_column(String(300))
     rol: Mapped[RolUsuario] = mapped_column(enum_pg(RolUsuario, "rol_usuario"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # El recurso (silla/barbero) que opera este usuario, si es un profesional.
+    # Decisión 1-a-1: un profesional ↔ un recurso. El FK vive en Recurso.usuario_id;
+    # esto es solo la lectura inversa cómoda desde el ORM (usuario.recurso).
+    # viewonly=True: el dueño del vínculo es Recurso.usuario_id; se setea desde ahí
+    # (panel de usuarios, Bloque 3), nunca desde acá.
+    recurso: Mapped["Recurso | None"] = relationship(
+        "Recurso",
+        primaryjoin="Usuario.id == Recurso.usuario_id",
+        uselist=False,
+        viewonly=True,
+    )
 
 
 class SuperAdmin(Base):
