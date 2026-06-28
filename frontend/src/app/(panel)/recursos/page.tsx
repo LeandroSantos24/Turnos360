@@ -9,6 +9,7 @@ import { listarRecursos, borrarRecurso, Recurso } from "@/lib/recursos-api";
 import { ApiError } from "@/lib/api";
 import { NuevoRecursoDialog } from "./nuevo-recurso-dialog";
 import { EditarRecursoDialog } from "./editar-recurso-dialog";
+import { SoloDueno } from "@/components/si-rol";
 import { toast } from "sonner";
 import { Clock, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -110,7 +111,9 @@ export default function RecursosPage() {
             {recursos.length === 1 ? "recurso" : "recursos"}
           </p>
         </div>
-        <NuevoRecursoDialog onCreado={cargar} />
+        <SoloDueno>
+          <NuevoRecursoDialog onCreado={cargar} />
+        </SoloDueno>
       </div>
 
       <div className="mb-4 max-w-sm">
@@ -178,32 +181,34 @@ export default function RecursosPage() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/recursos/${r.id}/horarios`}>
-                            <Clock size={14} className="mr-2" />
-                            Horarios
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setEditando(r)}>
-                          <Pencil size={14} className="mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setABorrar(r)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 size={14} className="mr-2" />
-                          Borrar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <SoloDueno>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/recursos/${r.id}/horarios`}>
+                              <Clock size={14} className="mr-2" />
+                              Horarios
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setEditando(r)}>
+                            <Pencil size={14} className="mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setABorrar(r)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 size={14} className="mr-2" />
+                            Borrar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SoloDueno>
                   </TableCell>
                 </TableRow>
               ))}

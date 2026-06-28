@@ -21,6 +21,7 @@ import {
   Horario,
 } from "@/lib/horarios-api";
 import { ApiError } from "@/lib/api";
+import { RequiereDueno } from "@/components/requiere-rol";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -53,7 +54,7 @@ for (let h = 0; h < 24; h++) {
   HORAS.push(`${String(h).padStart(2, "0")}:30`);
 }
 
-export default function HorariosRecursoPage() {
+function ContenidoHorarios() {
   const params = useParams();
   const router = useRouter();
   const recursoId = Number(params.id);
@@ -259,5 +260,13 @@ export default function HorariosRecursoPage() {
         })}
       </div>
     </div>
+  );
+}
+
+export default function HorariosRecursoPage() {
+  return (
+    <RequiereDueno>
+      <ContenidoHorarios />
+    </RequiereDueno>
   );
 }

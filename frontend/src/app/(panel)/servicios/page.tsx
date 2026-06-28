@@ -13,6 +13,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { NuevoServicioDialog } from "./nuevo-servicio-dialog";
 import { EditarServicioDialog } from "./editar-servicio-dialog";
+import { SoloDueno } from "@/components/si-rol";
 import { toast } from "sonner";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
@@ -108,7 +109,9 @@ export default function ServiciosPage() {
             {servicios.length === 1 ? "servicio" : "servicios"}
           </p>
         </div>
-        <NuevoServicioDialog onCreado={cargar} />
+        <SoloDueno>
+          <NuevoServicioDialog onCreado={cargar} />
+        </SoloDueno>
       </div>
 
       <div className="mb-4 max-w-sm">
@@ -184,26 +187,28 @@ export default function ServiciosPage() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditando(s)}>
-                          <Pencil size={14} className="mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setABorrar(s)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 size={14} className="mr-2" />
-                          Borrar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <SoloDueno>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditando(s)}>
+                            <Pencil size={14} className="mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setABorrar(s)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 size={14} className="mr-2" />
+                            Borrar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SoloDueno>
                   </TableCell>
                 </TableRow>
               ))}

@@ -25,25 +25,36 @@ import {
   Wallet,
   Banknote,
   BarChart3,
+  type LucideIcon,
 } from "lucide-react";
 
 import { isLoggedIn, clearToken } from "@/lib/auth";
 import { getMe, UsuarioMe } from "@/lib/auth-api";
 import { obtenerConfigEmpresa, ConfigEmpresa } from "@/lib/empresa-api";
 import { ConfigRubroProvider } from "@/lib/config-rubro";
+import { esDueno, type Rol } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  grupo: string;
+  soloDueno?: boolean;
+};
+
 // Ítems del menú, agrupados como en TurnosPro.
-const NAV = [
+// soloDueno: la entrada se oculta para recepción/profesional (finanzas sensibles).
+const NAV: NavItem[] = [
   { href: "/", label: "Inicio", icon: LayoutDashboard, grupo: "principal" },
   { href: "/agenda", label: "Agenda", icon: Calendar, grupo: "principal" },
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio" },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio" },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio" },
-  { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas" },
+  { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
   { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas" },
-  { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas" },
+  { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas", soloDueno: true },
 ];
 
 const GRUPOS = [
@@ -87,6 +98,9 @@ export default function PanelLayout({
       </div>
     );
   }
+
+  // El menú de finanzas sensibles (Estadísticas, Métodos de pago) solo lo ve el dueño.
+  const dueno = esDueno(usuario.rol as Rol);
 
   return (
     <ConfigRubroProvider value={config}>
@@ -135,7 +149,10 @@ export default function PanelLayout({
         {/* Navegación agrupada */}
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
           {GRUPOS.map((grupo) => {
-            const items = NAV.filter((n) => n.grupo === grupo.id);
+            const items = NAV.filter(
+              (n) => n.grupo === grupo.id && (!n.soloDueno || dueno),
+            );
+            if (items.length === 0) return null;
             return (
               <div key={grupo.id}>
                 <p

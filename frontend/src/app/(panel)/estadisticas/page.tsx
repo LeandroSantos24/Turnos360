@@ -25,6 +25,7 @@ import {
   EstadisticasFacturacion,
 } from "@/lib/estadisticas-api";
 import { ApiError } from "@/lib/api";
+import { RequiereDueno } from "@/components/requiere-rol";
 
 type Periodo = "hoy" | "semana" | "mes";
 
@@ -90,7 +91,7 @@ function Card({
   );
 }
 
-export default function EstadisticasPage() {
+function ContenidoEstadisticas() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [datos, setDatos] = useState<EstadisticasFacturacion | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -274,5 +275,13 @@ export default function EstadisticasPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function EstadisticasPage() {
+  return (
+    <RequiereDueno>
+      <ContenidoEstadisticas />
+    </RequiereDueno>
   );
 }

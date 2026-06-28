@@ -7,9 +7,9 @@
  * sacamos de ahí sin pegarle al backend. Reutiliza getToken() de auth.ts
  * para no duplicar de dónde sale el token.
  *
- * OJO: esto es SOLO para la UI (esconder botones/menús). El candado real
- * está en el backend (gate_dueno / gate_gestion en deps.py): aunque alguien
- * fuerce la UI, el endpoint igual le devuelve 403.
+ * OJO: esto es SOLO para la UI (esconder botones/menús/pantallas). El candado
+ * real está en el backend (gate_dueno / gate_gestion en deps.py): aunque
+ * alguien fuerce la UI, el endpoint igual le devuelve 403.
  */
 
 import { useEffect, useState } from "react";
@@ -32,6 +32,15 @@ function decodificarRol(token: string | null): Rol | null {
 }
 
 /**
+ * Lee el rol de forma SINCRÓNICA (sin hook). Devuelve null en el server
+ * (no hay localStorage) o si no hay sesión. Pensado para usar dentro de un
+ * useEffect o un handler — p. ej. los guards de página de requiere-rol.tsx.
+ */
+export function leerRol(): Rol | null {
+  return decodificarRol(getToken());
+}
+
+/**
  * Hook: devuelve el rol del usuario logueado, o null si no hay sesión.
  *
  * Lee en un useEffect (no en el render) para no romper la hidratación de
@@ -41,7 +50,7 @@ function decodificarRol(token: string | null): Rol | null {
 export function useRol(): Rol | null {
   const [rol, setRol] = useState<Rol | null>(null);
   useEffect(() => {
-    setRol(decodificarRol(getToken()));
+    setRol(leerRol());
   }, []);
   return rol;
 }

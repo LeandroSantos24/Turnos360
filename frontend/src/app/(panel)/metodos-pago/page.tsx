@@ -17,6 +17,7 @@ import {
   MetodoPago,
 } from "@/lib/finanzas-api";
 import { ApiError } from "@/lib/api";
+import { RequiereDueno } from "@/components/requiere-rol";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-export default function MetodosPagoPage() {
+function ContenidoMetodosPago() {
   const [metodos, setMetodos] = useState<MetodoPago[]>([]);
   const [cargando, setCargando] = useState(true);
   const [dialogAbierto, setDialogAbierto] = useState(false);
@@ -239,5 +240,13 @@ export default function MetodosPagoPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function MetodosPagoPage() {
+  return (
+    <RequiereDueno>
+      <ContenidoMetodosPago />
+    </RequiereDueno>
   );
 }
