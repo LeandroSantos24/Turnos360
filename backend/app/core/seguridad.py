@@ -58,6 +58,19 @@ def crear_refresh_token(usuario_id: int, empresa_id: int, rol: str) -> str:
     )
 
 
+def crear_token_superadmin(superadmin_id: int) -> str:
+    """Token para el panel de super-administración (no pertenece a ninguna empresa)."""
+    ahora = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(superadmin_id),
+        "scope": "superadmin",
+        "type": "access",
+        "iat": ahora,
+        "exp": ahora + timedelta(hours=12),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algoritmo)
+
+
 def decodificar_token(token: str, tipo_esperado: str = "access") -> dict:
     """Valida la firma y el vencimiento de un token y devuelve sus claims.
 

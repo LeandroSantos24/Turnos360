@@ -142,7 +142,7 @@ export default function RecursosPage() {
       )}
 
       {!cargando && !error && visibles.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border bg-card">
+        <div className="overflow-x-auto rounded-2xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">

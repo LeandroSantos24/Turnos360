@@ -1,8 +1,8 @@
 """Endpoints de servicios: lo que cada negocio ofrece (E2)."""
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, gate_dueno
 from app.schemas.servicio import (
     ServicioCrear,
     ServicioEditar,
@@ -30,12 +30,22 @@ def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> Ser
     return servicio
 
 
-@router.post("", response_model=ServicioOut, status_code=status.HTTP_201_CREATED)
+# Catálogo = configuración del negocio -> solo el dueño.
+@router.post(
+    "",
+    response_model=ServicioOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_dueno)],
+)
 def crear_servicio(datos: ServicioCrear, empresa_id: EmpresaActual, db: DB) -> ServicioOut:
     return svc.crear(db, empresa_id, datos)
 
 
-@router.patch("/{servicio_id}", response_model=ServicioOut)
+@router.patch(
+    "/{servicio_id}",
+    response_model=ServicioOut,
+    dependencies=[Depends(gate_dueno)],
+)
 def editar_servicio(
     servicio_id: int, datos: ServicioEditar, empresa_id: EmpresaActual, db: DB
 ) -> ServicioOut:
@@ -45,7 +55,11 @@ def editar_servicio(
     return servicio
 
 
-@router.delete("/{servicio_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{servicio_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_dueno)],
+)
 def desactivar_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     if not svc.desactivar(db, empresa_id, servicio_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")

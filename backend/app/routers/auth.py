@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 
-from app.api.deps import DB, UsuarioActual
+from app.api.deps import DB, UsuarioActual, verificar_empresa_activa
 from app.core.seguridad import (
     crear_access_token,
     crear_refresh_token,
@@ -14,7 +14,7 @@ from app.core.seguridad import (
 )
 from app.core.crypto import verificar_clave
 from app.core.rate_limit import limiter
-from app.models import Usuario
+from app.models import Empresa, Usuario
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -46,7 +46,15 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     if usuario is None or not usuario.activo or not clave_ok:
         raise credenciales_invalidas
 
-    # 3. Emitir los tokens con el empresa_id y rol fijados adentro
+    # 3. La empresa no debe estar pausada por el super-admin.
+    #    Va DESPUÉS de validar la clave a propósito: solo un usuario legítimo
+    #    (que ya probó email + contraseña) se entera de que el servicio está
+    #    pausado. A un atacante le seguimos respondiendo "credenciales inválidas"
+    #    y no le revelamos nada sobre la empresa.
+    empresa = db.get(Empresa, usuario.empresa_id)
+    verificar_empresa_activa(empresa)
+
+    # 4. Emitir los tokens con el empresa_id y rol fijados adentro
     return TokenResponse(
         access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value),
         refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value),
@@ -73,11 +81,19 @@ def refresh(datos: RefreshRequest, db: DB) -> TokenResponse:
     if usuario is None or not usuario.activo:
         raise token_invalido
 
-    # 3. Emitir tokens frescos
+    # 3. La empresa no debe estar pausada: si no, no minteamos tokens nuevos.
+    #    Sin esto, un usuario de una empresa pausada podría seguir refrescando
+    #    su sesión para siempre (aunque cada access token resultante igual
+    #    moriría en get_current_usuario, mejor cortarlo de raíz acá).
+    empresa = db.get(Empresa, usuario.empresa_id)
+    verificar_empresa_activa(empresa)
+
+    # 4. Emitir tokens frescos
     return TokenResponse(
         access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value),
         refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value),
     )
+
 
 @router.get("/me", response_model=UsuarioMe)
 def me(usuario: UsuarioActual) -> Usuario:

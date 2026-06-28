@@ -15,11 +15,29 @@ from sqlalchemy.orm import Session
 
 from app.core.seguridad import decodificar_token
 from app.db.session import get_db
-from app.models import Usuario
+from app.models import Empresa, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
 
 # Lee el header "Authorization: Bearer <token>" de cada request.
 _bearer = HTTPBearer(auto_error=True)
+
+
+def verificar_empresa_activa(empresa: Empresa | None) -> None:
+    """Corta el acceso si la empresa fue pausada por el super-admin (E5).
+
+    Se usa en el login (frenar sesiones nuevas) y en get_current_usuario
+    (frenar tokens YA emitidos antes de la pausa). El estado se lee de la
+    base en cada request a propósito: querés que pausar/reactivar tenga
+    efecto al instante, no recién cuando venza el token.
+
+    Devuelve 403 (no 401): las credenciales son válidas; lo deshabilitado
+    es el servicio del tenant.
+    """
+    if empresa is None or not empresa.activa:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El servicio de tu empresa está pausado. Contactá al administrador.",
+        )
 
 
 def get_current_usuario(
@@ -44,6 +62,15 @@ def get_current_usuario(
     usuario = db.get(Usuario, usuario_id)
     if usuario is None or not usuario.activo:
         raise no_autorizado
+
+    # 3. La empresa del usuario no debe estar pausada.
+    #    Este es el candado que corta los tokens YA emitidos: aunque el token
+    #    sea válido y no haya vencido, si pausaste la empresa deja de entrar.
+    #    Todas las rutas de negocio cuelgan de get_current_usuario (directo,
+    #    vía get_current_empresa o vía requiere_rol), así que con ponerlo
+    #    acá queda cubierto todo el panel de una sola vez.
+    empresa = db.get(Empresa, usuario.empresa_id)
+    verificar_empresa_activa(empresa)
 
     return usuario
 
@@ -80,7 +107,49 @@ def requiere_rol(*roles_permitidos: RolUsuario):
     return verificador
 
 
+# --- Atajos de rol, listos para usar como guarda de ruta -------------------
+#   @router.post(..., dependencies=[Depends(gate_dueno)])
+#
+# gate_dueno    -> SOLO el dueño. Catálogo (servicios, recursos), config del
+#                  negocio y finanzas sensibles (métodos de pago, estadísticas).
+# gate_gestion  -> dueño + recepción (+ admin, que queda "dormido" pero si algún
+#                  día se usa hereda permisos de recepción). Es la operación del
+#                  día: crear/mover turnos, cambiar estado (incluye REABRIR),
+#                  cobrar, caja. Excluye al PROFESIONAL.
+#
+# Nota a futuro: cuando exista el link Usuario<->Recurso y la "vista del
+# profesional", los endpoints de estado de turno habrá que revisarlos para
+# dejar que el profesional opere SOLO sus propios turnos (hoy no puede ninguno).
+gate_dueno = requiere_rol(RolUsuario.DUENO)
+gate_gestion = requiere_rol(RolUsuario.DUENO, RolUsuario.ADMIN, RolUsuario.RECEPCION)
+
+
 # Atajos para escribir las rutas más corto (se usan desde E2 en adelante)
+def get_current_superadmin(
+    credenciales: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    db: Annotated[Session, Depends(get_db)],
+) -> SuperAdmin:
+    """Valida el token del panel de super-administración."""
+    no_autorizado = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciales de administrador inválidas",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decodificar_token(credenciales.credentials, tipo_esperado="access")
+        if payload.get("scope") != "superadmin":
+            raise no_autorizado
+        sa_id = int(payload["sub"])
+    except (InvalidTokenError, KeyError, ValueError):
+        raise no_autorizado
+
+    sa = db.get(SuperAdmin, sa_id)
+    if sa is None or not sa.activo:
+        raise no_autorizado
+    return sa
+
+
 UsuarioActual = Annotated[Usuario, Depends(get_current_usuario)]
+SuperAdminActual = Annotated[SuperAdmin, Depends(get_current_superadmin)]
 EmpresaActual = Annotated[int, Depends(get_current_empresa)]
 DB = Annotated[Session, Depends(get_db)]

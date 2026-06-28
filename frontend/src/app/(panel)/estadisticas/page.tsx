@@ -18,6 +18,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { Printer } from "lucide-react";
 
 import {
   obtenerFacturacion,
@@ -133,20 +134,30 @@ export default function EstadisticasPage() {
             La facturación real: lo que entró de verdad en el período.
           </p>
         </div>
-        <div className="flex items-center rounded-lg border p-0.5">
-          {(["hoy", "semana", "mes"] as Periodo[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriodo(p)}
-              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                periodo === p
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p === "hoy" ? "Hoy" : p === "semana" ? "Semana" : "Mes"}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-lg border p-0.5">
+            {(["hoy", "semana", "mes"] as Periodo[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                  periodo === p
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p === "hoy" ? "Hoy" : p === "semana" ? "Semana" : "Mes"}
+              </button>
+            ))}
+          </div>
+          <a
+            href={`/imprimir/estadisticas?periodo=${periodo}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted/50"
+          >
+            <Printer className="h-4 w-4" /> Imprimir
+          </a>
         </div>
       </div>
 

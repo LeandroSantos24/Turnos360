@@ -11,6 +11,7 @@ import { Printer } from "lucide-react";
 
 import { listarTurnosDelDia, Turno } from "@/lib/turnos-api";
 import { labelEstado, horaDe } from "@/lib/turno-visual";
+import { obtenerFacturacion, MetodoTotal } from "@/lib/estadisticas-api";
 
 function pesos(n: number): string {
   return `$${Number(n).toLocaleString("es-AR")}`;
@@ -20,12 +21,22 @@ export default function ImprimirParteDia() {
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [porMetodo, setPorMetodo] = useState<MetodoTotal[]>([]);
 
   useEffect(() => {
     setCargando(true);
-    listarTurnosDelDia(`${fecha}T00:00:00`, `${fecha}T23:59:59`)
-      .then((r) => setTurnos(r.items))
-      .catch(() => setTurnos([]))
+    Promise.all([
+      listarTurnosDelDia(`${fecha}T00:00:00`, `${fecha}T23:59:59`),
+      obtenerFacturacion(`${fecha}T00:00:00`, `${fecha}T23:59:59`),
+    ])
+      .then(([t, f]) => {
+        setTurnos(t.items);
+        setPorMetodo(f.por_metodo);
+      })
+      .catch(() => {
+        setTurnos([]);
+        setPorMetodo([]);
+      })
       .finally(() => setCargando(false));
   }, [fecha]);
 
@@ -119,6 +130,18 @@ export default function ImprimirParteDia() {
                 <span className="tabular-nums">{pesos(totalFacturado)}</span>
               </div>
             </div>
+
+            {porMetodo.length > 0 && (
+              <div className="mt-4 border-t border-gray-300 pt-3 text-sm">
+                <p className="mb-1 font-semibold">Cobrado por método</p>
+                {porMetodo.map((m) => (
+                  <div key={m.metodo} className="flex justify-between">
+                    <span>{m.metodo}</span>
+                    <span className="tabular-nums">{pesos(m.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 

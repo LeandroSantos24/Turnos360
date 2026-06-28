@@ -2,13 +2,18 @@
 
 El service ya valida disponibilidad con el motor y controla las transiciones
 de estado; acá solo exponemos esas operaciones por HTTP, atadas al guardián.
+
+Roles: leer la agenda es libre para cualquier usuario logueado; las acciones
+(crear, mover, cambiar estado -incluye reabrir-, descuento) son gestión del
+día -> dueño + recepción (gate_gestion). El profesional aún no opera turnos:
+queda pendiente para cuando exista el link Usuario<->Recurso.
 """
 
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, gate_gestion
 from app.models.enums import EstadoTurno
 from app.schemas.turno import (
     TurnoCambiarEstado,
@@ -83,13 +88,22 @@ def obtener_turno(turno_id: int, empresa_id: EmpresaActual, db: DB) -> TurnoOut:
     return turno
 
 
-@router.post("", response_model=TurnoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=TurnoOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def crear_turno(datos: TurnoCrear, empresa_id: EmpresaActual, db: DB) -> TurnoOut:
     """Crea un turno validando disponibilidad. 409 si el horario no está libre."""
     return svc.crear(db, empresa_id, datos)
 
 
-@router.patch("/{turno_id}/mover", response_model=TurnoOut)
+@router.patch(
+    "/{turno_id}/mover",
+    response_model=TurnoOut,
+    dependencies=[Depends(gate_gestion)],
+)
 def mover_turno(
     turno_id: int, datos: TurnoMover, empresa_id: EmpresaActual, db: DB
 ) -> TurnoOut:
@@ -100,13 +114,18 @@ def mover_turno(
     return turno
 
 
-@router.patch("/{turno_id}/estado", response_model=TurnoOut)
+@router.patch(
+    "/{turno_id}/estado",
+    response_model=TurnoOut,
+    dependencies=[Depends(gate_gestion)],
+)
 def cambiar_estado_turno(
     turno_id: int, datos: TurnoCambiarEstado, empresa_id: EmpresaActual, db: DB
 ) -> TurnoOut:
-    """Cambia el estado del turno (confirmar, atender, cancelar...).
+    """Cambia el estado del turno (confirmar, atender, cancelar, REABRIR...).
 
     409 si la transición no es válida (p. ej. finalizar un turno cancelado).
+    Gestión del día: dueño + recepción. Reabrir entra por acá.
     """
     turno = svc.cambiar_estado(db, empresa_id, turno_id, datos)
     if turno is None:
@@ -114,11 +133,15 @@ def cambiar_estado_turno(
     return turno
 
 
-@router.patch("/{turno_id}/descuento", response_model=TurnoOut)
+@router.patch(
+    "/{turno_id}/descuento",
+    response_model=TurnoOut,
+    dependencies=[Depends(gate_gestion)],
+)
 def aplicar_descuento_turno(
     turno_id: int, datos: TurnoDescuento, empresa_id: EmpresaActual, db: DB
 ) -> TurnoOut:
-    """Aplica un % de descuento al turno (0-100)."""
+    """Aplica un % de descuento al turno (0-100). Parte del armado del cobro."""
     turno = svc.aplicar_descuento(db, empresa_id, turno_id, datos.descuento_pct)
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")

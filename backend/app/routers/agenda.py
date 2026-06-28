@@ -2,13 +2,17 @@
 
 Horarios anidados bajo el recurso (/recursos/{id}/horarios).
 Excepciones en ruta propia (/excepciones) porque pueden ser de toda la empresa.
+
+Roles: los HORARIOS de trabajo son configuración del recurso -> dueño.
+Las EXCEPCIONES (bloqueos puntuales: "hoy el barbero no viene", feriados)
+son operación del día -> dueño + recepción. Leer es libre.
 """
 
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, gate_dueno, gate_gestion
 from app.schemas.agenda import (
     ExcepcionCrear,
     ExcepcionOut,
@@ -30,7 +34,12 @@ def listar_horarios(recurso_id: int, empresa_id: EmpresaActual, db: DB) -> list[
     return horarios
 
 
-@horarios_router.post("", response_model=HorarioOut, status_code=status.HTTP_201_CREATED)
+@horarios_router.post(
+    "",
+    response_model=HorarioOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_dueno)],
+)
 def agregar_horario(
     recurso_id: int, datos: HorarioCrear, empresa_id: EmpresaActual, db: DB
 ) -> HorarioOut:
@@ -41,7 +50,11 @@ def agregar_horario(
     return horario
 
 
-@horarios_router.delete("/{horario_id}", status_code=status.HTTP_204_NO_CONTENT)
+@horarios_router.delete(
+    "/{horario_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_dueno)],
+)
 def eliminar_horario(
     recurso_id: int, horario_id: int, empresa_id: EmpresaActual, db: DB
 ) -> None:
@@ -64,7 +77,12 @@ def listar_excepciones(
     return svc.listar_excepciones(db, empresa_id, desde=desde)
 
 
-@excepciones_router.post("", response_model=ExcepcionOut, status_code=status.HTTP_201_CREATED)
+@excepciones_router.post(
+    "",
+    response_model=ExcepcionOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def agregar_excepcion(
     datos: ExcepcionCrear, empresa_id: EmpresaActual, db: DB
 ) -> ExcepcionOut:
@@ -78,7 +96,11 @@ def agregar_excepcion(
     return excepcion
 
 
-@excepciones_router.delete("/{excepcion_id}", status_code=status.HTTP_204_NO_CONTENT)
+@excepciones_router.delete(
+    "/{excepcion_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_gestion)],
+)
 def eliminar_excepcion(excepcion_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     """Elimina una excepción."""
     if not svc.eliminar_excepcion(db, empresa_id, excepcion_id):
