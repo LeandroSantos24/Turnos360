@@ -114,14 +114,31 @@ def requiere_rol(*roles_permitidos: RolUsuario):
 #                  negocio y finanzas sensibles (métodos de pago, estadísticas).
 # gate_gestion  -> dueño + recepción (+ admin, que queda "dormido" pero si algún
 #                  día se usa hereda permisos de recepción). Es la operación del
-#                  día: crear/mover turnos, cambiar estado (incluye REABRIR),
-#                  cobrar, caja. Excluye al PROFESIONAL.
-#
-# Nota a futuro: cuando exista el link Usuario<->Recurso y la "vista del
-# profesional", los endpoints de estado de turno habrá que revisarlos para
-# dejar que el profesional opere SOLO sus propios turnos (hoy no puede ninguno).
+#                  día: crear/mover turnos, cobrar, caja. Excluye al PROFESIONAL.
+#                  (Cambiar estado YA NO usa este gate: el profesional puede
+#                  operar SUS turnos; ver contexto_profesional + turnos.py.)
 gate_dueno = requiere_rol(RolUsuario.DUENO)
 gate_gestion = requiere_rol(RolUsuario.DUENO, RolUsuario.ADMIN, RolUsuario.RECEPCION)
+
+
+def contexto_profesional(usuario: Usuario) -> tuple[bool, int | None]:
+    """Resuelve la restricción "solo lo mío" de un profesional.
+
+    Devuelve (es_profesional, recurso_id):
+      - (False, None): NO es profesional (dueño/recepción/admin) → sin restricción.
+      - (True, <id>):  profesional CON recurso asignado → restringido a ese recurso.
+      - (True, None):  profesional SIN recurso asignado todavía → no debe ver ni
+                       gestionar ningún turno (la ruta decide: agenda vacía / 403).
+
+    No es una dependencia de FastAPI a propósito: es una función pura que las
+    rutas llaman con el usuario ya resuelto, para tener la regla en un solo lugar.
+    Usa usuario.recurso (el relationship 1-a-1 del Bloque 1); solo dispara esa
+    query para los profesionales (los demás salen por el early return).
+    """
+    if usuario.rol != RolUsuario.PROFESIONAL:
+        return (False, None)
+    recurso = usuario.recurso
+    return (True, recurso.id if recurso else None)
 
 
 # Atajos para escribir las rutas más corto (se usan desde E2 en adelante)

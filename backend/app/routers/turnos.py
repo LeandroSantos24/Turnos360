@@ -3,17 +3,25 @@
 El service ya valida disponibilidad con el motor y controla las transiciones
 de estado; acá solo exponemos esas operaciones por HTTP, atadas al guardián.
 
-Roles: leer la agenda es libre para cualquier usuario logueado; las acciones
-(crear, mover, cambiar estado -incluye reabrir-, descuento) son gestión del
-día -> dueño + recepción (gate_gestion). El profesional aún no opera turnos:
-queda pendiente para cuando exista el link Usuario<->Recurso.
+Roles:
+- Crear / mover / descuento = gestión del día (gate_gestion: dueño + recepción).
+- Cambiar estado: dueño/recepción todo; el PROFESIONAL puede operar SOLO sus
+  propios turnos y solo el flujo de atención (en curso / finalizado).
+- Agenda (listar sin cliente_id): el profesional ve SOLO lo suyo (forzado).
+  Con cliente_id es la ficha/historial del cliente, abierta a todo el equipo.
 """
 
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual, gate_gestion
+from app.api.deps import (
+    DB,
+    EmpresaActual,
+    UsuarioActual,
+    contexto_profesional,
+    gate_gestion,
+)
 from app.models.enums import EstadoTurno
 from app.schemas.turno import (
     TurnoCambiarEstado,
@@ -59,7 +67,7 @@ def buscar_huecos(
 
 @router.get("", response_model=TurnosPagina)
 def listar_turnos(
-    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
     db: DB,
     recurso_id: int | None = Query(default=None, description="Filtrar por recurso (agenda de un barbero)"),
     cliente_id: int | None = Query(default=None, description="Filtrar por cliente (historial)"),
@@ -69,10 +77,20 @@ def listar_turnos(
 ) -> TurnosPagina:
     """Lista turnos de la empresa, filtrables por recurso, rango y estado.
 
-    Es la consulta que alimenta la vista de agenda.
+    Es la consulta que alimenta la vista de agenda. Para un PROFESIONAL, la
+    agenda (sin cliente_id) se fuerza a SU recurso: ignora el recurso_id que
+    mande. Con cliente_id es la ficha del cliente (historial completo del
+    negocio), que está abierta a todo el equipo.
     """
+    es_prof, mi_recurso = contexto_profesional(usuario)
+    if es_prof and cliente_id is None:
+        if mi_recurso is None:
+            # Profesional todavía sin recurso asignado: agenda vacía (no error).
+            return TurnosPagina(total=0, items=[])
+        recurso_id = mi_recurso  # fuerza el suyo, ignora lo pedido
+
     total, items = svc.listar(
-        db, empresa_id,
+        db, usuario.empresa_id,
         recurso_id=recurso_id, cliente_id=cliente_id,
         desde=desde, hasta=hasta, estado=estado,
     )
@@ -114,20 +132,31 @@ def mover_turno(
     return turno
 
 
-@router.patch(
-    "/{turno_id}/estado",
-    response_model=TurnoOut,
-    dependencies=[Depends(gate_gestion)],
-)
+@router.patch("/{turno_id}/estado", response_model=TurnoOut)
 def cambiar_estado_turno(
-    turno_id: int, datos: TurnoCambiarEstado, empresa_id: EmpresaActual, db: DB
+    turno_id: int, datos: TurnoCambiarEstado, usuario: UsuarioActual, db: DB
 ) -> TurnoOut:
     """Cambia el estado del turno (confirmar, atender, cancelar, REABRIR...).
 
-    409 si la transición no es válida (p. ej. finalizar un turno cancelado).
-    Gestión del día: dueño + recepción. Reabrir entra por acá.
+    Sin gate de rol fijo: dueño y recepción pueden todo; el PROFESIONAL solo
+    sus propios turnos y solo el flujo de atención (en curso / finalizado).
+    El service hace cumplir esas dos reglas a partir de recurso_profesional.
+    409 si la transición de estado no es válida.
     """
-    turno = svc.cambiar_estado(db, empresa_id, turno_id, datos)
+    es_prof, mi_recurso = contexto_profesional(usuario)
+    if es_prof and mi_recurso is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Todavía no estás vinculado a una agenda. Pedile al dueño que te asigne tu recurso.",
+        )
+
+    turno = svc.cambiar_estado(
+        db,
+        usuario.empresa_id,
+        turno_id,
+        datos,
+        recurso_profesional=mi_recurso if es_prof else None,
+    )
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
     return turno

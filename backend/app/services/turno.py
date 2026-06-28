@@ -32,6 +32,12 @@ TRANSICIONES = {
     EstadoTurno.AUSENTE: set(),      # estado terminal
 }
 
+# Subconjunto de transiciones que un PROFESIONAL puede hacer en SUS turnos.
+# Acotado al flujo de atención: empezar (en curso) y terminar (finalizado).
+# Confirmar, cancelar, marcar ausente y reabrir quedan para recepción/dueño.
+# (Si más adelante querés sumarle marcar AUSENTE, agregá EstadoTurno.AUSENTE acá.)
+ESTADOS_PROFESIONAL = {EstadoTurno.EN_CURSO, EstadoTurno.FINALIZADO}
+
 
 def _entidad_de_empresa(db, modelo, entidad_id: int, empresa_id: int):
     """Trae una entidad (Cliente/Recurso/Servicio) solo si es de esta empresa."""
@@ -249,14 +255,40 @@ def mover(
 
 
 def cambiar_estado(
-    db: Session, empresa_id: int, turno_id: int, datos: TurnoCambiarEstado
+    db: Session,
+    empresa_id: int,
+    turno_id: int,
+    datos: TurnoCambiarEstado,
+    *,
+    recurso_profesional: int | None = None,
 ) -> Turno | None:
-    """Cambia el estado del turno respetando las transiciones válidas."""
+    """Cambia el estado del turno respetando las transiciones válidas.
+
+    recurso_profesional:
+      - None  -> quien gestiona es dueño/recepción: sin restricción de propiedad.
+      - <id>  -> quien gestiona es un profesional: el turno DEBE ser de ese
+                 recurso y la transición DEBE estar en ESTADOS_PROFESIONAL
+                 (solo en curso / finalizado). Si no, 403.
+    La capa de ruta traduce rol -> recurso_profesional; el service no conoce roles.
+    """
     turno = db.scalar(
         select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
     )
     if turno is None:
         return None
+
+    # Restricción del profesional: solo SUS turnos y solo el flujo de atención.
+    if recurso_profesional is not None:
+        if turno.recurso_id != recurso_profesional:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Solo podés gestionar tus propios turnos",
+            )
+        if datos.estado not in ESTADOS_PROFESIONAL:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Como profesional solo podés marcar el turno en curso o finalizado",
+            )
 
     # ¿La transición es válida? (no se puede finalizar un cancelado, etc.)
     permitidos = TRANSICIONES[turno.estado]
