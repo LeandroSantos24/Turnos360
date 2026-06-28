@@ -1,12 +1,12 @@
 """Endpoints de recursos: lo reservable de cada empresa (E2).
-
 Mismo patrón que clientes: todas las rutas exigen token (EmpresaActual),
 el empresa_id sale del token y se delega en el service.
+
+Roles: leer es libre para cualquier usuario logueado; crear / editar / baja
+del catálogo de recursos es configuración del negocio -> solo el dueño.
 """
-
-from fastapi import APIRouter, HTTPException, Query, status
-
-from app.api.deps import DB, EmpresaActual
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from app.api.deps import DB, EmpresaActual, gate_dueno
 from app.models.enums import TipoRecurso
 from app.schemas.recurso import (
     RecursoCrear,
@@ -42,13 +42,22 @@ def obtener_recurso(recurso_id: int, empresa_id: EmpresaActual, db: DB) -> Recur
     return recurso
 
 
-@router.post("", response_model=RecursoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=RecursoOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_dueno)],
+)
 def crear_recurso(datos: RecursoCrear, empresa_id: EmpresaActual, db: DB) -> RecursoOut:
     """Crea un recurso en la empresa del usuario autenticado."""
     return svc.crear(db, empresa_id, datos)
 
 
-@router.patch("/{recurso_id}", response_model=RecursoOut)
+@router.patch(
+    "/{recurso_id}",
+    response_model=RecursoOut,
+    dependencies=[Depends(gate_dueno)],
+)
 def editar_recurso(
     recurso_id: int, datos: RecursoEditar, empresa_id: EmpresaActual, db: DB
 ) -> RecursoOut:
@@ -59,7 +68,11 @@ def editar_recurso(
     return recurso
 
 
-@router.delete("/{recurso_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{recurso_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_dueno)],
+)
 def desactivar_recurso(recurso_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     """Baja lógica del recurso. 404 si no es de esta empresa."""
     if not svc.desactivar(db, empresa_id, recurso_id):

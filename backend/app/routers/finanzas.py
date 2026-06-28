@@ -2,11 +2,18 @@
 
 El empresa_id sale del token; el usuario actual queda registrado en cada
 operación (quién abrió/cerró la caja, quién cobró, quién cargó el gasto).
+
+Roles (criterio "lecturas abiertas, escrituras gateadas"):
+- Configurar métodos de pago (crear/editar/borrar) = dueño (gate_dueno).
+- Operar el día (abrir/cerrar caja, cobrar, gastos, categorías) = dueño +
+  recepción (gate_gestion).
+- LISTAR métodos de pago queda abierto: el flujo de cobro de recepción lo
+  necesita para elegir con qué se paga. Igual el resto de las lecturas.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual, UsuarioActual
+from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno, gate_gestion
 from app.models.enums import TipoMovimiento
 from app.schemas.finanzas import (
     CajaAbrir,
@@ -35,15 +42,25 @@ router = APIRouter(tags=["finanzas"])
 
 @router.get("/metodos-pago", response_model=list[MetodoPagoOut])
 def listar_metodos(empresa_id: EmpresaActual, db: DB) -> list[MetodoPagoOut]:
+    # Abierto: el cobro (recepción) necesita la lista para elegir método.
     return svc.listar_metodos(db, empresa_id)
 
 
-@router.post("/metodos-pago", response_model=MetodoPagoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/metodos-pago",
+    response_model=MetodoPagoOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_dueno)],
+)
 def crear_metodo(datos: MetodoPagoCrear, empresa_id: EmpresaActual, db: DB) -> MetodoPagoOut:
     return svc.crear_metodo(db, empresa_id, datos)
 
 
-@router.patch("/metodos-pago/{metodo_id}", response_model=MetodoPagoOut)
+@router.patch(
+    "/metodos-pago/{metodo_id}",
+    response_model=MetodoPagoOut,
+    dependencies=[Depends(gate_dueno)],
+)
 def editar_metodo(
     metodo_id: int, datos: MetodoPagoEditar, empresa_id: EmpresaActual, db: DB
 ) -> MetodoPagoOut:
@@ -53,7 +70,11 @@ def editar_metodo(
     return m
 
 
-@router.delete("/metodos-pago/{metodo_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/metodos-pago/{metodo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(gate_dueno)],
+)
 def borrar_metodo(metodo_id: int, empresa_id: EmpresaActual, db: DB) -> None:
     if not svc.borrar_metodo(db, empresa_id, metodo_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Método de pago no encontrado")
@@ -66,7 +87,12 @@ def listar_categorias(empresa_id: EmpresaActual, db: DB) -> list[CategoriaOut]:
     return svc.listar_categorias(db, empresa_id)
 
 
-@router.post("/categorias-financieras", response_model=CategoriaOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/categorias-financieras",
+    response_model=CategoriaOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def crear_categoria(datos: CategoriaCrear, empresa_id: EmpresaActual, db: DB) -> CategoriaOut:
     return svc.crear_categoria(db, empresa_id, datos)
 
@@ -97,7 +123,12 @@ def detalle_caja(caja_id: int, empresa_id: EmpresaActual, db: DB) -> CajaDetalle
     return det
 
 
-@router.post("/caja/abrir", response_model=CajaOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/caja/abrir",
+    response_model=CajaOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def abrir_caja(
     datos: CajaAbrir, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
 ) -> CajaOut:
@@ -107,7 +138,11 @@ def abrir_caja(
     return caja
 
 
-@router.post("/caja/cerrar", response_model=CajaResumen)
+@router.post(
+    "/caja/cerrar",
+    response_model=CajaResumen,
+    dependencies=[Depends(gate_gestion)],
+)
 def cerrar_caja(
     datos: CajaCerrar, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
 ) -> CajaResumen:
@@ -119,7 +154,12 @@ def cerrar_caja(
 
 # ─────────────────────────── Cobro de un turno ──────────────────────────────
 
-@router.post("/turnos/{turno_id}/cobro", response_model=CobroOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/turnos/{turno_id}/cobro",
+    response_model=CobroOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def registrar_cobro(
     turno_id: int, datos: CobroCrear, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
 ) -> CobroOut:
@@ -136,7 +176,12 @@ def pagos_de_turno(turno_id: int, empresa_id: EmpresaActual, db: DB) -> list[Pag
 
 # ─────────────────────────── Gastos / movimientos ───────────────────────────
 
-@router.post("/gastos", response_model=MovimientoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/gastos",
+    response_model=MovimientoOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_gestion)],
+)
 def registrar_gasto(
     datos: GastoCrear, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
 ) -> MovimientoOut:
