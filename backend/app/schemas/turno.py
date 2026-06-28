@@ -1,25 +1,17 @@
 """Schemas de Turno: la reserva (E2).
-
 Al crear, el cliente manda inicio + servicio; el sistema calcula fecha_fin
 desde la duración del servicio y valida disponibilidad con el motor.
 Al listar/ver, se devuelven datos relacionados (cliente, recurso, servicio)
 para pintarlos en la agenda sin más consultas.
 """
-
 import datetime as dt
-
 from pydantic import BaseModel, Field
-
 from app.models.enums import EstadoTurno, TipoTurno
-
-
 class TurnoCrear(BaseModel):
     """Lo que se manda para reservar un turno.
-
     No se manda fecha_fin: la calcula el sistema desde la duración del servicio.
     Tampoco empresa_id (sale del token).
     """
-
     cliente_id: int
     recurso_id: int
     servicio_id: int
@@ -29,31 +21,23 @@ class TurnoCrear(BaseModel):
     notas: str | None = None
     importe_previsto: float | None = None
     es_sobreturno: bool = False  # si es True, salta la validación de disponibilidad
-
-
 class TurnoMover(BaseModel):
     """Reprogramar: nuevo horario y/o nuevo recurso."""
-
     fecha_inicio: dt.datetime
     recurso_id: int | None = None  # si cambia de profesional
-
-
 class TurnoCambiarEstado(BaseModel):
-    """Cambiar el estado del turno (confirmar, atender, cancelar...)."""
+    """Cambiar el estado del turno (confirmar, atender, cancelar...).
 
+    Al cancelar se puede mandar el motivo. El service lo guarda solo cuando el
+    estado es CANCELADO; en las demás transiciones se ignora.
+    """
     estado: EstadoTurno
-
-
+    motivo_cancelacion: str | None = Field(default=None, max_length=300)
 class TurnoDescuento(BaseModel):
     """Aplicar un descuento al turno (porcentaje 0-100)."""
-
     descuento_pct: float = Field(ge=0, le=100)
-    motivo_cancelacion: str | None = Field(default=None, max_length=300)
-
-
 class TurnoOut(BaseModel):
     """Lo que devuelve la API. Incluye nombres relacionados para la agenda."""
-
     id: int
     empresa_id: int
     cliente_id: int
@@ -72,16 +56,12 @@ class TurnoOut(BaseModel):
     total: float = 0  # servicio + adicionales − descuento (lo calcula el service)
     notas: str | None
     motivo_cancelacion: str | None
-
     # nombres resueltos (los llena el service para la agenda)
     cliente_nombre: str | None = None
     recurso_nombre: str | None = None
     servicio_nombre: str | None = None
     servicio_grupo: str | None = None  # carril del servicio (corte/tintura/barba)
-
     model_config = {"from_attributes": True}
-
-
 class TurnosPagina(BaseModel):
     total: int
     items: list[TurnoOut]
