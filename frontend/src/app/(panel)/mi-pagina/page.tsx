@@ -2,32 +2,37 @@
 
 /**
  * Mi página (/mi-pagina). El dueño edita el contenido de su landing pública:
- * sobre nosotros, dirección, contacto, logo, color, horarios (display) y redes.
- * Solo dueño (RequiereDueno + gate_dueno en el backend).
+ * sobre nosotros, dirección, contacto, logo, color, horarios (display), redes,
+ * galería de fotos y las fotos del equipo. Arriba de todo, el link público
+ * para compartir. Solo dueño (RequiereDueno + gate_dueno en el backend).
+ *
+ * La galería viaja dentro del LandingConfig (botón Guardar global). Las fotos
+ * del equipo se guardan por fila con el PATCH de recursos.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  Save,
-  Instagram,
-  Facebook,
-  Linkedin,
-  Globe,
-  Music2,
-  type LucideIcon,
-} from "lucide-react";
+import { Save, Copy, Check, ExternalLink, Plus, X, Globe } from "lucide-react";
 
 import {
   obtenerLanding,
   guardarLanding,
+  obtenerConfigEmpresa,
   LandingConfig,
   HorariosAtencion,
   Franja,
   Redes,
 } from "@/lib/empresa-api";
+import { listarRecursos, editarRecurso, Recurso } from "@/lib/recursos-api";
 import { ApiError } from "@/lib/api";
 import { RequiereDueno } from "@/components/requiere-rol";
+import {
+  IconoInstagram,
+  IconoFacebook,
+  IconoLinkedin,
+  IconoTiktok,
+  type IconoRed,
+} from "@/components/iconos-redes";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +46,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+const MAX_FOTOS = 12;
 
 const DIAS: { clave: string; label: string }[] = [
   { clave: "lun", label: "Lunes" },
@@ -56,12 +63,12 @@ const REDES: {
   clave: keyof Redes;
   label: string;
   placeholder: string;
-  Icono: LucideIcon;
+  Icono: IconoRed;
 }[] = [
-  { clave: "instagram", label: "Instagram", placeholder: "usuario o link", Icono: Instagram },
-  { clave: "facebook", label: "Facebook", placeholder: "link a tu página", Icono: Facebook },
-  { clave: "tiktok", label: "TikTok", placeholder: "@usuario", Icono: Music2 },
-  { clave: "linkedin", label: "LinkedIn", placeholder: "link a tu perfil", Icono: Linkedin },
+  { clave: "instagram", label: "Instagram", placeholder: "usuario o link", Icono: IconoInstagram },
+  { clave: "facebook", label: "Facebook", placeholder: "link a tu página", Icono: IconoFacebook },
+  { clave: "tiktok", label: "TikTok", placeholder: "@usuario", Icono: IconoTiktok },
+  { clave: "linkedin", label: "LinkedIn", placeholder: "link a tu perfil", Icono: IconoLinkedin },
   { clave: "sitio_web", label: "Sitio web", placeholder: "https://…", Icono: Globe },
 ];
 
@@ -74,6 +81,7 @@ const VACIO: LandingConfig = {
   color_marca: null,
   horarios_atencion: null,
   redes: {},
+  galeria: [],
 };
 
 /** Editor de horarios visibles (display). Por día: abierto/cerrado + 1-2 franjas. */
@@ -173,14 +181,278 @@ function HorariosEditor({
   );
 }
 
+/** Card con el link público del negocio, para copiar y compartir. */
+function LinkPublico({ slug }: { slug: string | null }) {
+  const [copiado, setCopiado] = useState(false);
+  const url = useMemo(() => {
+    if (!slug) return null;
+    const origen =
+      typeof window !== "undefined" ? window.location.origin : "https://turnos360.com.ar";
+    return `${origen}/${slug}`;
+  }, [slug]);
+
+  async function copiar() {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiado(true);
+      toast.success("Link copiado");
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      toast.error("No se pudo copiar. Seleccionalo y copialo a mano.");
+    }
+  }
+
+  return (
+    <Card className="rounded-2xl lg:col-span-2">
+      <CardHeader>
+        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Tu link público</CardTitle>
+        <CardDescription>
+          Compartilo en Instagram, WhatsApp o donde quieras: tus clientes ven tu página y
+          reservan solos.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {url ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code className="flex-1 truncate rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm">
+              {url}
+            </code>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={copiar}>
+                {copiado ? (
+                  <Check className="mr-1.5 h-4 w-4" />
+                ) : (
+                  <Copy className="mr-1.5 h-4 w-4" />
+                )}
+                {copiado ? "Copiado" : "Copiar"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+              >
+                <ExternalLink className="mr-1.5 h-4 w-4" />
+                Abrir
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Cargando tu link…</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Card de galería: URLs de fotos con vista previa. Se guarda con el botón global. */
+function GaleriaEditor({
+  fotos,
+  onChange,
+}: {
+  fotos: string[];
+  onChange: (fotos: string[]) => void;
+}) {
+  const [nueva, setNueva] = useState("");
+
+  function agregar() {
+    const url = nueva.trim();
+    if (!url) return;
+    if (fotos.length >= MAX_FOTOS) {
+      toast.error(`Máximo ${MAX_FOTOS} fotos`);
+      return;
+    }
+    if (fotos.includes(url)) {
+      toast.error("Esa foto ya está en la galería");
+      return;
+    }
+    onChange([...fotos, url]);
+    setNueva("");
+  }
+  function quitar(i: number) {
+    onChange(fotos.filter((_, j) => j !== i));
+  }
+
+  return (
+    <Card className="rounded-2xl lg:col-span-2">
+      <CardHeader>
+        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Galería de fotos</CardTitle>
+        <CardDescription>
+          Fotos de tus trabajos o del local (hasta {MAX_FOTOS}). Pegá la URL de cada imagen; se
+          guardan con el botón &quot;Guardar cambios&quot;.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            placeholder="https://…/foto.jpg"
+            value={nueva}
+            onChange={(e) => setNueva(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                agregar();
+              }
+            }}
+          />
+          <Button type="button" variant="outline" onClick={agregar}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Agregar
+          </Button>
+        </div>
+
+        {fotos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no agregaste fotos. La sección Galería no se muestra en tu página hasta que
+            haya al menos una.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {fotos.map((url, i) => (
+              <div
+                key={`${url}-${i}`}
+                className="group relative aspect-square overflow-hidden rounded-xl border bg-muted"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`Foto ${i + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+                <button
+                  type="button"
+                  onClick={() => quitar(i)}
+                  className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+                  aria-label="Quitar foto"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Card de fotos del equipo: una fila por profesional, guardado por fila (PATCH). */
+function EquipoEditor({
+  recursos,
+  onGuardado,
+}: {
+  recursos: Recurso[];
+  onGuardado: (r: Recurso) => void;
+}) {
+  const [borradores, setBorradores] = useState<Record<number, string>>({});
+  const [guardandoId, setGuardandoId] = useState<number | null>(null);
+
+  const valorDe = (r: Recurso) => borradores[r.id] ?? r.foto_url ?? "";
+  const cambiado = (r: Recurso) => valorDe(r).trim() !== (r.foto_url ?? "");
+
+  async function guardarFoto(r: Recurso) {
+    const url = valorDe(r).trim();
+    setGuardandoId(r.id);
+    try {
+      const actualizado = await editarRecurso(r.id, { foto_url: url === "" ? null : url });
+      onGuardado(actualizado);
+      setBorradores((b) => {
+        const copia = { ...b };
+        delete copia[r.id];
+        return copia;
+      });
+      toast.success(`Foto de ${r.nombre} guardada`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo guardar");
+    } finally {
+      setGuardandoId(null);
+    }
+  }
+
+  return (
+    <Card className="rounded-2xl lg:col-span-2">
+      <CardHeader>
+        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Fotos del equipo</CardTitle>
+        <CardDescription>
+          La foto de cada profesional aparece en la sección Equipo de tu página. Sin foto, se
+          muestra la inicial del nombre.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {recursos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay profesionales activos. Crealos en la pantalla Recursos y van a aparecer acá.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {recursos.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border bg-muted">
+                    {valorDe(r).trim() ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={valorDe(r).trim()}
+                        alt={r.nombre}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground">
+                        {r.nombre.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <span className="truncate text-sm font-medium">{r.nombre}</span>
+                </div>
+                <div className="flex flex-1 gap-2">
+                  <Input
+                    placeholder="https://…/foto.jpg"
+                    value={valorDe(r)}
+                    onChange={(e) =>
+                      setBorradores((b) => ({ ...b, [r.id]: e.target.value }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!cambiado(r) || guardandoId === r.id}
+                    onClick={() => guardarFoto(r)}
+                  >
+                    {guardandoId === r.id ? "Guardando…" : "Guardar"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ContenidoMiPagina() {
   const [form, setForm] = useState<LandingConfig | null>(null);
+  const [slug, setSlug] = useState<string | null>(null);
+  const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    obtenerLanding()
-      .then((data) => setForm({ ...VACIO, ...data, redes: data.redes ?? {} }))
+    Promise.all([
+      obtenerLanding(),
+      obtenerConfigEmpresa().catch(() => null),
+      listarRecursos().catch(() => null),
+    ])
+      .then(([data, config, pagina]) => {
+        setForm({ ...VACIO, ...data, redes: data.redes ?? {}, galeria: data.galeria ?? [] });
+        if (config) setSlug(config.slug);
+        if (pagina)
+          setRecursos(pagina.items.filter((r) => r.tipo === "persona" && r.activo));
+      })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : "Error al cargar"),
       )
@@ -218,11 +490,17 @@ function ContenidoMiPagina() {
       color_marca: limpio(form.color_marca),
       horarios_atencion: tieneHorarios ? form.horarios_atencion : null,
       redes: redesLimpias,
+      galeria: form.galeria.map((u) => u.trim()).filter(Boolean).slice(0, MAX_FOTOS),
     };
 
     try {
       const guardado = await guardarLanding(payload);
-      setForm({ ...VACIO, ...guardado, redes: guardado.redes ?? {} });
+      setForm({
+        ...VACIO,
+        ...guardado,
+        redes: guardado.redes ?? {},
+        galeria: guardado.galeria ?? [],
+      });
       toast.success("Página actualizada");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo guardar");
@@ -253,6 +531,8 @@ function ContenidoMiPagina() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <LinkPublico slug={slug} />
+
         {/* Información del negocio */}
         <Card className="rounded-2xl">
           <CardHeader>
@@ -281,7 +561,7 @@ function ContenidoMiPagina() {
                 onChange={(e) => set("direccion", e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                De acá sale el botón “Ver en Google Maps”.
+                De acá salen el mapa y el botón &ldquo;Cómo llegar&rdquo;.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -361,6 +641,17 @@ function ContenidoMiPagina() {
             ))}
           </CardContent>
         </Card>
+
+        <GaleriaEditor fotos={form.galeria} onChange={(g) => set("galeria", g)} />
+
+        <EquipoEditor
+          recursos={recursos}
+          onGuardado={(actualizado) =>
+            setRecursos((lista) =>
+              lista.map((r) => (r.id === actualizado.id ? actualizado : r)),
+            )
+          }
+        />
 
         {/* Horarios */}
         <Card className="rounded-2xl lg:col-span-2">

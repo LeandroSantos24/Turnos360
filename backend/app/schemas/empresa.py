@@ -40,3 +40,5 @@ class LandingConfig(BaseModel):
     color_marca: str | None = None
     horarios_atencion: dict | None = None
     redes: dict = {}
+    # Galería de la landing: lista de URLs de fotos (máx. razonable: 12).
+    galeria: list[str] = []

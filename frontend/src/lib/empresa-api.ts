@@ -54,6 +54,8 @@ export interface LandingConfig {
   color_marca: string | null;
   horarios_atencion: HorariosAtencion | null;
   redes: Redes;
+  /** Galería de la landing: lista de URLs de fotos (máx. 12). */
+  galeria: string[];
 }
 
 /** Contenido actual de la landing del negocio (GET /empresa/landing). */

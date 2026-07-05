@@ -5,7 +5,7 @@
  * Documento en blanco y negro con la facturación real del período.
  */
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import {
@@ -43,7 +43,7 @@ function etiqueta(p: string): string {
   return "Este mes";
 }
 
-export default function ImprimirEstadisticas() {
+function ContenidoImprimirEstadisticas() {
   const sp = useSearchParams();
   const periodo = sp.get("periodo") ?? "mes";
   const [datos, setDatos] = useState<EstadisticasFacturacion | null>(null);
@@ -177,5 +177,14 @@ export default function ImprimirEstadisticas() {
         </p>
       </div>
     </div>
+  );
+}
+/** Next 14 exige un límite de Suspense alrededor de useSearchParams()
+ *  para poder prerenderizar la página en el build de producción. */
+export default function ImprimirEstadisticas() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-gray-500">Cargando…</div>}>
+      <ContenidoImprimirEstadisticas />
+    </Suspense>
   );
 }

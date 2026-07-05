@@ -15,6 +15,7 @@ class RecursoBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     tipo: TipoRecurso = TipoRecurso.PERSONA
     color: str | None = Field(default=None, max_length=9)  # para la agenda visual
+    foto_url: str | None = Field(default=None, max_length=300)  # foto para la landing
     sucursal_id: int | None = None
     usuario_id: int | None = None  # si la persona tiene login
     especialidad_ids: list[int] = Field(default_factory=list)
@@ -30,6 +31,7 @@ class RecursoEditar(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     tipo: TipoRecurso | None = None
     color: str | None = Field(default=None, max_length=9)
+    foto_url: str | None = Field(default=None, max_length=300)
     sucursal_id: int | None = None
     usuario_id: int | None = None
     especialidad_ids: list[int] | None = None
@@ -53,6 +55,7 @@ class RecursoOut(BaseModel):
     nombre: str
     tipo: TipoRecurso
     color: str | None
+    foto_url: str | None
     sucursal_id: int | None
     usuario_id: int | None
     activo: bool

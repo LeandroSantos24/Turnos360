@@ -83,6 +83,7 @@ def vidriera(db: Session, slug: str) -> dict:
         "color_marca": empresa.color_marca,
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
+        "galeria": empresa.galeria or [],
         "servicios": [
             {
                 "id": s.id,
@@ -92,7 +93,9 @@ def vidriera(db: Session, slug: str) -> dict:
             }
             for s in servicios
         ],
-        "recursos": [{"id": r.id, "nombre": r.nombre} for r in recursos],
+        "recursos": [
+            {"id": r.id, "nombre": r.nombre, "foto_url": r.foto_url} for r in recursos
+        ],
     }
 
 

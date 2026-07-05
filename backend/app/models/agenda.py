@@ -61,6 +61,8 @@ class Recurso(TenantMixin, Base):
         ForeignKey("usuario.id")
     )  # si el recurso es una persona con login
     color: Mapped[str | None] = mapped_column(String(9))  # para la agenda visual
+    # Foto del profesional para la sección "Equipo" de la landing pública.
+    foto_url: Mapped[str | None] = mapped_column(String(300))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
     especialidades: Mapped[list["Especialidad"]] = relationship(

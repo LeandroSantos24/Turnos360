@@ -67,6 +67,8 @@ class Empresa(Base):
     color_marca: Mapped[str | None] = mapped_column(String(7))  # acento, ej. #00d4aa
     horarios_atencion: Mapped[dict | None] = mapped_column(JSONB, default=None)
     redes: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    # Galería de la landing: lista de URLs de fotos del local/trabajos.
+    galeria: Mapped[list | None] = mapped_column(JSONB, default=list)
     wa_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)  # Fernet (app.core.crypto)
     email_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)
     activa: Mapped[bool] = mapped_column(Boolean, default=True)

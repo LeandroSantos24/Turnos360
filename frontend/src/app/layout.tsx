@@ -4,8 +4,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Turnos360",
-  description: "Panel de gestión de turnos",
+  title: "Turnos360 · Gestión integral de turnos y clientes",
+  description:
+    "Agenda inteligente, reservas online 24/7, caja, membresías y CRM para barberías, peluquerías, salones de uñas y centros de estética.",
 };
 
 export default function RootLayout({

@@ -15,6 +15,7 @@ export interface ServicioPublico {
 export interface RecursoPublico {
   id: number;
   nombre: string;
+  foto_url: string | null;
 }
 
 /** [abre, cierra], ej. ["09:00", "13:00"]. */
@@ -31,6 +32,7 @@ export interface Vidriera {
   color_marca: string | null;
   horarios_atencion: Record<string, Franja[]> | null;
   redes: Record<string, string>;
+  galeria: string[];
   servicios: ServicioPublico[];
   recursos: RecursoPublico[];
 }

@@ -22,6 +22,8 @@ export interface Recurso {
   nombre: string;
   tipo: TipoRecurso;
   color: string | null;
+  /** Foto del profesional para la landing pública (se edita en "Mi página"). */
+  foto_url: string | null;
   sucursal_id: number | null;
   usuario_id: number | null;
   activo: boolean;
@@ -37,6 +39,8 @@ export interface RecursoCrear {
   nombre: string;
   tipo: TipoRecurso;
   color?: string;
+  /** Foto del profesional para la landing pública. */
+  foto_url?: string | null;
   /** Usuario con login que opera este recurso (1-a-1). null = sin vincular. */
   usuario_id?: number | null;
 }

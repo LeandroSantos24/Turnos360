@@ -42,6 +42,7 @@ def obtener_landing(db: Session, empresa_id: int) -> dict:
         "color_marca": empresa.color_marca,
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
+        "galeria": empresa.galeria or [],
     }
 
 
@@ -56,5 +57,6 @@ def actualizar_landing(db: Session, empresa_id: int, datos: LandingConfig) -> di
     empresa.color_marca = datos.color_marca
     empresa.horarios_atencion = datos.horarios_atencion
     empresa.redes = datos.redes or {}
+    empresa.galeria = [u.strip() for u in (datos.galeria or []) if u and u.strip()][:12]
     db.commit()
     return obtener_landing(db, empresa_id)

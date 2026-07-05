@@ -19,6 +19,7 @@ class ServicioPublico(BaseModel):
 class RecursoPublico(BaseModel):
     id: int
     nombre: str
+    foto_url: str | None = None
 
 
 class VidrieraOut(BaseModel):
@@ -34,6 +35,7 @@ class VidrieraOut(BaseModel):
     color_marca: str | None = None
     horarios_atencion: dict | None = None
     redes: dict = {}
+    galeria: list[str] = []
     servicios: list[ServicioPublico]
     recursos: list[RecursoPublico]
 
