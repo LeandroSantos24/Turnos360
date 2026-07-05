@@ -25,3 +25,43 @@ export interface ConfigEmpresa {
 export function obtenerConfigEmpresa(): Promise<ConfigEmpresa> {
   return api.get<ConfigEmpresa>("/empresa/actual");
 }
+
+// === Landing pública ("Mi página") ===
+
+/** Una franja horaria: [abre, cierra], ej. ["09:00", "13:00"]. */
+export type Franja = [string, string];
+
+/** Horarios visibles por día (clave: lun..dom). Día ausente o [] = cerrado.
+ *  Solo para mostrar en la landing; NO calcula huecos reservables. */
+export type HorariosAtencion = Record<string, Franja[]>;
+
+/** Links de redes. Claves conocidas + libres (sumar una red = agregar clave). */
+export interface Redes {
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+  linkedin?: string;
+  sitio_web?: string;
+  [red: string]: string | undefined;
+}
+
+export interface LandingConfig {
+  descripcion: string | null;
+  direccion: string | null;
+  telefono_publico: string | null;
+  email_publico: string | null;
+  logo_url: string | null;
+  color_marca: string | null;
+  horarios_atencion: HorariosAtencion | null;
+  redes: Redes;
+}
+
+/** Contenido actual de la landing del negocio (GET /empresa/landing). */
+export function obtenerLanding(): Promise<LandingConfig> {
+  return api.get<LandingConfig>("/empresa/landing");
+}
+
+/** Guarda el contenido de la landing (PUT /empresa/landing). Solo dueño. */
+export function guardarLanding(datos: LandingConfig): Promise<LandingConfig> {
+  return api.put<LandingConfig>("/empresa/landing", datos);
+}

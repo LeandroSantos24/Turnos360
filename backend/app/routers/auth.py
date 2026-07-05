@@ -62,7 +62,8 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(datos: RefreshRequest, db: DB) -> TokenResponse:
+@limiter.limit("20/minute")
+def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
     """Recibe un refresh token válido y emite un par nuevo de tokens."""
     token_invalido = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

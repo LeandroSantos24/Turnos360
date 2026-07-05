@@ -1,8 +1,9 @@
 """Endpoints del panel de super-administración (alta de empresas y usuarios)."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.api.deps import DB, SuperAdminActual
+from app.core.rate_limit import limiter
 from app.core.seguridad import crear_token_superadmin
 from app.schemas.admin import (
     AdminLogin,
@@ -21,7 +22,12 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/login", response_model=AdminToken)
-def login(datos: AdminLogin, db: DB) -> AdminToken:
+@limiter.limit("5/minute")
+def login(request: Request, datos: AdminLogin, db: DB) -> AdminToken:
+    # Rate limit estricto: es el endpoint más sensible del sistema (controla
+    # todos los tenants) y hay un solo operador legítimo. Detrás de Nginx,
+    # configurar el proxy para pasar la IP real (X-Forwarded-For) o todos los
+    # clientes caen en el mismo bucket.
     sa = svc.autenticar_admin(db, datos.email, datos.clave)
     if sa is None:
         raise HTTPException(

@@ -46,6 +46,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SoloDueno } from "@/components/si-rol";
 
 const NUM_STYLE: React.CSSProperties = {
   fontFamily: "Syne, sans-serif",
@@ -132,10 +133,12 @@ export default function MembresiasPage() {
             <UserPlus size={16} className="mr-1" />
             Asignar a cliente
           </Button>
-          <Button onClick={abrirCrear}>
-            <Plus size={16} className="mr-1" />
-            Nuevo plan
-          </Button>
+          <SoloDueno>
+            <Button onClick={abrirCrear}>
+              <Plus size={16} className="mr-1" />
+              Nuevo plan
+            </Button>
+          </SoloDueno>
         </div>
       </div>
 
@@ -217,29 +220,31 @@ export default function MembresiasPage() {
                     key={plan.id}
                     className="relative rounded-2xl border bg-card p-5"
                   >
-                    {/* Menú de acciones */}
-                    <div className="absolute right-3 top-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => abrirEditar(plan)}>
-                            <Pencil size={14} className="mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setABorrar(plan)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 size={14} className="mr-2" />
-                            Borrar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                    {/* Menú de acciones (catálogo del plan: solo el dueño) */}
+                    <SoloDueno>
+                      <div className="absolute right-3 top-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical size={16} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => abrirEditar(plan)}>
+                              <Pencil size={14} className="mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setABorrar(plan)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 size={14} className="mr-2" />
+                              Borrar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </SoloDueno>
 
                     {/* Nombre + precio */}
                     <h3

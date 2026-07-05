@@ -27,6 +27,7 @@ import {
   Banknote,
   BarChart3,
   Sun,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,7 @@ const NAV: NavItem[] = [
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
+  { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "negocio", soloDueno: true },
   { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
   { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas", ocultarProfesional: true },
   { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas", soloDueno: true },

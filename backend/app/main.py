@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin
+from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico
 
 
 app = FastAPI(
@@ -62,6 +62,7 @@ app.include_router(items.router)
 app.include_router(finanzas.router)
 app.include_router(estadisticas.router)
 app.include_router(admin.router)
+app.include_router(publico.router)
 
 
 @app.get("/", tags=["meta"])
