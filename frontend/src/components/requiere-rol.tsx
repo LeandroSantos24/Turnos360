@@ -53,10 +53,10 @@ function GuardaRol({
   return <>{children}</>;
 }
 
-/** Solo el dueño ve la página; si no, redirige a `destino` (default "/"). */
+/** Solo el dueño ve la página; si no, redirige a `destino` (default "/inicio"). */
 export function RequiereDueno({
   children,
-  destino = "/",
+  destino = "/inicio",
 }: {
   children: ReactNode;
   destino?: string;
@@ -71,7 +71,7 @@ export function RequiereDueno({
 /** Dueño + recepción (gestión del día); excluye al profesional. */
 export function RequiereGestion({
   children,
-  destino = "/",
+  destino = "/inicio",
 }: {
   children: ReactNode;
   destino?: string;

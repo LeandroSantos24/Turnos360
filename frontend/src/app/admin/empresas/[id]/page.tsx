@@ -8,7 +8,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -58,6 +58,7 @@ export default function AdminUsuariosPage() {
 
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [nombreEmpresa, setNombreEmpresa] = useState("");
+  const [slugEmpresa, setSlugEmpresa] = useState("");
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -75,7 +76,9 @@ export default function AdminUsuariosPage() {
         listarEmpresas(),
       ]);
       setUsuarios(us);
-      setNombreEmpresa(empresas.find((e) => e.id === empresaId)?.nombre ?? "");
+      const emp = empresas.find((e) => e.id === empresaId);
+      setNombreEmpresa(emp?.nombre ?? "");
+      setSlugEmpresa(emp?.slug ?? "");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Error al cargar");
     } finally {
@@ -141,8 +144,17 @@ export default function AdminUsuariosPage() {
           <h1 className="text-2xl font-bold" style={SYNE}>
             Usuarios
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
             {nombreEmpresa || "Empresa"}
+            {slugEmpresa && (
+              <button
+                type="button"
+                onClick={() => window.open(`/${slugEmpresa}`, "_blank", "noopener,noreferrer")}
+                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                /{slugEmpresa} <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            )}
           </p>
         </div>
         <Dialog

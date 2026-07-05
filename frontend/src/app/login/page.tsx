@@ -33,7 +33,7 @@ export default function LoginPage() {
     setCargando(true);
     try {
       await login(email, clave);
-      router.push("/");
+      router.push("/inicio");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conectar con el servidor.");
       setCargando(false);

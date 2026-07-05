@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   CalendarDays,
@@ -298,7 +299,17 @@ function Navbar() {
             Rubros
           </a>
         </nav>
-        <BotonDemo />
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Link
+            href="/login"
+            className="text-sm font-semibold transition-colors hover:text-black"
+            style={{ color: TINTA_SUAVE }}
+          >
+            <span className="sm:hidden">Entrar</span>
+            <span className="hidden sm:inline">Iniciar sesión</span>
+          </Link>
+          <BotonDemo />
+        </div>
       </div>
     </header>
   );
@@ -765,15 +776,20 @@ function Footer() {
         <p className="text-xs" style={{ color: TINTA_SUAVE }}>
           © {new Date().getFullYear()} Turnos360 · Hecho en Mendoza, Argentina
         </p>
-        <a
-          href={LINK_DEMO}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-semibold"
-          style={{ color: TEAL_OSCURO }}
-        >
-          Contacto por WhatsApp
-        </a>
+        <div className="flex items-center gap-5">
+          <Link href="/login" className="text-xs font-semibold" style={{ color: TINTA_SUAVE }}>
+            Iniciar sesión
+          </Link>
+          <a
+            href={LINK_DEMO}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold"
+            style={{ color: TEAL_OSCURO }}
+          >
+            Contacto por WhatsApp
+          </a>
+        </div>
       </div>
     </footer>
   );

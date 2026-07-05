@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, ExternalLink, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -55,6 +55,7 @@ export default function AdminEmpresasPage() {
   const [rubros, setRubros] = useState<RubroAdmin[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
+  const [copiadoId, setCopiadoId] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   // formulario
@@ -121,6 +122,21 @@ export default function AdminEmpresasPage() {
       toast.error(err instanceof ApiError ? err.message : "No se pudo crear");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  function linkPublico(emp: EmpresaAdmin) {
+    return `${window.location.origin}/${emp.slug}`;
+  }
+
+  async function copiarLink(emp: EmpresaAdmin) {
+    try {
+      await navigator.clipboard.writeText(linkPublico(emp));
+      setCopiadoId(emp.id);
+      toast.success("Link público copiado");
+      setTimeout(() => setCopiadoId(null), 2000);
+    } catch {
+      toast.error("No se pudo copiar");
     }
   }
 
@@ -274,14 +290,33 @@ export default function AdminEmpresasPage() {
                   {e.cantidad_usuarios === 1 ? "usuario" : "usuarios"}
                 </p>
               </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <label className="mr-1 flex items-center gap-2 text-sm text-muted-foreground">
                   <Switch
                     checked={e.activa}
                     onCheckedChange={() => togglePausa(e)}
                   />
                   Activa
                 </label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copiarLink(e)}
+                  title="Copiar link público"
+                >
+                  {copiadoId === e.id ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(`/${e.slug}`, "_blank", "noopener,noreferrer")}
+                >
+                  <ExternalLink className="mr-1.5 h-4 w-4" /> Ver página
+                </Button>
                 <Link href={`/admin/empresas/${e.id}`}>
                   <Button variant="outline" size="sm">
                     <Users className="mr-1.5 h-4 w-4" /> Usuarios

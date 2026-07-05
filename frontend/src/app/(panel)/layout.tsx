@@ -54,7 +54,7 @@ type NavItem = {
 // ocultarProfesional: gestión del negocio que el profesional no ve.
 const NAV: NavItem[] = [
   { href: "/mi-dia", label: "Mi día", icon: Sun, grupo: "principal", soloProfesional: true },
-  { href: "/", label: "Inicio", icon: LayoutDashboard, grupo: "principal", ocultarProfesional: true },
+  { href: "/inicio", label: "Inicio", icon: LayoutDashboard, grupo: "principal", ocultarProfesional: true },
   { href: "/agenda", label: "Agenda", icon: Calendar, grupo: "principal", ocultarProfesional: true },
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
@@ -130,7 +130,7 @@ export default function PanelLayout({
   const bloquearContenido = esProfesional && !profesionalPuedeVer(pathname);
 
   // El logo lleva al "home" de cada rol.
-  const inicioHref = esProfesional ? "/mi-dia" : "/";
+  const inicioHref = esProfesional ? "/mi-dia" : "/inicio";
 
   return (
     <ConfigRubroProvider value={config}>
@@ -198,8 +198,8 @@ export default function PanelLayout({
                 <div className="space-y-0.5">
                   {items.map((item) => {
                     const activo =
-                      item.href === "/"
-                        ? pathname === "/"
+                      item.href === "/inicio"
+                        ? pathname === "/inicio"
                         : pathname.startsWith(item.href);
                     const Icono = item.icon;
                     return (
