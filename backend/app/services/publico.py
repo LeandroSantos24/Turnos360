@@ -20,6 +20,7 @@ from app.models.enums import TipoRecurso
 from app.schemas.publico import ReservaPublicaCrear
 from app.schemas.turno import TurnoCrear
 from app.services import disponibilidad as disp
+from app.services import mercadopago as mp
 from app.services import turno as turno_svc
 
 
@@ -203,12 +204,24 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
                 "Ese horario ya no está disponible. Elegí otro.",
             )
 
-    # Busca-o-crea el cliente por teléfono (dentro de la empresa).
-    cliente = db.scalar(
+    # Busca-o-crea el cliente por teléfono + nombre (dentro de la empresa).
+    # Solo por teléfono no alcanza: un mismo número puede usarlo un padre que
+    # reserva para su hijo, y quedarían pegados en una sola ficha. Matcheamos
+    # también el nombre (normalizado: sin distinguir mayúsculas ni espacios de
+    # más) para que el cliente habitual sume a su ficha y una persona distinta
+    # con el mismo número quede en la suya.
+    def _norm(s: str) -> str:
+        return " ".join((s or "").lower().split())
+
+    nombre_norm = _norm(datos.cliente.nombre)
+    candidatos = db.scalars(
         select(Cliente).where(
             Cliente.empresa_id == empresa.id,
             Cliente.telefono == datos.cliente.telefono,
         )
+    ).all()
+    cliente = next(
+        (c for c in candidatos if _norm(c.nombre) == nombre_norm), None
     )
     if cliente is None:
         cliente = Cliente(
@@ -216,11 +229,12 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
             nombre=datos.cliente.nombre,
             telefono=datos.cliente.telefono,
             email=datos.cliente.email,
+            acepta_marketing=datos.cliente.acepta_marketing,
             canal_adquisicion="web",
         )
         db.add(cliente)
         db.flush()  # para tener cliente.id sin cerrar la transacción
-    # Si ya existía, lo reusamos tal cual (no le pisamos el nombre cargado).
+    # Si ya existía (mismo tel + mismo nombre), lo reusamos tal cual.
 
     # Delegar al motor de turnos: revalida el hueco (409 si se ocupó) y crea
     # el turno en estado PENDIENTE. Un solo lugar que sabe crear turnos.
@@ -236,11 +250,84 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         ),
     )
 
+    # Si el cliente ya existía y ahora acepta marketing, lo registramos.
+    if datos.cliente.acepta_marketing and not cliente.acepta_marketing:
+        cliente.acepta_marketing = True
+        db.commit()
+
+    # --- Cupón de descuento (si el cliente cargó un código) ---
+    # Se revalida acá SIEMPRE (server-side): entre que el wizard lo validó y
+    # confirmó, pudo vencer o agotarse. Si no corre, la reserva se rechaza con
+    # el motivo — jamás se reserva "creyendo" tener un descuento que no corrió.
+    descuento_pesos = 0.0
+    if datos.cupon_codigo:
+        from app.services import cupones as svc_cupones
+
+        cupon, descuento_pesos, mensaje_cupon = svc_cupones.validar_cupon(
+            db, empresa.id, datos.cupon_codigo, servicio.id
+        )
+        if cupon is None:
+            raise HTTPException(status_code=400, detail=mensaje_cupon)
+        precio_serv = float(servicio.precio or 0)
+        turno.descuento_pct = svc_cupones.pct_equivalente(descuento_pesos, precio_serv)
+        cupon.usos = (cupon.usos or 0) + 1
+        db.commit()
+
+    # --- Cobro anticipado con Mercado Pago (lo que el negocio haya elegido) ---
+    # cobro_modo: "ninguno" (no se cobra nada) | "sena" (monto fijo) | "total"
+    # (el precio del servicio).
+    pago_url: str | None = None
+    monto_a_cobrar: float | None = None
+    concepto = ""
+    if empresa.cobro_modo == "sena" and empresa.sena_monto:
+        monto_a_cobrar = float(empresa.sena_monto)
+        concepto = f"Seña · {servicio.nombre} · {empresa.nombre}"
+    elif empresa.cobro_modo == "total" and servicio.precio:
+        # Si hubo cupón, se cobra el precio CON el descuento aplicado.
+        monto_a_cobrar = round(float(servicio.precio) - descuento_pesos, 2)
+        concepto = f"{servicio.nombre} · {empresa.nombre}"
+
+    if monto_a_cobrar:
+        turno.sena_estado = "pendiente"
+        turno.sena_monto = monto_a_cobrar
+        db.commit()
+        pago_url = mp.crear_preferencia(empresa, turno, concepto)
+
+    # --- Emails por cola (Regla 6). La reserva jamás depende del email. ---
+    try:
+        from app.tasks.emails import enviar_aviso_negocio, enviar_confirmacion_reserva
+
+        enviar_confirmacion_reserva.delay(turno.id)
+        enviar_aviso_negocio.delay(turno.id)
+    except Exception:
+        # Redis caído o worker apagado: se pierde el aviso, no la reserva.
+        pass
+
+    if pago_url:
+        mensaje = (
+            "Tu turno quedó reservado. Aboná la seña para confirmarlo: "
+            "si no se abona, el negocio puede liberar el horario."
+        )
+    else:
+        mensaje = "Tu turno quedó solicitado. El negocio te lo va a confirmar."
+
     return {
         "turno_id": turno.id,
         "servicio": servicio.nombre,
         "recurso": recurso.nombre,
         "inicio": datos.inicio,
         "estado": "pendiente",
-        "mensaje": "Tu turno quedó solicitado. El negocio te lo va a confirmar.",
+        "mensaje": mensaje,
+        "pago_url": pago_url,
+        "sena_monto": float(turno.sena_monto) if turno.sena_monto else None,
     }
+
+def slugs_activos(db: Session) -> list[str]:
+    """Slugs de las empresas activas. Alimenta el sitemap de la landing."""
+    return list(
+        db.scalars(
+            select(Empresa.slug)
+            .where(Empresa.activa.is_(True), Empresa.slug.is_not(None))
+            .order_by(Empresa.slug)
+        )
+    )

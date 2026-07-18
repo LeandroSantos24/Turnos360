@@ -15,6 +15,7 @@ from app.schemas.admin import (
     UsuarioActualizar,
     UsuarioAdminOut,
     UsuarioCrear,
+    SuscripcionAdminIn,
 )
 from app.services import admin as svc
 
@@ -83,3 +84,15 @@ def actualizar_usuario(
     usuario_id: int, datos: UsuarioActualizar, admin: SuperAdminActual, db: DB
 ):
     return svc.actualizar_usuario(db, usuario_id, datos.activo)
+
+@router.patch("/empresas/{empresa_id}/suscripcion", response_model=EmpresaAdminOut)
+def setear_suscripcion(
+    empresa_id: int,
+    datos: SuscripcionAdminIn,
+    admin: SuperAdminActual,
+    db: DB,
+):
+    """Setea el plan y/o el vencimiento de la suscripción (solo super-admin)."""
+    return svc.setear_suscripcion(
+        db, empresa_id, datos.plan, datos.suscripcion_vence, datos.renovar_30
+    )

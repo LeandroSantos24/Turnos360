@@ -56,6 +56,11 @@ function ordenarPorHora(turnos: Turno[]): Turno[] {
   });
 }
  
+/** "lunes 13 de julio" → "Lunes 13 de julio" (solo la primera letra). */
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export default function AgendaPage() {
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [horarios, setHorarios] = useState<Horario[]>([]);
@@ -147,6 +152,21 @@ export default function AgendaPage() {
   useEffect(() => {
     cargarTurnos();
   }, [cargarTurnos]);
+
+  // Mantener el panel de detalle en sincronía: cuando la agenda se recarga
+  // tras un cambio de estado, el panel queda abierto pero debe mostrar el
+  // turno actualizado (mismo id, estado nuevo). Si el turno ya no está en la
+  // lista (otro día, filtro), no lo tocamos.
+  useEffect(() => {
+    if (turnoSel === null) return;
+    const fresco =
+      turnos.find((t) => t.id === turnoSel.id) ??
+      turnosDia.find((t) => t.id === turnoSel.id);
+    if (fresco && fresco !== turnoSel) {
+      setTurnoSel(fresco);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnos, turnosDia]);
  
   // Carga el horario del barbero elegido (para dibujar la grilla a su medida).
   useEffect(() => {
@@ -210,8 +230,8 @@ export default function AgendaPage() {
       : vista === "semana"
         ? `${format(inicioSem, "d", { locale: es })} – ${format(finSem, "d 'de' MMMM", { locale: es })}`
         : vista === "equipo"
-          ? `${format(dia, "EEEE d 'de' MMMM", { locale: es })} · equipo`
-          : format(dia, "EEEE d 'de' MMMM", { locale: es });
+          ? `${cap(format(dia, "EEEE d 'de' MMMM", { locale: es }))} · equipo`
+          : cap(format(dia, "EEEE d 'de' MMMM", { locale: es }));
  
   /** Reprograma un turno al soltarlo en otra franja (drag & drop). */
   async function manejarMover(turno: Turno, nuevaFecha: Date) {
@@ -356,7 +376,7 @@ export default function AgendaPage() {
               onClick={() =>
                 imprimirDia({
                   titulo: "Agenda del día",
-                  subtitulo: `${recursoActual?.nombre ?? ""} · ${format(dia, "EEEE d 'de' MMMM", { locale: es })}`,
+                  subtitulo: `${recursoActual?.nombre ?? ""} · ${cap(format(dia, "EEEE d 'de' MMMM", { locale: es }))}`,
                   filas: turnos
                     .filter((t) => t.estado !== "cancelado")
                     .map((t) => ({
@@ -388,7 +408,7 @@ export default function AgendaPage() {
  
       {vista === "dia" && <MetricasDia turnos={turnosDia} />}
  
-      <p className="mb-4 text-sm font-medium capitalize text-muted-foreground">
+      <p className="mb-4 text-sm font-medium text-muted-foreground">
         {etiquetaPeriodo}
         {recursoActual && ` · ${recursoActual.nombre}`}
         {cargando && " · cargando…"}

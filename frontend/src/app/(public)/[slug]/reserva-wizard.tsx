@@ -24,6 +24,7 @@ import {
   Users,
   CalendarDays,
   MessageCircle,
+  CalendarPlus,
   Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   type Vidriera,
   type HuecosDia,
   type ReservaResultado,
+  validarCupon,
 } from "@/lib/publico-api";
 import { ApiError } from "@/lib/api";
 import { horaDe } from "@/lib/turno-visual";
@@ -48,6 +50,30 @@ function fechaLocal(iso: string): Date {
 }
 
 /** Datetime "etiquetado UTC" → texto legible ("viernes 10 de julio · 15:30"). */
+function linkGoogleCalendar(
+  resultado: { inicio: string; servicio: string },
+  v: { nombre: string; direccion?: string | null; servicios: { nombre: string; duracion_min: number }[] },
+): string {
+  // OJO con las zonas horarias: el sistema guarda la hora DE PARED marcada como
+  // UTC ("…T09:00:00Z" = las 9 del reloj del local). Si le mandamos esa Z a
+  // Google, Google la toma como UTC real y la convierte a -03 → agenda a las 6.
+  // Solución: mandar la hora SIN Z (Google la lee como local) y declarar la
+  // zona con ctz. Usamos getUTC* para leer los dígitos tal cual los guardamos.
+  const inicio = new Date(resultado.inicio);
+  const serv = v.servicios.find((s) => s.nombre === resultado.servicio);
+  const fin = new Date(inicio.getTime() + (serv?.duracion_min ?? 30) * 60000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 19).replace(/[-:]/g, "");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${resultado.servicio} · ${v.nombre}`,
+    dates: `${fmt(inicio)}/${fmt(fin)}`,
+    ctz: "America/Argentina/Buenos_Aires",
+    location: v.direccion ?? v.nombre,
+    details: "Reservado online con Turnos360",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 function fechaHoraLegible(iso: string): string {
   const d = new Date(iso);
   const local = new Date(
@@ -105,6 +131,47 @@ export function ReservaWizard({
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
+  const [aceptaMkt, setAceptaMkt] = useState(false);
+  // Cupón de descuento
+  const [mostrarCupon, setMostrarCupon] = useState(false);
+  const [codigoCupon, setCodigoCupon] = useState("");
+  const [cuponAplicado, setCuponAplicado] = useState<{
+    codigo: string;
+    descuento: number;
+    precio_final: number | null;
+  } | null>(null);
+  const [errorCupon, setErrorCupon] = useState("");
+  const [validandoCupon, setValidandoCupon] = useState(false);
+
+  useEffect(() => {
+    // Si cambia el servicio, el cupón se recalcula (aplica a otro precio o
+    // directamente no cubre el servicio nuevo).
+    setCuponAplicado(null);
+    setErrorCupon("");
+  }, [servicioId]);
+
+  async function aplicarCupon() {
+    if (!codigoCupon.trim() || servicioId == null) return;
+    setValidandoCupon(true);
+    setErrorCupon("");
+    try {
+      const r = await validarCupon(slug, codigoCupon.trim(), servicioId);
+      if (r.valido) {
+        setCuponAplicado({
+          codigo: codigoCupon.trim().toUpperCase(),
+          descuento: r.descuento,
+          precio_final: r.precio_final,
+        });
+      } else {
+        setCuponAplicado(null);
+        setErrorCupon(r.mensaje);
+      }
+    } catch {
+      setErrorCupon("No se pudo validar el código. Probá de nuevo.");
+    } finally {
+      setValidandoCupon(false);
+    }
+  }
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ReservaResultado | null>(null);
@@ -195,8 +262,13 @@ export function ReservaWizard({
     [dias, diaSel],
   );
 
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
   const puedeConfirmar =
-    nombre.trim().length > 0 && telefono.trim().length >= 5 && horaSel != null && !enviando;
+    nombre.trim().length > 0 &&
+    telefono.trim().length >= 5 &&
+    emailOk &&
+    horaSel != null &&
+    !enviando;
 
   const confirmar = async () => {
     if (!puedeConfirmar || servicioId == null || horaSel == null) return;
@@ -210,8 +282,10 @@ export function ReservaWizard({
         cliente: {
           nombre: nombre.trim(),
           telefono: telefono.trim(),
-          email: email.trim() || null,
+          email: email.trim(),
+          acepta_marketing: aceptaMkt,
         },
+        cupon_codigo: cuponAplicado?.codigo ?? null,
       });
       setResultado(r);
       setPaso(5);
@@ -220,6 +294,11 @@ export function ReservaWizard({
         setError("Ese horario se acaba de ocupar. Elegí otro, por favor.");
         setPaso(3);
         cargarHuecos();
+      } else if (e instanceof ApiError && e.status === 400) {
+        // Motivo específico (ej: el cupón venció o se agotó entre validar y
+        // confirmar). Se quita el cupón para que pueda reservar sin él.
+        setError(e.message);
+        setCuponAplicado(null);
       } else {
         setError("No pudimos crear la reserva. Probá de nuevo en unos segundos.");
       }
@@ -544,10 +623,24 @@ export function ReservaWizard({
                       {servicio?.nombre}
                       {servicio?.precio != null && (
                         <span className="float-right" style={{ fontVariantNumeric: "tabular-nums" }}>
-                          {precioFmt(servicio.precio)}
+                          {cuponAplicado && cuponAplicado.precio_final != null ? (
+                            <>
+                              <s className="mr-1.5 text-xs font-normal opacity-60">
+                                {precioFmt(servicio.precio)}
+                              </s>
+                              {precioFmt(cuponAplicado.precio_final)}
+                            </>
+                          ) : (
+                            precioFmt(servicio.precio)
+                          )}
                         </span>
                       )}
                     </p>
+                    {cuponAplicado && (
+                      <p className="mt-1 text-xs font-semibold" style={{ color: "#059669" }}>
+                        ✓ {cuponAplicado.codigo} aplicado: −{precioFmt(cuponAplicado.descuento)}
+                      </p>
+                    )}
                     <p className="mt-1 flex items-center gap-1.5 capitalize" style={{ color: TINTA_SUAVE }}>
                       <CalendarDays className="h-4 w-4" />
                       {horaSel ? fechaHoraLegible(horaSel) : ""}
@@ -605,7 +698,7 @@ export function ReservaWizard({
                         className="mb-1 block text-sm font-semibold"
                         style={{ color: TINTA }}
                       >
-                        Email <span style={{ color: TINTA_SUAVE }}>(opcional)</span>
+                        Email
                       </label>
                       <input
                         id="rw-email"
@@ -614,10 +707,118 @@ export function ReservaWizard({
                         placeholder="tu@email.com"
                         inputMode="email"
                         autoComplete="email"
+                        required
                         className="w-full rounded-xl border bg-white px-3.5 py-3 text-base outline-none transition-shadow focus:shadow-[0_0_0_2px_var(--tw-shadow-color)]"
-                        style={{ borderColor: BORDE, color: TINTA, ["--tw-shadow-color" as string]: hexA(acento, 0.5) }}
+                        style={{
+                          borderColor: email.length > 0 && !emailOk ? "#dc2626" : BORDE,
+                          color: TINTA,
+                          ["--tw-shadow-color" as string]: hexA(acento, 0.5),
+                        }}
                       />
+                      <p className="mt-1 text-xs" style={{ color: TINTA_SUAVE }}>
+                        Te mandamos la confirmación y el recordatorio del turno acá.
+                      </p>
                     </div>
+                  </div>
+
+                  {/* Consentimiento de marketing (Ley 25.326): separado de los
+                      emails del turno, que son parte del servicio. */}
+                  <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={aceptaMkt}
+                      onChange={(e) => setAceptaMkt(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded"
+                      style={{ accentColor: acento }}
+                    />
+                    <span className="text-xs leading-relaxed" style={{ color: TINTA_SUAVE }}>
+                      Quiero recibir promociones y novedades de {v.nombre} por email
+                      (podés darte de baja cuando quieras).
+                    </span>
+                  </label>
+
+                  <p className="mt-3 text-[11px] leading-relaxed" style={{ color: TINTA_SUAVE }}>
+                    Al reservar aceptás la{" "}
+                    <a
+                      href="/privacidad#reservas"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2"
+                    >
+                      política de privacidad
+                    </a>
+                    . Tus datos los recibe {v.nombre} para gestionar tu turno.
+                  </p>
+
+                  {/* Código de descuento: link discreto que despliega el input */}
+                  <div className="mt-4">
+                    {!mostrarCupon && !cuponAplicado && (
+                      <button
+                        type="button"
+                        onClick={() => setMostrarCupon(true)}
+                        className="text-xs font-semibold underline underline-offset-2"
+                        style={{ color: acento }}
+                      >
+                        Tengo un código de descuento
+                      </button>
+                    )}
+                    {(mostrarCupon || cuponAplicado) && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium" style={{ color: TINTA }}>
+                          Código de descuento
+                        </p>
+                        {cuponAplicado ? (
+                          <div
+                            className="flex items-center justify-between rounded-xl border px-3.5 py-2.5"
+                            style={{ borderColor: "#05966955", background: "#05966910" }}
+                          >
+                            <span className="text-sm font-bold tracking-wide" style={{ color: "#059669" }}>
+                              ✓ {cuponAplicado.codigo} · −{precioFmt(cuponAplicado.descuento)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCuponAplicado(null);
+                                setCodigoCupon("");
+                                setErrorCupon("");
+                              }}
+                              className="text-xs underline"
+                              style={{ color: TINTA_SUAVE }}
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              value={codigoCupon}
+                              onChange={(e) => {
+                                setCodigoCupon(e.target.value.toUpperCase());
+                                setErrorCupon("");
+                              }}
+                              onKeyDown={(e) => e.key === "Enter" && aplicarCupon()}
+                              placeholder="EJ: INAUGURACION20"
+                              className="w-full rounded-xl border bg-white px-3.5 py-2.5 font-mono text-sm uppercase outline-none"
+                              style={{ borderColor: errorCupon ? "#dc2626" : BORDE, color: TINTA }}
+                            />
+                            <button
+                              type="button"
+                              onClick={aplicarCupon}
+                              disabled={validandoCupon || !codigoCupon.trim()}
+                              className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                              style={{ background: acento }}
+                            >
+                              {validandoCupon ? "…" : "Aplicar"}
+                            </button>
+                          </div>
+                        )}
+                        {errorCupon && (
+                          <p className="text-xs font-medium" style={{ color: "#dc2626" }}>
+                            {errorCupon}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -648,7 +849,7 @@ export function ReservaWizard({
                       cy="36"
                       r="33"
                       fill="none"
-                      stroke={acento}
+                      stroke="#16a34a"
                       strokeWidth="4"
                       variants={{
                         oculto: { pathLength: 0 },
@@ -658,7 +859,7 @@ export function ReservaWizard({
                     <motion.path
                       d="M22 37 l10 10 l19 -20"
                       fill="none"
-                      stroke={acento}
+                      stroke="#16a34a"
                       strokeWidth="5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -695,6 +896,41 @@ export function ReservaWizard({
                       Con {resultado.recurso} · {v.nombre}
                     </p>
                   </div>
+                  <a
+                    href={linkGoogleCalendar(resultado, v)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border py-3 text-sm font-semibold"
+                    style={{ borderColor: BORDE, color: TINTA }}
+                  >
+                    <CalendarPlus className="h-4 w-4" style={{ color: "#1a73e8" }} />
+                    Agregar a Google Calendar
+                  </a>
+                  {resultado.pago_url && (
+                    <div
+                      className="mt-4 w-full rounded-2xl border p-4 text-left"
+                      style={{ borderColor: "#f6c94f", background: "#fef8e7" }}
+                    >
+                      <p className="text-sm font-bold" style={{ color: "#8a6a12" }}>
+                        Falta la seña para confirmar
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed" style={{ color: "#8a6a12" }}>
+                        {v.nombre} pide una seña de{" "}
+                        <b>${(resultado.sena_monto ?? 0).toLocaleString("es-AR")}</b> para
+                        asegurar tu turno. Si no se abona, el negocio puede liberar el horario.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.location.href = resultado.pago_url as string;
+                        }}
+                        className="mt-3 w-full rounded-full py-3 text-sm font-bold text-white"
+                        style={{ background: "#009ee3" }}
+                      >
+                        Pagar seña con Mercado Pago
+                      </button>
+                    </div>
+                  )}
                   {wa && (
                     <a
                       href={wa}
@@ -710,10 +946,18 @@ export function ReservaWizard({
                   <button
                     type="button"
                     onClick={onCerrar}
-                    className="mt-5 w-full rounded-full py-3.5 text-base font-bold text-white"
-                    style={{ background: acento }}
+                    className={
+                      resultado.pago_url
+                        ? "mt-4 w-full rounded-full border py-3 text-sm font-semibold"
+                        : "mt-5 w-full rounded-full py-3.5 text-base font-bold text-white"
+                    }
+                    style={
+                      resultado.pago_url
+                        ? { borderColor: BORDE, color: TINTA_SUAVE, background: "#fff" }
+                        : { background: acento }
+                    }
                   >
-                    Listo
+                    {resultado.pago_url ? "Pagar más tarde" : "Listo"}
                   </button>
                 </div>
               )}

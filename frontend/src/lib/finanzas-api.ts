@@ -64,9 +64,18 @@ export interface Caja {
   estado: string;
 }
 
+export interface EgresoMetodoResumen {
+  metodo: string;
+  cantidad: number;
+  total: number;
+}
+
 export interface MetodoResumen {
   metodo: string;
-  total: number;
+  cantidad: number;
+  total: number;     // bruto
+  comision: number;  // lo que se come el método
+  neto: number;      // total − comisión
 }
 export interface CajaResumen {
   caja: Caja;
@@ -77,6 +86,10 @@ export interface CajaResumen {
   diferencia: number | null;
   cantidad_movimientos: number;
   por_metodo: MetodoResumen[];
+  egresos_por_metodo: EgresoMetodoResumen[];
+  total_comisiones: number;
+  total_neto: number;
+  efectivo_esperado: number; // lo que tiene que haber en el cajón físico
 }
 
 export function cajaActual(): Promise<CajaResumen | null> {

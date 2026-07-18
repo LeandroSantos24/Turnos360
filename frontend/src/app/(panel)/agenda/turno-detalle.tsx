@@ -32,6 +32,9 @@ import {
 } from "@/components/ui/select";
 import { listarItems, agregarItem, quitarItem, ItemTurno } from "@/lib/items-api";
 import { listarServicios, Servicio } from "@/lib/servicios-api";
+import { moverTurno } from "@/lib/turnos-api";
+import { listarRecursos, Recurso } from "@/lib/recursos-api";
+import { CalendarClock } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -68,6 +71,48 @@ export function TurnoDetalle({
   const router = useRouter();
   const [procesando, setProcesando] = useState(false);
   const [confirmar, setConfirmar] = useState<EstadoTurno | null>(null);
+
+  // Reprogramar: fecha/hora nuevas y/o cambio de profesional.
+  const [reprogramando, setReprogramando] = useState(false);
+  const [nuevaFecha, setNuevaFecha] = useState("");
+  const [nuevaHora, setNuevaHora] = useState("");
+  const [nuevoRecurso, setNuevoRecurso] = useState<string>("");
+  const [recursos, setRecursos] = useState<Recurso[]>([]);
+  const [moviendo, setMoviendo] = useState(false);
+
+  function abrirReprogramar() {
+    if (!turno?.fecha_inicio) return;
+    setNuevaFecha(turno.fecha_inicio.slice(0, 10));
+    setNuevaHora(turno.fecha_inicio.slice(11, 16));
+    setNuevoRecurso(String(turno.recurso_id ?? ""));
+    setReprogramando(true);
+    if (recursos.length === 0) {
+      listarRecursos()
+        .then((r) => setRecursos(r.items.filter((x) => x.activo)))
+        .catch(() => {});
+    }
+  }
+
+  async function confirmarReprogramar() {
+    if (!turno || !nuevaFecha || !nuevaHora) return;
+    setMoviendo(true);
+    try {
+      const iso = `${nuevaFecha}T${nuevaHora}:00Z`;
+      await moverTurno(
+        turno.id,
+        iso,
+        nuevoRecurso ? Number(nuevoRecurso) : undefined,
+      );
+      toast.success("Turno reprogramado — le avisamos al cliente por email");
+      setReprogramando(false);
+      onCambio();
+      onCerrar();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "No se pudo reprogramar");
+    } finally {
+      setMoviendo(false);
+    }
+  }
 
   // Ítems adicionales del turno (perfilado, productos...).
   const [items, setItems] = useState<ItemTurno[]>([]);
@@ -136,8 +181,9 @@ export function TurnoDetalle({
     try {
       await cambiarEstadoTurno(turno.id, destino);
       toast.success(`Turno ${labelEstado(destino).toLowerCase()}`);
+      // No cerramos el panel: el usuario suele encadenar estados
+      // (confirmar → iniciar → finalizar). Se cierra tocando afuera.
       onCambio();
-      onCerrar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo cambiar");
     } finally {
@@ -276,6 +322,16 @@ export function TurnoDetalle({
                     {turno.cubierto_por_abono && (
                       <span className="inline-block rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                         PRO
+                      </span>
+                    )}
+                    {turno.sena_estado === "pagada" && (
+                      <span className="inline-block rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        SEÑADO{turno.sena_monto ? ` $${Number(turno.sena_monto).toLocaleString("es-AR")}` : ""}
+                      </span>
+                    )}
+                    {turno.sena_estado === "pendiente" && (
+                      <span className="inline-block rounded-full bg-orange-400/20 px-2 py-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400">
+                        SEÑA PENDIENTE
                       </span>
                     )}
                     <span
@@ -494,6 +550,72 @@ export function TurnoDetalle({
                     </Button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Reprogramar: nueva fecha/hora y/o cambio de profesional */}
+            {(turno.estado === "pendiente" || turno.estado === "confirmado") && (
+              <div className="rounded-xl border bg-card p-3">
+                {!reprogramando ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={abrirReprogramar}
+                  >
+                    <CalendarClock className="mr-1.5 h-4 w-4" />
+                    Reprogramar / cambiar profesional
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Reprogramar turno
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="date"
+                        value={nuevaFecha}
+                        onChange={(e) => setNuevaFecha(e.target.value)}
+                      />
+                      <Input
+                        type="time"
+                        value={nuevaHora}
+                        onChange={(e) => setNuevaHora(e.target.value)}
+                      />
+                    </div>
+                    <select
+                      value={nuevoRecurso}
+                      onChange={(e) => setNuevoRecurso(e.target.value)}
+                      className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    >
+                      {recursos.length === 0 && (
+                        <option value={String(turno.recurso_id ?? "")}>
+                          {turno.recurso_nombre ?? "Mismo profesional"}
+                        </option>
+                      )}
+                      {recursos.map((r) => (
+                        <option key={r.id} value={String(r.id)}>
+                          {r.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        className="flex-1"
+                        onClick={() => setReprogramando(false)}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        disabled={moviendo}
+                        onClick={confirmarReprogramar}
+                      >
+                        {moviendo ? "Moviendo…" : "Confirmar cambio"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

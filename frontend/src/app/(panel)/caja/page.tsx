@@ -125,7 +125,9 @@ export default function CajaPage() {
   }
 
   const esperado = resumen?.saldo_esperado ?? 0;
-  const difViva = (Number(saldoReal) || 0) - esperado;
+  // El arqueo cuadra el CAJÓN: lo contado vs el efectivo esperado.
+  const efectivoEsperado = resumen?.efectivo_esperado ?? 0;
+  const difViva = (Number(saldoReal) || 0) - efectivoEsperado;
 
   return (
     <div className="p-8">
@@ -210,16 +212,103 @@ export default function CajaPage() {
           {resumen.por_metodo && resumen.por_metodo.length > 0 && (
             <div className="mb-8">
               <h2 className="mb-3 text-lg font-bold">Ingresos por método</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {resumen.por_metodo.map((pm) => (
-                  <div key={pm.metodo} className="rounded-2xl border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">{pm.metodo}</p>
-                    <p className="mt-1 text-lg font-bold tabular-nums" style={NUM}>
-                      {pesos(pm.total)}
-                    </p>
-                  </div>
-                ))}
+              <div className="overflow-x-auto rounded-2xl border bg-card">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-4 py-2.5 font-medium">Método</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Cobros</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Bruto</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Comisión</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumen.por_metodo.map((pm) => (
+                      <tr key={pm.metodo} className="border-b last:border-0">
+                        <td className="px-4 py-2.5 font-medium">{pm.metodo}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground" style={NUM}>
+                          {pm.cantidad}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums" style={NUM}>
+                          {pesos(pm.total)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400" style={NUM}>
+                          {pm.comision > 0 ? `− ${pesos(pm.comision)}` : "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums" style={NUM}>
+                          {pesos(pm.neto)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted/40 font-semibold">
+                      <td className="px-4 py-2.5">Total</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground" style={NUM}>
+                        {resumen.por_metodo.reduce((a, m) => a + m.cantidad, 0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums" style={NUM}>
+                        {pesos(resumen.total_ingresos)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400" style={NUM}>
+                        {resumen.total_comisiones > 0 ? `− ${pesos(resumen.total_comisiones)}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums" style={NUM}>
+                        {pesos(resumen.total_neto)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                El neto es lo que queda después de la comisión de cada método (Mercado
+                Pago, tarjetas). Las comisiones se configuran en Métodos de pago.
+              </p>
+            </div>
+          )}
+
+          {resumen.egresos_por_metodo && resumen.egresos_por_metodo.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-3 text-lg font-bold">Gastos por método</h2>
+              <div className="overflow-x-auto rounded-2xl border bg-card">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-4 py-2.5 font-medium">Método</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Gastos</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumen.egresos_por_metodo.map((em) => (
+                      <tr key={em.metodo} className="border-b last:border-0">
+                        <td className="px-4 py-2.5 font-medium">{em.metodo}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground" style={NUM}>
+                          {em.cantidad}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums" style={NUM}>
+                          {pesos(em.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted/40 font-semibold">
+                      <td className="px-4 py-2.5">Total</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground" style={NUM}>
+                        {resumen.egresos_por_metodo.reduce((a, m) => a + m.cantidad, 0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums" style={NUM}>
+                        {pesos(resumen.total_egresos)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Los gastos no tienen comisión: se paga el monto completo.
+              </p>
             </div>
           )}
 
@@ -358,14 +447,24 @@ export default function CajaPage() {
             <DialogTitle>Cerrar caja</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
-            <div className="flex items-center justify-between rounded-2xl bg-muted/40 px-4 py-3">
-              <span className="text-sm text-muted-foreground">Saldo esperado</span>
-              <span className="font-bold tabular-nums" style={NUM}>
-                {pesos(esperado)}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-2xl bg-emerald-500/10 px-4 py-3">
+                <span className="text-sm font-medium">Efectivo esperado en el cajón</span>
+                <span className="font-bold tabular-nums" style={NUM}>
+                  {pesos(efectivoEsperado)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-muted/40 px-4 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  Saldo esperado total (todos los métodos)
+                </span>
+                <span className="text-sm font-semibold tabular-nums text-muted-foreground" style={NUM}>
+                  {pesos(esperado)}
+                </span>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="saldo-real">Saldo real (lo que contás)</Label>
+              <Label htmlFor="saldo-real">Efectivo contado (lo que hay en el cajón)</Label>
               <Input
                 id="saldo-real"
                 type="number"

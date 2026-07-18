@@ -36,8 +36,40 @@ def listar_empresas(db: Session) -> list[Empresa]:
     for empresa, rubro_nombre, cant in filas:
         empresa.rubro_nombre = rubro_nombre
         empresa.cantidad_usuarios = int(cant)
+        from app.services.suscripcion import estado_suscripcion
+
+        est = estado_suscripcion(empresa)
+        empresa.estado_suscripcion = est["estado"]
+        empresa.suscripcion_vence = est["vence"]
         salida.append(empresa)
     return salida
+
+
+def setear_suscripcion(
+    db: Session, empresa_id: int, plan, vence, renovar_30: bool
+) -> Empresa:
+    """Setea plan y/o vencimiento. renovar_30 = vence hoy + 30 días (atajo)."""
+    import datetime as _dt
+
+    empresa = _empresa_o_404(db, empresa_id)
+    if plan is not None:
+        empresa.plan = plan
+    if renovar_30:
+        empresa.suscripcion_vence = _dt.date.today() + _dt.timedelta(days=30)
+        if empresa.plan == "gratuito":
+            empresa.plan = "pro"
+    elif vence is not None:
+        empresa.suscripcion_vence = vence
+    db.commit()
+    db.refresh(empresa)
+    # recalcular para la respuesta
+    from app.services.suscripcion import estado_suscripcion
+
+    est = estado_suscripcion(empresa)
+    empresa.estado_suscripcion = est["estado"]
+    empresa.suscripcion_vence = est["vence"]
+    empresa.cantidad_usuarios = 0
+    return empresa
 
 
 def _empresa_o_404(db: Session, empresa_id: int) -> Empresa:

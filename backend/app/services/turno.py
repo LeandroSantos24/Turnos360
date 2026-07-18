@@ -251,6 +251,15 @@ def mover(
     turno.recurso_id = nuevo_recurso_id
     db.commit()
     db.refresh(turno)
+
+    # Aviso al cliente del cambio (por cola; nunca rompe la operación).
+    try:
+        from app.tasks.emails import enviar_reprogramacion
+
+        enviar_reprogramacion.delay(turno.id)
+    except Exception:
+        pass
+
     return _resolver_nombres(db, turno)
 
 
@@ -303,6 +312,18 @@ def cambiar_estado(
         turno.motivo_cancelacion = datos.motivo_cancelacion
     db.commit()
     db.refresh(turno)
+
+    # Emails del workflow (por cola; jamás bloquean ni rompen la operación).
+    try:
+        from app.tasks.emails import enviar_cancelacion, pedir_resena
+
+        if datos.estado == EstadoTurno.CANCELADO:
+            enviar_cancelacion.delay(turno.id)
+        elif datos.estado == EstadoTurno.FINALIZADO:
+            pedir_resena.delay(turno.id)
+    except Exception:
+        pass
+
     return _resolver_nombres(db, turno)
 
 

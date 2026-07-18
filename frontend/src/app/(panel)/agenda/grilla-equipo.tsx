@@ -15,6 +15,7 @@ import {
   estaInactivo,
   labelEstado,
   horaDe,
+  inicialDe,
 } from "@/lib/turno-visual";
  
 interface GrillaEquipoProps {
@@ -96,7 +97,10 @@ export function GrillaEquipo({
         res.push({
           turno: item.turno,
           top: item.r.ini * pxPorMin,
-          alto: Math.max((item.r.fin - item.r.ini) * pxPorMin, 22),
+          // Alto proporcional a la duración, con un mínimo legible: aunque el
+          // turno sea corto (o su duración venga mal calculada), la tarjeta
+          // nunca es más fina que su texto.
+          alto: Math.max((item.r.fin - item.r.ini) * pxPorMin, 40),
           columna: idx,
           totalColumnas,
         }),
@@ -208,18 +212,26 @@ export function GrillaEquipo({
                       }}
                       title={`${turno.cliente_nombre} · ${turno.servicio_nombre ?? ""} · ${labelEstado(turno.estado)}${turno.es_sobreturno ? " · sobreturno" : ""}`}
                     >
-                      <div className="flex h-full flex-col px-1 py-0.5">
-                        <span
-                          className={`truncate text-[11px] font-semibold leading-tight ${
-                            inactivo ? "line-through" : ""
-                          }`}
-                        >
-                          {turno.fecha_inicio && horaDe(turno.fecha_inicio)}{" "}
-                          {turno.cliente_nombre}
-                        </span>
-                        {alto > 30 && (
+                      <div className="flex h-full flex-col justify-center gap-0.5 px-1.5 py-1">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white"
+                            style={{ backgroundColor: color, fontFamily: "Syne, sans-serif" }}
+                          >
+                            {inicialDe(turno.cliente_nombre)}
+                          </div>
+                          <span
+                            className={`truncate text-[11px] font-semibold leading-tight ${
+                              inactivo ? "line-through" : ""
+                            }`}
+                          >
+                            {turno.cliente_nombre}
+                          </span>
+                        </div>
+                        {alto > 34 && (
                           <span className="truncate text-[10px] leading-tight text-muted-foreground">
-                            {turno.servicio_nombre}
+                            {turno.fecha_inicio && horaDe(turno.fecha_inicio)}
+                            {turno.servicio_nombre ? ` · ${turno.servicio_nombre}` : ""}
                           </span>
                         )}
                       </div>

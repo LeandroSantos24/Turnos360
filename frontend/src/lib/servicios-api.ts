@@ -16,6 +16,7 @@ export interface Servicio {
   precio: number | null;
   activo: boolean;
   agendable: boolean;
+  recurso_ids?: number[];
 }
 
 export interface ServiciosPagina {
@@ -31,6 +32,11 @@ export interface ServicioCrear {
   grupo_agenda?: string | null;
   precio?: number;
   agendable?: boolean;
+  recurso_ids?: number[];
+}
+
+export function obtenerServicio(id: number): Promise<Servicio> {
+  return api.get<Servicio>(`/servicios/${id}`);
 }
 
 export function listarServicios(): Promise<ServiciosPagina> {

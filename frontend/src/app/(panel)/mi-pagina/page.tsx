@@ -6,8 +6,10 @@
  * galería de fotos y las fotos del equipo. Arriba de todo, el link público
  * para compartir. Solo dueño (RequiereDueno + gate_dueno en el backend).
  *
- * La galería viaja dentro del LandingConfig (botón Guardar global). Las fotos
- * del equipo se guardan por fila con el PATCH de recursos.
+ * Nota de estilo: NO usamos components/ui/card.tsx (está escrito con sintaxis
+ * de Tailwind 4 y este proyecto usa Tailwind 3, así que sus paddings no
+ * generan CSS). Seguimos el patrón del resto del panel: divs con
+ * rounded-2xl + border + bg-card.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +20,9 @@ import {
   obtenerLanding,
   guardarLanding,
   obtenerConfigEmpresa,
+  obtenerSenas,
+  guardarSenas,
+  type SenasConfig,
   LandingConfig,
   HorariosAtencion,
   Franja,
@@ -39,14 +44,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
+const SYNE = { fontFamily: "Syne, sans-serif" } as const;
 const MAX_FOTOS = 12;
 
 const DIAS: { clave: string; label: string }[] = [
@@ -84,6 +83,31 @@ const VACIO: LandingConfig = {
   galeria: [],
 };
 
+/** Tarjeta de sección con el estilo del panel (rounded-2xl + bg-card). */
+function Seccion({
+  titulo,
+  descripcion,
+  className = "",
+  children,
+}: {
+  titulo: string;
+  descripcion?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`rounded-2xl border bg-card p-5 ${className}`}>
+      <h2 className="text-base font-bold" style={SYNE}>
+        {titulo}
+      </h2>
+      {descripcion && (
+        <p className="mt-1 text-sm text-muted-foreground">{descripcion}</p>
+      )}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
 /** Editor de horarios visibles (display). Por día: abierto/cerrado + 1-2 franjas. */
 function HorariosEditor({
   value,
@@ -108,14 +132,38 @@ function HorariosEditor({
     onChange({ ...value, [clave]: franjas });
   }
   function agregarFranja(clave: string) {
-    onChange({ ...value, [clave]: [...franjasDe(clave), ["16:00", "20:00"]] });
+    const franjas = franjasDe(clave);
+    // La franja nueva arranca donde termina la última, para no pisarse.
+    const ultimaFin = franjas.length ? franjas[franjas.length - 1][1] : "16:00";
+    const desde = ultimaFin < "20:00" ? ultimaFin : "20:00";
+    onChange({ ...value, [clave]: [...franjas, [desde, "22:00"]] });
   }
   function quitarFranja(clave: string, i: number) {
     onChange({ ...value, [clave]: franjasDe(clave).filter((_, j) => j !== i) });
   }
 
+  /** Horas 00 a 23, en punto y y media. */
+  const HORAS: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    HORAS.push(`${String(h).padStart(2, "0")}:00`);
+    HORAS.push(`${String(h).padStart(2, "0")}:30`);
+  }
+
+  /** ¿La franja i se solapa o repite con otra del mismo día? */
+  function franjaInvalida(franjas: Franja[], i: number): string | null {
+    const [ini, fin] = franjas[i];
+    if (ini >= fin) return "El horario de fin debe ser mayor al de inicio";
+    for (let j = 0; j < franjas.length; j++) {
+      if (j === i) continue;
+      const [ini2, fin2] = franjas[j];
+      // Se pisan si una empieza antes de que la otra termine (y viceversa).
+      if (ini < fin2 && ini2 < fin) return "Esta franja se pisa con otra del mismo día";
+    }
+    return null;
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="grid items-start gap-2 lg:grid-cols-2">
       {DIAS.map((d) => {
         const franjas = franjasDe(d.clave);
         return (
@@ -135,33 +183,55 @@ function HorariosEditor({
 
             {abierto(d.clave) && (
               <div className="mt-3 space-y-2">
-                {franjas.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      type="time"
-                      value={f[0]}
-                      onChange={(e) => setHora(d.clave, i, 0, e.target.value)}
-                      className="w-32"
-                    />
-                    <span className="text-sm text-muted-foreground">a</span>
-                    <Input
-                      type="time"
-                      value={f[1]}
-                      onChange={(e) => setHora(d.clave, i, 1, e.target.value)}
-                      className="w-32"
-                    />
-                    {franjas.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => quitarFranja(d.clave, i)}
-                      >
-                        Quitar
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                {franjas.map((f, i) => {
+                  const error = franjaInvalida(franjas, i);
+                  return (
+                    <div key={i}>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={f[0]}
+                          onChange={(e) => setHora(d.clave, i, 0, e.target.value)}
+                          className={`h-9 w-24 rounded-md border bg-background px-2 text-sm ${
+                            error ? "border-red-500" : ""
+                          }`}
+                        >
+                          {HORAS.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-sm text-muted-foreground">a</span>
+                        <select
+                          value={f[1]}
+                          onChange={(e) => setHora(d.clave, i, 1, e.target.value)}
+                          className={`h-9 w-24 rounded-md border bg-background px-2 text-sm ${
+                            error ? "border-red-500" : ""
+                          }`}
+                        >
+                          {HORAS.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                        {franjas.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => quitarFranja(d.clave, i)}
+                          >
+                            Quitar
+                          </Button>
+                        )}
+                      </div>
+                      {error && (
+                        <p className="mt-1 text-xs text-red-500">{error}</p>
+                      )}
+                    </div>
+                  );
+                })}
                 {franjas.length < 2 && (
                   <Button
                     type="button"
@@ -204,48 +274,43 @@ function LinkPublico({ slug }: { slug: string | null }) {
   }
 
   return (
-    <Card className="rounded-2xl lg:col-span-2">
-      <CardHeader>
-        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Tu link público</CardTitle>
-        <CardDescription>
-          Compartilo en Instagram, WhatsApp o donde quieras: tus clientes ven tu página y
-          reservan solos.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {url ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <code className="flex-1 truncate rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm">
-              {url}
-            </code>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={copiar}>
-                {copiado ? (
-                  <Check className="mr-1.5 h-4 w-4" />
-                ) : (
-                  <Copy className="mr-1.5 h-4 w-4" />
-                )}
-                {copiado ? "Copiado" : "Copiar"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-              >
-                <ExternalLink className="mr-1.5 h-4 w-4" />
-                Abrir
-              </Button>
-            </div>
+    <Seccion
+      titulo="Tu link público"
+      descripcion="Compartilo en Instagram, WhatsApp o donde quieras: tus clientes ven tu página y reservan solos."
+      className="lg:col-span-2"
+    >
+      {url ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code className="flex-1 truncate rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm">
+            {url}
+          </code>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={copiar}>
+              {copiado ? (
+                <Check className="mr-1.5 h-4 w-4" />
+              ) : (
+                <Copy className="mr-1.5 h-4 w-4" />
+              )}
+              {copiado ? "Copiado" : "Copiar"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLink className="mr-1.5 h-4 w-4" />
+              Abrir
+            </Button>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Cargando tu link…</p>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Cargando tu link…</p>
+      )}
+    </Seccion>
   );
 }
 
-/** Card de galería: URLs de fotos con vista previa. Se guarda con el botón global. */
+/** Galería: URLs de fotos con vista previa. Se guarda con el botón global. */
 function GaleriaEditor({
   fotos,
   onChange,
@@ -274,15 +339,12 @@ function GaleriaEditor({
   }
 
   return (
-    <Card className="rounded-2xl lg:col-span-2">
-      <CardHeader>
-        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Galería de fotos</CardTitle>
-        <CardDescription>
-          Fotos de tus trabajos o del local (hasta {MAX_FOTOS}). Pegá la URL de cada imagen; se
-          guardan con el botón &quot;Guardar cambios&quot;.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Seccion
+      titulo="Galería de fotos"
+      descripcion={`Fotos de tus trabajos o del local (hasta ${MAX_FOTOS}). Pegá la URL de cada imagen; se guardan con el botón "Guardar cambios".`}
+      className="lg:col-span-2"
+    >
+      <div className="space-y-4">
         <div className="flex gap-2">
           <Input
             placeholder="https://…/foto.jpg"
@@ -303,8 +365,8 @@ function GaleriaEditor({
 
         {fotos.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Todavía no agregaste fotos. La sección Galería no se muestra en tu página hasta que
-            haya al menos una.
+            Todavía no agregaste fotos. La sección Galería no se muestra en tu página hasta
+            que haya al menos una.
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
@@ -332,12 +394,12 @@ function GaleriaEditor({
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Seccion>
   );
 }
 
-/** Card de fotos del equipo: una fila por profesional, guardado por fila (PATCH). */
+/** Fotos del equipo: una fila por profesional, guardado por fila (PATCH). */
 function EquipoEditor({
   recursos,
   onGuardado,
@@ -371,66 +433,61 @@ function EquipoEditor({
   }
 
   return (
-    <Card className="rounded-2xl lg:col-span-2">
-      <CardHeader>
-        <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Fotos del equipo</CardTitle>
-        <CardDescription>
-          La foto de cada profesional aparece en la sección Equipo de tu página. Sin foto, se
-          muestra la inicial del nombre.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {recursos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay profesionales activos. Crealos en la pantalla Recursos y van a aparecer acá.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {recursos.map((r) => (
-              <div
-                key={r.id}
-                className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center"
-              >
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border bg-muted">
-                    {valorDe(r).trim() ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={valorDe(r).trim()}
-                        alt={r.nombre}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground">
-                        {r.nombre.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <span className="truncate text-sm font-medium">{r.nombre}</span>
+    <Seccion
+      titulo="Fotos del equipo"
+      descripcion="La foto de cada profesional aparece en la sección Equipo de tu página. Sin foto, se muestra la inicial del nombre."
+      className="lg:col-span-2"
+    >
+      {recursos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No hay profesionales activos. Crealos en la pantalla Recursos y van a aparecer acá.
+        </p>
+      ) : (
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          {recursos.map((r) => (
+            <div
+              key={r.id}
+              className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center"
+            >
+              <div className="flex min-w-0 items-center gap-3 sm:w-44 sm:shrink-0">
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border bg-muted">
+                  {valorDe(r).trim() ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={valorDe(r).trim()}
+                      alt={r.nombre}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground">
+                      {r.nombre.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-1 gap-2">
-                  <Input
-                    placeholder="https://…/foto.jpg"
-                    value={valorDe(r)}
-                    onChange={(e) =>
-                      setBorradores((b) => ({ ...b, [r.id]: e.target.value }))
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!cambiado(r) || guardandoId === r.id}
-                    onClick={() => guardarFoto(r)}
-                  >
-                    {guardandoId === r.id ? "Guardando…" : "Guardar"}
-                  </Button>
-                </div>
+                <span className="truncate text-sm font-medium">{r.nombre}</span>
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <div className="flex flex-1 gap-2">
+                <Input
+                  placeholder="https://…/foto.jpg"
+                  value={valorDe(r)}
+                  onChange={(e) =>
+                    setBorradores((b) => ({ ...b, [r.id]: e.target.value }))
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!cambiado(r) || guardandoId === r.id}
+                  onClick={() => guardarFoto(r)}
+                >
+                  {guardandoId === r.id ? "Guardando…" : "Guardar"}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Seccion>
   );
 }
 
@@ -481,6 +538,26 @@ function ContenidoMiPagina() {
       !!form.horarios_atencion &&
       Object.values(form.horarios_atencion).some((f) => f.length > 0);
 
+    // No dejar guardar franjas de atención pisadas o mal cargadas.
+    if (form.horarios_atencion) {
+      for (const franjas of Object.values(form.horarios_atencion)) {
+        for (let i = 0; i < franjas.length; i++) {
+          const [ini, fin] = franjas[i];
+          if (ini >= fin) {
+            toast.error("Revisá los horarios de atención: hay una franja con fin anterior al inicio.");
+            return;
+          }
+          for (let j = i + 1; j < franjas.length; j++) {
+            const [ini2, fin2] = franjas[j];
+            if (ini < fin2 && ini2 < fin) {
+              toast.error("Revisá los horarios de atención: hay franjas del mismo día que se pisan.");
+              return;
+            }
+          }
+        }
+      }
+    }
+
     const payload: LandingConfig = {
       descripcion: limpio(form.descripcion),
       direccion: limpio(form.direccion),
@@ -515,13 +592,14 @@ function ContenidoMiPagina() {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "Syne, sans-serif" }}>
+          <h1 className="text-2xl font-bold" style={SYNE}>
             Mi página
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Lo que ven tus clientes en tu página pública. Se comparte con el link de tu negocio.
+            Lo que ven tus clientes en tu página pública. Se comparte con el link de tu
+            negocio.
           </p>
         </div>
         <Button onClick={guardar} disabled={guardando}>
@@ -530,18 +608,14 @@ function ContenidoMiPagina() {
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <LinkPublico slug={slug} />
 
-        {/* Información del negocio */}
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>
-              Información del negocio
-            </CardTitle>
-            <CardDescription>Lo básico que ve el cliente al entrar.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Seccion
+          titulo="Información del negocio"
+          descripcion="Lo básico que ve el cliente al entrar."
+        >
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="descripcion">Sobre nosotros</Label>
               <Textarea
@@ -615,16 +689,11 @@ function ContenidoMiPagina() {
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Seccion>
 
-        {/* Redes y links */}
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>Redes y links</CardTitle>
-            <CardDescription>Dejá vacío lo que no uses.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Seccion titulo="Redes y links" descripcion="Dejá vacío lo que no uses.">
+          <div className="space-y-4">
             {REDES.map(({ clave, label, placeholder, Icono }) => (
               <div key={String(clave)} className="space-y-1.5">
                 <Label htmlFor={String(clave)} className="flex items-center gap-2">
@@ -639,8 +708,8 @@ function ContenidoMiPagina() {
                 />
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </Seccion>
 
         <GaleriaEditor fotos={form.galeria} onChange={(g) => set("galeria", g)} />
 
@@ -653,24 +722,18 @@ function ContenidoMiPagina() {
           }
         />
 
-        {/* Horarios */}
-        <Card className="rounded-2xl lg:col-span-2">
-          <CardHeader>
-            <CardTitle style={{ fontFamily: "Syne, sans-serif" }}>
-              Horarios de atención
-            </CardTitle>
-            <CardDescription>
-              Solo para mostrar en tu página. Los turnos reservables salen de la agenda de cada
-              profesional.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <HorariosEditor
-              value={form.horarios_atencion ?? {}}
-              onChange={(h) => set("horarios_atencion", h)}
-            />
-          </CardContent>
-        </Card>
+        <Seccion
+          titulo="Horarios de atención"
+          descripcion="Solo para mostrar en tu página. Los turnos reservables salen de la agenda de cada profesional."
+          className="lg:col-span-2"
+        >
+          <HorariosEditor
+            value={form.horarios_atencion ?? {}}
+            onChange={(h) => set("horarios_atencion", h)}
+          />
+        </Seccion>
+
+        <SeccionSenas />
       </div>
 
       <div className="mt-6 flex justify-end">
@@ -680,6 +743,140 @@ function ContenidoMiPagina() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function SeccionSenas() {
+  const [config, setConfig] = useState<SenasConfig | null>(null);
+  const [modo, setModo] = useState<"ninguno" | "sena" | "total">("ninguno");
+  const [monto, setMonto] = useState("");
+  const [token, setToken] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    obtenerSenas()
+      .then((c) => {
+        setConfig(c);
+        setModo(c.cobro_modo ?? (c.sena_activa ? "sena" : "ninguno"));
+        setMonto(c.sena_monto != null ? String(c.sena_monto) : "");
+      })
+      .catch(() => toast.error("No se pudo cargar la config de señas"));
+  }, []);
+
+  async function guardar() {
+    const montoNum = monto.trim() === "" ? null : Number(monto);
+    if (modo === "sena" && (!montoNum || montoNum <= 0)) {
+      toast.error("Definí el monto de la seña");
+      return;
+    }
+    if (modo !== "ninguno" && !config?.mp_conectado && !token.trim()) {
+      toast.error("Pegá el Access Token de tu cuenta de Mercado Pago");
+      return;
+    }
+    setGuardando(true);
+    try {
+      const nuevo = await guardarSenas({
+        cobro_modo: modo,
+        sena_activa: modo !== "ninguno",
+        sena_monto: montoNum,
+        ...(token.trim() ? { mp_access_token: token.trim() } : {}),
+      });
+      setConfig(nuevo);
+      setToken("");
+      toast.success("Señas guardadas");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Seccion
+      titulo="Señas con Mercado Pago"
+      descripcion="Cobrá una seña al reservar online: el que paga, aparece. La plata va directo a TU cuenta de Mercado Pago (la comisión de MP la absorbe el negocio)."
+      className="lg:col-span-2"
+    >
+      <div className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          {config?.mp_conectado
+            ? "Cuenta de Mercado Pago conectada ✓"
+            : "Todavía sin conectar Mercado Pago"}
+        </p>
+
+        {/* Qué se cobra al reservar: lo elige el negocio. */}
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(
+            [
+              { id: "ninguno", t: "No cobrar nada", d: "Reservan sin pagar" },
+              { id: "sena", t: "Cobrar una seña", d: "Un monto fijo" },
+              { id: "total", t: "Cobrar el total", d: "El precio del servicio" },
+            ] as const
+          ).map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setModo(o.id)}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                modo === o.id
+                  ? "border-primary bg-primary/5"
+                  : "hover:border-muted-foreground/40"
+              }`}
+            >
+              <p className="text-sm font-medium">{o.t}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{o.d}</p>
+            </button>
+          ))}
+        </div>
+
+        {modo !== "ninguno" && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {modo === "sena" ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Monto de la seña (ARS)</Label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="5000"
+                  value={monto}
+                  onChange={(e) => setMonto(e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Monto a cobrar</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                  El precio de cada servicio
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Access Token de Mercado Pago{config?.mp_conectado ? " (solo si querés cambiarlo)" : ""}
+              </Label>
+              <Input
+                type="password"
+                placeholder="APP_USR-…"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se guarda encriptado. Lo sacás de Mercado Pago → Tus integraciones →
+                Credenciales de producción.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <Button onClick={guardar} disabled={guardando}>
+            {guardando ? "Guardando…" : "Guardar señas"}
+          </Button>
+        </div>
+      </div>
+    </Seccion>
   );
 }
 

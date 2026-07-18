@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { crearCliente } from "@/lib/clientes-api";
+import { useTermino } from "@/lib/config-rubro";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { CamposCliente, DatosCliente, CLIENTE_VACIO } from "./campos-cliente";
@@ -25,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 
 export function NuevoClienteDialog({ onCreado }: { onCreado: () => void }) {
+  const termino = useTermino()("cliente", "cliente");
+  const Termino = termino.charAt(0).toUpperCase() + termino.slice(1);
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [datos, setDatos] = useState<DatosCliente>(CLIENTE_VACIO);
@@ -67,11 +70,11 @@ export function NuevoClienteDialog({ onCreado }: { onCreado: () => void }) {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button>Nuevo cliente</Button>
+        <Button>{`Nuevo ${termino}`}</Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nuevo cliente</DialogTitle>
+          <DialogTitle>{`Nuevo ${termino}`}</DialogTitle>
           <DialogDescription>
             Cargá los datos del cliente. Solo el nombre es obligatorio.
           </DialogDescription>

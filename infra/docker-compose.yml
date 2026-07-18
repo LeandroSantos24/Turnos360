@@ -37,11 +37,62 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENV: dev
       SECRET_KEY: ${SECRET_KEY}
+      # URLs base (en deploy: el dominio real)
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      # Email saliente (Gmail: contraseña de APLICACIÓN, no la de la cuenta)
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     ports:
       - "8000:8000"
     volumes:
       - ../backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
+      REDIS_URL: redis://redis:6379/0
+      ENV: dev
+      SECRET_KEY: ${SECRET_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - ../backend:/app
+    command: celery -A app.celery_app worker --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
+      REDIS_URL: redis://redis:6379/0
+      ENV: dev
+      SECRET_KEY: ${SECRET_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - ../backend:/app
+    command: celery -A app.celery_app beat --loglevel=info
     depends_on:
       db:
         condition: service_healthy
@@ -54,6 +105,9 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # URL del backend DESDE el contenedor frontend (la usa sitemap.ts, que
+      # corre server-side y no puede llegar a "localhost" del host).
+      API_URL_INTERNA: http://backend:8000
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"

@@ -70,6 +70,9 @@ export interface EmpresaAdmin {
   rubro_nombre: string | null;
   activa: boolean;
   cantidad_usuarios: number;
+  plan: string;
+  suscripcion_vence: string | null;
+  estado_suscripcion: string;
 }
 export type RolUsuario = "dueno" | "admin" | "recepcion" | "profesional";
 export interface UsuarioAdmin {
@@ -122,6 +125,13 @@ export function crearEmpresa(datos: {
 }
 export function pausarEmpresa(id: number, activa: boolean): Promise<EmpresaAdmin> {
   return adminApi.patch<EmpresaAdmin>(`/admin/empresas/${id}`, { activa });
+}
+
+export function setearSuscripcion(
+  id: number,
+  datos: { plan?: string; suscripcion_vence?: string | null; renovar_30?: boolean },
+): Promise<EmpresaAdmin> {
+  return adminApi.patch<EmpresaAdmin>(`/admin/empresas/${id}/suscripcion`, datos);
 }
 
 // ---------- Usuarios ----------

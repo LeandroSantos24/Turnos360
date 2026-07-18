@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from "react";
 import { listarClientes, borrarCliente, Cliente } from "@/lib/clientes-api";
 import { ApiError } from "@/lib/api";
 import { NuevoClienteDialog } from "./nuevo-cliente-dialog";
+import { useTermino } from "@/lib/config-rubro";
 import { EditarClienteDialog } from "./editar-cliente-dialog";
 import { Paginacion } from "@/components/paginacion";
 import { toast } from "sonner";
@@ -44,6 +45,10 @@ import {
 const POR_PAGINA = 10;
 
 export default function ClientesPage() {
+  // Terminología del rubro: "cliente" o "paciente" según el preset.
+  const termino = useTermino()("cliente", "cliente");
+  const Termino = termino.charAt(0).toUpperCase() + termino.slice(1);
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(0);
@@ -103,10 +108,10 @@ export default function ClientesPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Clientes</h1>
+          <h1 className="text-2xl font-bold">{Termino}s</h1>
           <p className="text-sm text-muted-foreground">
             <span className="tabular-nums">{total}</span>{" "}
-            {total === 1 ? "cliente" : "clientes"}
+            {total === 1 ? termino : `${termino}s`}
           </p>
         </div>
         <NuevoClienteDialog onCreado={() => cargar(buscar, pagina)} />
@@ -127,7 +132,7 @@ export default function ClientesPage() {
       )}
 
       {cargando && !error && (
-        <p className="text-sm text-muted-foreground">Cargando clientes…</p>
+        <p className="text-sm text-muted-foreground">{`Cargando ${termino}s…`}</p>
       )}
 
       {!cargando && !error && clientes.length === 0 && (

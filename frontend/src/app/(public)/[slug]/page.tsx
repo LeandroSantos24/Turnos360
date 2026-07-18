@@ -23,6 +23,7 @@ import {
   Galeria,
   Horarios,
   Ubicacion,
+  Confianza,
   Contacto,
   FooterVidriera,
   BarraMobile,
@@ -33,6 +34,42 @@ import {
 } from "./vidriera-ui";
 import { ReservaWizard } from "./reserva-wizard";
 
+function BannerPago({
+  tipo,
+  onCerrar,
+}: {
+  tipo: "aprobado" | "pendiente" | "rechazado";
+  onCerrar: () => void;
+}) {
+  const estilos = {
+    aprobado: { bg: "#e8f7f0", borde: "#17a08a", texto: "#0e6b5c", msg: "¡Seña recibida! Tu turno quedó confirmado. Te llega el comprobante de Mercado Pago por email." },
+    pendiente: { bg: "#fef8e7", borde: "#f6c94f", texto: "#8a6a12", msg: "Tu pago quedó pendiente de acreditación. Cuando se apruebe, el turno se confirma solo." },
+    rechazado: { bg: "#fdecec", borde: "#e5484d", texto: "#9f1d21", msg: "El pago no se pudo procesar. Tu turno sigue reservado: podés intentar de nuevo o coordinar la seña con el negocio." },
+  }[tipo];
+  return (
+    <div
+      className="fixed inset-x-0 top-0 z-[60] border-b px-4 py-3"
+      style={{ background: estilos.bg, borderColor: estilos.borde }}
+      role="status"
+    >
+      <div className="mx-auto flex max-w-3xl items-start justify-between gap-3">
+        <p className="text-sm font-medium leading-snug" style={{ color: estilos.texto }}>
+          {estilos.msg}
+        </p>
+        <button
+          type="button"
+          onClick={onCerrar}
+          aria-label="Cerrar aviso"
+          className="shrink-0 text-lg font-bold leading-none"
+          style={{ color: estilos.texto }}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function VidrieraPage({ params }: { params: { slug: string } }) {
   const [vidriera, setVidriera] = useState<Vidriera | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -41,6 +78,17 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
     abierto: false,
     servicio: null,
   });
+  // Al volver de Mercado Pago (?pago=aprobado|pendiente|rechazado).
+  const [avisoPago, setAvisoPago] = useState<"aprobado" | "pendiente" | "rechazado" | null>(null);
+
+  useEffect(() => {
+    // window.location en vez de useSearchParams: evita el Suspense de Next 14.
+    const valor = new URLSearchParams(window.location.search).get("pago");
+    if (valor === "aprobado" || valor === "pendiente" || valor === "rechazado") {
+      setAvisoPago(valor);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     obtenerVidriera(params.slug)
@@ -87,6 +135,7 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
 
   return (
     <div className="min-h-screen bg-white antialiased" style={{ color: TINTA }}>
+      {avisoPago && <BannerPago tipo={avisoPago} onCerrar={() => setAvisoPago(null)} />}
       <TopBar v={vidriera} acento={acento} onReservar={() => abrir()} />
       <Hero v={vidriera} acento={acento} onReservar={() => abrir()} />
 
@@ -106,6 +155,7 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
       <Galeria v={vidriera} acento={acento} />
       <Horarios v={vidriera} acento={acento} />
       <Ubicacion v={vidriera} acento={acento} />
+      <Confianza v={vidriera} acento={acento} />
       <Contacto v={vidriera} acento={acento} />
       <FooterVidriera />
 

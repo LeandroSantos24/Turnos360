@@ -50,6 +50,19 @@ class Turno(TenantMixin, Base):
     descuento_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     # ¿Ya se cobró este turno? Lo marca el registro de cobro (N-52).
     cobrado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    # Seña online (Mercado Pago): null = sin seña · "pendiente" · "pagada"
+    sena_estado: Mapped[str | None] = mapped_column(String(20))
+    sena_monto: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    mp_payment_id: Mapped[str | None] = mapped_column(String(60))
+
+    # Recordatorios por email ya enviados (dedup del beat de Celery)
+    recordatorio_enviado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    recordatorio_2h_enviado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     motivo_cancelacion: Mapped[str | None] = mapped_column(String(300))
     notas: Mapped[str | None] = mapped_column(Text)
     creado_por: Mapped[int | None] = mapped_column(

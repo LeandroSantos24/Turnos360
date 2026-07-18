@@ -11,11 +11,12 @@ Uso (dentro del contenedor):
 from app.core.crypto import hash_clave
 from app.db.session import SessionLocal
 from app.models import Rubro, SuperAdmin
-from app.seeds import PRESET_BARBERIA, PRESET_MEDICO
+from app.seeds import PRESET_BARBERIA, PRESET_MEDICO, PRESET_NUTRICION
 
 RUBROS = [
     ("barberia", "Barbería / Peluquería", PRESET_BARBERIA),
     ("medico", "Consultorio médico", PRESET_MEDICO),
+    ("nutricion", "Nutrición", PRESET_NUTRICION),
 ]
 
 
@@ -40,7 +41,7 @@ def run() -> None:
         db.commit()
         print("Seed base OK.")
         print("  Super-admin: admin@turnos360.com / superadmin360")
-        print("  Rubros disponibles: barbería, médico")
+        print("  Rubros disponibles: barbería, médico, nutrición")
         print("  Entrá al panel /admin para crear tus empresas y usuarios.")
     finally:
         db.close()

@@ -26,8 +26,10 @@ from app.models.mensajeria import Mensaje, PlantillaMensaje
 from app.models.organizacion import Empresa, Rubro, Sucursal, SuperAdmin, Usuario
 from app.models.turno import Turno
 from app.models.modulos.fidelizacion import *  # noqa: F401,F403  -> E11
+from app.models.modulos.giftcards import GiftCard  # noqa: F401  -> E11
 from app.models.modulos.salud import *  # noqa: F401,F403  -> E13
 from app.models.items import ItemTurno
+from app.models.cupon import CuponDescuento
 
 __all__ = [
     "Base",

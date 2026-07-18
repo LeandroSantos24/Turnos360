@@ -63,6 +63,14 @@ PRESET_MEDICO = {
     "datos_sensibles": True,
 }
 
+PRESET_NUTRICION = {
+    "terminologia": {"turno": "consulta", "recurso": "profesional", "cliente": "paciente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": False, "ficha_clinica": True, "ordenes_trabajo": False},
+    "campos_cliente": [],
+    "datos_sensibles": True,
+}
+
 CATEGORIAS = {
     TipoMovimiento.INGRESO: ["Turnos", "Venta de productos", "Membresías", "Gift cards", "Paquetes"],
     TipoMovimiento.EGRESO: [

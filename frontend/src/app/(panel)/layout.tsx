@@ -17,10 +17,14 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   Calendar,
+  TicketPercent,
   Users,
   Scissors,
   UserCog,
   CreditCard,
+  Gift,
+  Megaphone,
+  UserCircle,
   LogOut,
   ChevronRight,
   Wallet,
@@ -46,6 +50,7 @@ type NavItem = {
   soloDueno?: boolean;
   soloProfesional?: boolean;
   ocultarProfesional?: boolean;
+  moduloRequerido?: string; // solo se muestra si el preset activa ese módulo
 };
 
 // Ítems del menú, agrupados como en TurnosPro.
@@ -60,6 +65,10 @@ const NAV: NavItem[] = [
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
+  { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards" },
+  { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
+  { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true },
+  { href: "/cuenta", label: "Mi cuenta", icon: UserCircle, grupo: "config" },
   { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "negocio", soloDueno: true },
   { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
   { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas", ocultarProfesional: true },
@@ -70,6 +79,7 @@ const GRUPOS = [
   { id: "principal", label: "Principal" },
   { id: "negocio", label: "Negocio" },
   { id: "finanzas", label: "Finanzas" },
+  { id: "config", label: "Configuración" },
 ];
 
 /** Rutas que el profesional SÍ puede ver. El resto lo redirige a "Mi día". */
@@ -86,6 +96,15 @@ export default function PanelLayout({
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<UsuarioMe | null>(null);
   const [config, setConfig] = useState<ConfigEmpresa | null>(null);
+
+  // Terminología del rubro (preset): "Clientes" -> "Pacientes" en nutrición.
+  // Se usa config directo porque estos hooks corren FUERA del ConfigRubroProvider.
+  const term = config?.preset?.terminologia ?? {};
+  const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const labelNav = (item: { href: string; label: string }) =>
+    item.href === "/clientes" && term.cliente
+      ? `${capitalizar(term.cliente)}s`
+      : item.label;
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -149,15 +168,13 @@ export default function PanelLayout({
           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
           <Link href={inicioHref} className="group flex items-center gap-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base font-bold transition-transform group-hover:scale-105"
-              style={{
-                background: "hsl(168 100% 42%)",
-                color: "hsl(222 47% 8%)",
-                fontFamily: "Syne, sans-serif",
-              }}
-            >
-              T
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1 transition-transform group-hover:scale-105">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/marca/logo-turnos360.png"
+                alt="Turnos360"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <div
@@ -184,6 +201,8 @@ export default function PanelLayout({
               if (n.soloProfesional) return esProfesional;
               if (n.soloDueno && !dueno) return false;
               if (n.ocultarProfesional && esProfesional) return false;
+              if (n.moduloRequerido && !config?.preset?.modulos?.[n.moduloRequerido])
+                return false;
               return true;
             });
             if (items.length === 0) return null;
@@ -236,7 +255,7 @@ export default function PanelLayout({
                                 : "rgba(255,255,255,0.4)",
                             }}
                           />
-                          <span className="relative z-10">{item.label}</span>
+                          <span className="relative z-10">{labelNav(item)}</span>
                           {activo && (
                             <ChevronRight
                               size={14}

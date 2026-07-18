@@ -6,7 +6,9 @@ Regla 1: TODA tabla de negocio hereda TenantMixin → empresa_id NOT NULL + índ
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+import datetime as dt
+
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func, Numeric
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -71,7 +73,26 @@ class Empresa(Base):
     galeria: Mapped[list | None] = mapped_column(JSONB, default=list)
     wa_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)  # Fernet (app.core.crypto)
     email_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)
+
+    # Campañas / automatizaciones del negocio (switches + config de cada una).
+    automatizaciones: Mapped[dict | None] = mapped_column(JSONB)
+
+    # Señas con Mercado Pago (opcional por empresa). Token encriptado (Regla 7).
+    mp_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)
+    sena_activa: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Qué se cobra al reservar online: "ninguno" | "sena" (monto fijo) | "total"
+    # (el precio del servicio). Lo elige el negocio.
+    cobro_modo: Mapped[str] = mapped_column(
+        String(10), default="ninguno", server_default="ninguno"
+    )
+    sena_monto: Mapped[float | None] = mapped_column(Numeric(12, 2))
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Suscripción: el plan y hasta cuándo está paga. La prórroga (días de
+    # gracia tras el vencimiento) se define globalmente, no por empresa.
+    plan: Mapped[str] = mapped_column(
+        String(20), default="gratuito", server_default="gratuito"
+    )
+    suscripcion_vence: Mapped[dt.date | None] = mapped_column(Date)
     creada_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -101,6 +122,10 @@ class Usuario(TenantMixin, Base):
     hash_clave: Mapped[str] = mapped_column(String(300))
     rol: Mapped[RolUsuario] = mapped_column(enum_pg(RolUsuario, "rol_usuario"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Recuperación de contraseña: HASH del token de un solo uso + expiración.
+    reset_token_hash: Mapped[str | None] = mapped_column(String(128))
+    reset_token_expira: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     # El recurso (silla/barbero) que opera este usuario, si es un profesional.
     # Decisión 1-a-1: un profesional ↔ un recurso. El FK vive en Recurso.usuario_id;

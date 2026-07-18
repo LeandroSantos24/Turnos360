@@ -8,7 +8,8 @@
  */
 
 import { useState, useEffect } from "react";
-import { editarServicio, Servicio } from "@/lib/servicios-api";
+import { editarServicio, obtenerServicio, Servicio } from "@/lib/servicios-api";
+import { SelectorRecursos } from "./selector-recursos";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -57,6 +58,7 @@ export function EditarServicioDialog({
   const [agendable, setAgendable] = useState(true);
   const [enParalelo, setEnParalelo] = useState(false);
   const [grupo, setGrupo] = useState("");
+  const [recursoIds, setRecursoIds] = useState<number[]>([]);
 
   // Precargar los valores del servicio cuando se abre
   useEffect(() => {
@@ -75,6 +77,11 @@ export function EditarServicioDialog({
       setEnParalelo(false);
       setGrupo(g);
     }
+    // Traer los recursos vinculados (el listado no los trae; el GET individual sí)
+    setRecursoIds(servicio.recurso_ids ?? []);
+    obtenerServicio(servicio.id)
+      .then((s) => setRecursoIds(s.recurso_ids ?? []))
+      .catch(() => {});
   }, [servicio]);
 
   async function guardar(e: React.FormEvent) {
@@ -97,6 +104,7 @@ export function EditarServicioDialog({
         precio: precio ? Number(precio) : undefined,
         grupo_agenda: agendable ? grupoAgenda : null,
         agendable,
+        recurso_ids: recursoIds,
       });
       toast.success("Servicio actualizado");
       onEditado();
@@ -210,6 +218,8 @@ export function EditarServicioDialog({
                 </p>
               </div>
               )}
+
+              <SelectorRecursos seleccionados={recursoIds} onCambio={setRecursoIds} />
             </div>
           )}
 

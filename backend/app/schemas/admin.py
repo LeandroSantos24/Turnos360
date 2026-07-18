@@ -1,6 +1,7 @@
 """Schemas del panel de super-administración."""
 
 from pydantic import BaseModel, Field
+import datetime as dt
 
 from app.models.enums import RolUsuario
 
@@ -43,12 +44,23 @@ class EmpresaAdminOut(BaseModel):
     rubro_nombre: str | None = None
     activa: bool
     cantidad_usuarios: int = 0
+    plan: str = "gratuito"
+    suscripcion_vence: str | None = None
+    estado_suscripcion: str = "sin_vencimiento"  # activa | prorroga | vencida | ...
 
     model_config = {"from_attributes": True}
 
 
 class EmpresaPausar(BaseModel):
     activa: bool
+
+
+class SuscripcionAdminIn(BaseModel):
+    """Setear la suscripción de una empresa desde el super-admin."""
+
+    plan: str | None = None            # gratuito | pro
+    suscripcion_vence: dt.date | None = None
+    renovar_30: bool = False           # atajo: vence hoy + 30 días
 
 
 class UsuarioCrear(BaseModel):

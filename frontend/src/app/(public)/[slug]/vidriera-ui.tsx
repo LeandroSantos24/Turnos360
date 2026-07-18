@@ -21,6 +21,9 @@ import {
   X,
   CalendarCheck2,
   Sparkles,
+  ShieldCheck,
+  Star,
+  BellRing,
 } from "lucide-react";
 
 import type { Vidriera } from "@/lib/publico-api";
@@ -122,12 +125,12 @@ export function linkWhatsApp(v: Vidriera): string | null {
   return `https://wa.me/${num}?text=${texto}`;
 }
 
-const REDES_META: Record<string, { label: string; Icono: IconoRed }> = {
-  instagram: { label: "Instagram", Icono: IconoInstagram },
-  facebook: { label: "Facebook", Icono: IconoFacebook },
-  tiktok: { label: "TikTok", Icono: IconoTiktok },
-  linkedin: { label: "LinkedIn", Icono: IconoLinkedin },
-  sitio_web: { label: "Sitio web", Icono: Globe },
+const REDES_META: Record<string, { label: string; Icono: IconoRed; color: string }> = {
+  instagram: { label: "Instagram", Icono: IconoInstagram, color: "#E1306C" },
+  facebook: { label: "Facebook", Icono: IconoFacebook, color: "#1877F2" },
+  tiktok: { label: "TikTok", Icono: IconoTiktok, color: "#010101" },
+  linkedin: { label: "LinkedIn", Icono: IconoLinkedin, color: "#0A66C2" },
+  sitio_web: { label: "Sitio web", Icono: Globe, color: "#0EA5E9" },
 };
 
 function hrefRed(clave: string, valor: string): string {
@@ -355,23 +358,22 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
         {estado && (
           <motion.div
             variants={item}
-            className="mt-4 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium"
+            className="mt-4 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold"
             style={{
-              borderColor: estado.abierto ? hexA(acento, 0.35) : BORDE,
-              background: estado.abierto ? hexA(acento, 0.08) : SUPERFICIE,
-              color: estado.abierto ? acento : TINTA_SUAVE,
+              background: estado.abierto ? "#16a34a" : "#dc2626",
+              color: "#ffffff",
             }}
           >
             <span className="relative flex h-2 w-2">
               {estado.abierto && (
                 <span
-                  className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                  style={{ background: acento }}
+                  className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70"
+                  style={{ background: "#ffffff" }}
                 />
               )}
               <span
                 className="relative inline-flex h-2 w-2 rounded-full"
-                style={{ background: estado.abierto ? acento : "#9aa3b2" }}
+                style={{ background: "#ffffff" }}
               />
             </span>
             {estado.texto}
@@ -526,8 +528,8 @@ export function Equipo({ v, acento }: { v: Vidriera; acento: string }) {
             {v.recursos.map((r) => (
               <figure key={r.id} className="w-[160px] shrink-0 snap-start md:w-[190px]">
                 <div
-                  className="group relative aspect-[4/5] overflow-hidden rounded-2xl border bg-white"
-                  style={{ borderColor: BORDE }}
+                  className="group relative mx-auto aspect-square w-[130px] overflow-hidden rounded-full border-2 bg-white md:w-[150px]"
+                  style={{ borderColor: hexA(acento, 0.4) }}
                 >
                   {r.foto_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -784,6 +786,129 @@ export function Ubicacion({ v, acento }: { v: Vidriera; acento: string }) {
 /* Contacto y redes                                                    */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Confianza / integraciones — "reservá con tranquilidad"              */
+/* ------------------------------------------------------------------ */
+
+export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
+  // Garantías siempre ciertas para un negocio en Turnos360.
+  const garantias = [
+    {
+      Icono: CalendarCheck2,
+      titulo: "Reserva online 24/7",
+      texto: "Elegís día y hora en segundos, sin llamar ni esperar respuesta.",
+    },
+    {
+      Icono: Mail,
+      titulo: "Confirmación al instante",
+      texto: "Te llega el turno por email, con opción de agregarlo a tu calendario.",
+    },
+    {
+      Icono: BellRing,
+      titulo: "Recordatorio antes de tu turno",
+      texto: "Un aviso para que no se te pase. Cero turnos olvidados.",
+    },
+    {
+      Icono: ShieldCheck,
+      titulo: "Tus datos, protegidos",
+      texto: "Solo los usamos para gestionar tu turno. Nada de spam.",
+    },
+  ];
+
+  // Integraciones que el negocio realmente tiene (honesto: según sus datos).
+  const tieneWhatsApp = !!linkWhatsApp(v);
+  const tieneMapa = !!v.direccion;
+
+  return (
+    <section className="mx-auto max-w-5xl px-5 py-14 md:py-20">
+      <Reveal>
+        <div className="text-center">
+          <Eyebrow acento={acento}>Reservá con tranquilidad</Eyebrow>
+          <TituloSeccion>Todo lo que necesitás, en un solo lugar</TituloSeccion>
+        </div>
+      </Reveal>
+
+      {/* Garantías */}
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {garantias.map((g, i) => (
+          <Reveal key={g.titulo} delay={i * 0.06}>
+            <div
+              className="h-full rounded-2xl border bg-white p-5"
+              style={{ borderColor: BORDE }}
+            >
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ background: hexA(acento, 0.1) }}
+              >
+                <g.Icono className="h-5 w-5" style={{ color: acento }} />
+              </div>
+              <p className="mt-3 font-semibold" style={{ color: TINTA }}>
+                {g.titulo}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
+                {g.texto}
+              </p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+
+      {/* Franja de integraciones (logos de marca reales) */}
+      <Reveal delay={0.1}>
+        <div
+          className="mt-8 rounded-2xl border bg-white px-5 py-7"
+          style={{ borderColor: BORDE }}
+        >
+          <p
+            className="text-center text-xs font-semibold uppercase tracking-[0.15em]"
+            style={{ color: TINTA_SUAVE }}
+          >
+            Conectado con las apps que ya usás
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/marca/integraciones/mercado-pago.png"
+              alt="Mercado Pago"
+              className="h-9 w-auto object-contain"
+            />
+            <img
+              src="/marca/integraciones/google-calendar.png"
+              alt="Google Calendar"
+              className="h-7 w-auto object-contain"
+            />
+            {tieneMapa && (
+              <img
+                src="/marca/integraciones/google-maps.png"
+                alt="Google Maps"
+                className="h-5 w-auto object-contain"
+              />
+            )}
+            {tieneWhatsApp && (
+              <img
+                src="/marca/integraciones/whatsapp.png"
+                alt="WhatsApp"
+                className="h-6 w-auto object-contain"
+              />
+            )}
+            <div className="flex items-center gap-1.5">
+              <Star className="h-5 w-5" style={{ color: "#f59e0b", fill: "#f59e0b" }} />
+              <span className="text-sm font-medium" style={{ color: TINTA }}>
+                Google Reseñas
+              </span>
+            </div>
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Contacto                                                            */
+/* ------------------------------------------------------------------ */
+
 export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
   const redes = Object.entries(v.redes || {}).filter(([, val]) => val && val.trim() !== "");
   const tieneAlgo = redes.length > 0 || v.telefono_publico || v.email_publico;
@@ -813,7 +938,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
           </a>
         )}
         {redes.map(([clave, valor]) => {
-          const meta = REDES_META[clave] ?? { label: clave, Icono: Globe };
+          const meta = REDES_META[clave] ?? { label: clave, Icono: Globe, color: acento };
           const Icono = meta.Icono;
           return (
             <a
@@ -824,7 +949,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
               className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
               style={{ borderColor: BORDE, color: TINTA }}
             >
-              <Icono className="h-4 w-4" style={{ color: acento }} />
+              <Icono className="h-4 w-4" style={{ color: meta.color }} />
               {meta.label}
             </a>
           );
@@ -852,6 +977,11 @@ export function FooterVidriera() {
           Turnos360
         </span>
       </a>
+      <p className="mt-2 text-[11px]" style={{ color: TINTA_SUAVE }}>
+        <a href="/privacidad#reservas" className="underline underline-offset-2">
+          Política de privacidad
+        </a>
+      </p>
     </footer>
   );
 }

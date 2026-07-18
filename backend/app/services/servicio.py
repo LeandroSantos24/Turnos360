@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Servicio
+from app.models import Recurso, Servicio
 from app.schemas.servicio import ServicioCrear, ServicioEditar
 
 
@@ -28,8 +28,24 @@ def obtener(db: Session, empresa_id: int, servicio_id: int) -> Servicio | None:
     )
 
 
+def _recursos_de(db: Session, empresa_id: int, ids: list[int]) -> list[Recurso]:
+    """Recursos de ESTA empresa entre los ids pedidos (filtra ajenos: Regla 1)."""
+    if not ids:
+        return []
+    return list(
+        db.scalars(
+            select(Recurso).where(
+                Recurso.empresa_id == empresa_id, Recurso.id.in_(ids)
+            )
+        )
+    )
+
+
 def crear(db: Session, empresa_id: int, datos: ServicioCrear) -> Servicio:
-    servicio = Servicio(empresa_id=empresa_id, **datos.model_dump())
+    payload = datos.model_dump()
+    recurso_ids = payload.pop("recurso_ids", [])
+    servicio = Servicio(empresa_id=empresa_id, **payload)
+    servicio.recursos = _recursos_de(db, empresa_id, recurso_ids)
     db.add(servicio)
     db.commit()
     db.refresh(servicio)
@@ -42,8 +58,12 @@ def editar(
     servicio = obtener(db, empresa_id, servicio_id)
     if servicio is None:
         return None
-    for campo, valor in datos.model_dump(exclude_unset=True).items():
+    cambios = datos.model_dump(exclude_unset=True)
+    recurso_ids = cambios.pop("recurso_ids", None)
+    for campo, valor in cambios.items():
         setattr(servicio, campo, valor)
+    if recurso_ids is not None:  # viene la lista => reemplaza el set completo
+        servicio.recursos = _recursos_de(db, empresa_id, recurso_ids)
     db.commit()
     db.refresh(servicio)
     return servicio

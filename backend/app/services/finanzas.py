@@ -7,7 +7,7 @@ a ella para poder cerrarla con cifras reales.
 
 import datetime as dt
 
-from sqlalchemy import func, select
+from sqlalchemy import or_ as sa_or, func, select
 from sqlalchemy.orm import Session
 
 from app.models.enums import EstadoCaja, TipoMovimiento
@@ -155,12 +155,20 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
     ingresos, egresos, cantidad = _totales_caja(db, empresa_id, caja.id)
     esperado = float(caja.saldo_inicial) + ingresos - egresos
     real = float(caja.saldo_final) if caja.saldo_final is not None else None
+
+    # Por método: cantidad de cobros, bruto, comisión (ya guardada en cada
+    # movimiento al cobrar) y neto. El arqueo responde dos preguntas: dónde
+    # está la plata y cuánto se come cada método.
+    # La comisión vive en Pago (1 a 1 con su movimiento vía movimiento_id).
     filas_metodo = db.execute(
         select(
             MetodoPago.nombre,
+            func.count(MovimientoFinanciero.id),
             func.coalesce(func.sum(MovimientoFinanciero.monto), 0),
+            func.coalesce(func.sum(Pago.comision_aplicada), 0),
         )
         .select_from(MovimientoFinanciero)
+        .join(Pago, Pago.movimiento_id == MovimientoFinanciero.id, isouter=True)
         .join(
             MetodoPago,
             MovimientoFinanciero.metodo_pago_id == MetodoPago.id,
@@ -172,20 +180,98 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
             MovimientoFinanciero.tipo == TipoMovimiento.INGRESO,
         )
         .group_by(MetodoPago.nombre)
+        .order_by(func.sum(MovimientoFinanciero.monto).desc())
     ).all()
     por_metodo = [
-        {"metodo": nombre or "Sin método", "total": float(total)}
-        for nombre, total in filas_metodo
+        {
+            "metodo": nombre or "Sin método",
+            "cantidad": int(cant),
+            "total": float(bruto),
+            "comision": float(comision),
+            "neto": round(float(bruto) - float(comision), 2),
+        }
+        for nombre, cant, bruto, comision in filas_metodo
     ]
+    total_comisiones = round(sum(m["comision"] for m in por_metodo), 2)
+
+    # Gastos por método: sin comisión. En un egreso pagamos el monto completo;
+    # la comisión solo existe cuando cobramos, no cuando gastamos.
+    filas_egreso = db.execute(
+        select(
+            MetodoPago.nombre,
+            func.count(MovimientoFinanciero.id),
+            func.coalesce(func.sum(MovimientoFinanciero.monto), 0),
+        )
+        .select_from(MovimientoFinanciero)
+        .join(
+            MetodoPago,
+            MovimientoFinanciero.metodo_pago_id == MetodoPago.id,
+            isouter=True,
+        )
+        .where(
+            MovimientoFinanciero.empresa_id == empresa_id,
+            MovimientoFinanciero.caja_id == caja.id,
+            MovimientoFinanciero.tipo == TipoMovimiento.EGRESO,
+        )
+        .group_by(MetodoPago.nombre)
+        .order_by(func.sum(MovimientoFinanciero.monto).desc())
+    ).all()
+    egresos_por_metodo = [
+        {
+            "metodo": nombre or "Sin método",
+            "cantidad": int(cant),
+            "total": float(monto),
+        }
+        for nombre, cant, monto in filas_egreso
+    ]
+
+    # Efectivo esperado en el cajón: saldo inicial + entradas en efectivo −
+    # salidas en efectivo. "Efectivo" = el método llamado así, más los
+    # movimientos sin método (los gastos de caja chica suelen cargarse sin
+    # método y salen de los billetes).
+    def _suma_efectivo(tipo: TipoMovimiento) -> float:
+        v = db.scalar(
+            select(func.coalesce(func.sum(MovimientoFinanciero.monto), 0))
+            .select_from(MovimientoFinanciero)
+            .join(
+                MetodoPago,
+                MovimientoFinanciero.metodo_pago_id == MetodoPago.id,
+                isouter=True,
+            )
+            .where(
+                MovimientoFinanciero.empresa_id == empresa_id,
+                MovimientoFinanciero.caja_id == caja.id,
+                MovimientoFinanciero.tipo == tipo,
+                sa_or(
+                    func.lower(MetodoPago.nombre) == "efectivo",
+                    MovimientoFinanciero.metodo_pago_id.is_(None),
+                ),
+            )
+        )
+        return float(v or 0)
+
+    efectivo_esperado = round(
+        float(caja.saldo_inicial)
+        + _suma_efectivo(TipoMovimiento.INGRESO)
+        - _suma_efectivo(TipoMovimiento.EGRESO),
+        2,
+    )
+
     return {
         "caja": caja,
         "total_ingresos": ingresos,
         "total_egresos": egresos,
         "saldo_esperado": esperado,
         "saldo_real": real,
-        "diferencia": (real - esperado) if real is not None else None,
+        # El arqueo cuadra el CAJÓN: lo contado vs el efectivo esperado.
+        # (Las transferencias y tarjetas no están en el cajón.)
+        "diferencia": (real - efectivo_esperado) if real is not None else None,
         "cantidad_movimientos": cantidad,
         "por_metodo": por_metodo,
+        "egresos_por_metodo": egresos_por_metodo,
+        "total_comisiones": total_comisiones,
+        "total_neto": round(ingresos - total_comisiones, 2),
+        "efectivo_esperado": efectivo_esperado,
     }
 
 

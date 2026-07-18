@@ -75,6 +75,7 @@ const ESTADOS_ORDEN = [
 
 /** Etiqueta + color por canal de adquisición. */
 const CANAL_INFO: Record<string, { label: string; color: string }> = {
+  web: { label: "Reserva online", color: "#17a08a" },
   instagram: { label: "Instagram", color: "#e1306c" },
   tiktok: { label: "TikTok", color: "#06b6d4" },
   referido: { label: "Referido", color: "#10b981" },
@@ -134,7 +135,9 @@ export default function InicioPage() {
 
   // Clientes (para la torta de canal de adquisición; dato histórico del negocio)
   useEffect(() => {
-    listarClientes(undefined, 0, 1000)
+    // OJO: el endpoint acepta máximo 200 (le=200). Pedir más da 422 y el
+    // catch dejaba la lista vacía → "Todavía no hay clientes cargados".
+    listarClientes(undefined, 0, 200)
       .then((data) => setClientes(data.items))
       .catch(() => setClientes([]));
   }, []);

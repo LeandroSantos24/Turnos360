@@ -67,3 +67,84 @@ export function obtenerLanding(): Promise<LandingConfig> {
 export function guardarLanding(datos: LandingConfig): Promise<LandingConfig> {
   return api.put<LandingConfig>("/empresa/landing", datos);
 }
+
+// ============================================================
+// Señas con Mercado Pago (config del negocio, solo dueño)
+// ============================================================
+
+export interface SenasConfig {
+  sena_activa: boolean;
+  sena_monto: number | null;
+  cobro_modo: "ninguno" | "sena" | "total";
+  mp_conectado: boolean;
+}
+
+export function obtenerSenas(): Promise<SenasConfig> {
+  return api.get<SenasConfig>("/empresa/senas");
+}
+
+/** El token solo viaja si se está cargando uno nuevo (nunca se lee de vuelta). */
+export function guardarSenas(datos: {
+  sena_activa: boolean;
+  sena_monto: number | null;
+  cobro_modo: "ninguno" | "sena" | "total";
+  mp_access_token?: string;
+}): Promise<SenasConfig> {
+  return api.put<SenasConfig>("/empresa/senas", datos);
+}
+
+
+// ============================================================
+// Campañas / automatizaciones (solo dueño)
+// ============================================================
+
+export interface AutomSwitch {
+  activa: boolean;
+}
+export interface AutomCumple extends AutomSwitch {
+  dias_antes: number;
+  mensaje: string;
+}
+export interface AutomResena extends AutomSwitch {
+  link: string;
+}
+export interface AutomInactivos extends AutomSwitch {
+  dias: number;
+  mensaje: string;
+}
+export interface Automatizaciones {
+  recordatorio_24h: AutomSwitch;
+  recordatorio_2h: AutomSwitch;
+  cumple: AutomCumple;
+  resena_google: AutomResena;
+  inactivos: AutomInactivos;
+}
+
+export function obtenerAutomatizaciones(): Promise<Automatizaciones> {
+  return api.get<Automatizaciones>("/empresa/automatizaciones");
+}
+
+export function guardarAutomatizaciones(datos: Automatizaciones): Promise<Automatizaciones> {
+  return api.put<Automatizaciones>("/empresa/automatizaciones", datos);
+}
+
+
+export function probarCampana(tipo: string, destino: string): Promise<{ detalle: string }> {
+  return api.post<{ detalle: string }>(
+    `/empresa/automatizaciones/probar?tipo=${encodeURIComponent(tipo)}&destino=${encodeURIComponent(destino)}`,
+    {},
+  );
+}
+
+export interface Suscripcion {
+  plan: string;
+  estado: "activa" | "prorroga" | "vencida" | "sin_vencimiento";
+  vence: string | null;
+  dias_restantes: number | null;
+  en_prorroga: boolean;
+  mensaje: string;
+}
+
+export function obtenerSuscripcion(): Promise<Suscripcion> {
+  return api.get<Suscripcion>("/empresa/suscripcion");
+}

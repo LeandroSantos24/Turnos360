@@ -27,7 +27,7 @@ def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> Ser
     servicio = svc.obtener(db, empresa_id, servicio_id)
     if servicio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
-    return servicio
+    return ServicioOut.desde_modelo(servicio)
 
 
 # Catálogo = configuración del negocio -> solo el dueño.
@@ -38,7 +38,7 @@ def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> Ser
     dependencies=[Depends(gate_dueno)],
 )
 def crear_servicio(datos: ServicioCrear, empresa_id: EmpresaActual, db: DB) -> ServicioOut:
-    return svc.crear(db, empresa_id, datos)
+    return ServicioOut.desde_modelo(svc.crear(db, empresa_id, datos))
 
 
 @router.patch(
@@ -52,7 +52,7 @@ def editar_servicio(
     servicio = svc.editar(db, empresa_id, servicio_id, datos)
     if servicio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
-    return servicio
+    return ServicioOut.desde_modelo(servicio)
 
 
 @router.delete(

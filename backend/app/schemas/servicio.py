@@ -14,7 +14,7 @@ class ServicioBase(BaseModel):
 
 
 class ServicioCrear(ServicioBase):
-    pass
+    recurso_ids: list[int] = Field(default_factory=list, description="Recursos que prestan este servicio")
 
 
 class ServicioEditar(BaseModel):
@@ -26,14 +26,23 @@ class ServicioEditar(BaseModel):
     precio: float | None = Field(default=None, ge=0)
     agendable: bool | None = None
     activo: bool | None = None
+    recurso_ids: list[int] | None = Field(default=None, description="Si viene, reemplaza el set de recursos")
 
 
 class ServicioOut(ServicioBase):
     id: int
     empresa_id: int
     activo: bool
+    recurso_ids: list[int] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def desde_modelo(cls, servicio) -> "ServicioOut":
+        """Arma el Out incluyendo los ids de recursos vinculados."""
+        base = cls.model_validate(servicio)
+        base.recurso_ids = [r.id for r in servicio.recursos]
+        return base
 
 
 class ServiciosPagina(BaseModel):

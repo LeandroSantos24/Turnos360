@@ -1,3 +1,5 @@
+from typing import Literal
+
 """Schema de la configuración de la empresa actual (preset del rubro).
 
 Lo consume el frontend al iniciar sesión para saber:
@@ -5,7 +7,7 @@ Lo consume el frontend al iniciar sesión para saber:
 - cómo nombrar las cosas (preset["terminologia"], ej. cliente -> paciente).
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EmpresaActualOut(BaseModel):
@@ -42,3 +44,57 @@ class LandingConfig(BaseModel):
     redes: dict = {}
     # Galería de la landing: lista de URLs de fotos (máx. razonable: 12).
     galeria: list[str] = []
+
+class SenasConfigOut(BaseModel):
+    """Estado de la config de señas (el token JAMÁS se devuelve)."""
+
+    sena_activa: bool
+    sena_monto: float | None
+    cobro_modo: str = "ninguno"
+    mp_conectado: bool
+
+
+class SenasConfigIn(BaseModel):
+    """Guardado de señas. mp_access_token: solo si viene no-vacío se actualiza."""
+
+    sena_activa: bool = False
+    sena_monto: float | None = Field(default=None, ge=0)
+    cobro_modo: Literal["ninguno", "sena", "total"] = "ninguno"
+    mp_access_token: str | None = Field(default=None, max_length=300)
+
+
+class AutomSwitch(BaseModel):
+    activa: bool = False
+
+
+class AutomCumple(AutomSwitch):
+    dias_antes: int = Field(default=7, ge=0, le=30)
+    mensaje: str = Field(default="", max_length=500)
+
+
+class AutomResena(AutomSwitch):
+    link: str = Field(default="", max_length=300)
+
+
+class AutomInactivos(AutomSwitch):
+    dias: int = Field(default=60, ge=7, le=365)
+    mensaje: str = Field(default="", max_length=500)
+
+
+class AutomatizacionesConfig(BaseModel):
+    """La pantalla Campañas: cada automatización con su switch y su config."""
+
+    recordatorio_24h: AutomSwitch = AutomSwitch(activa=True)
+    recordatorio_2h: AutomSwitch = AutomSwitch()
+    cumple: AutomCumple = AutomCumple()
+    resena_google: AutomResena = AutomResena()
+    inactivos: AutomInactivos = AutomInactivos()
+
+
+class SuscripcionOut(BaseModel):
+    plan: str
+    estado: str  # activa | prorroga | vencida | sin_vencimiento
+    vence: str | None
+    dias_restantes: int | None
+    en_prorroga: bool
+    mensaje: str

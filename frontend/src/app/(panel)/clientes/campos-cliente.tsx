@@ -28,6 +28,7 @@ export interface DatosCliente {
   telefono: string;
   fecha_nacimiento: string;
   canal_adquisicion: string;
+  acepta_marketing: boolean;
   etiquetas: string[];
   observaciones: string;
 }
@@ -41,12 +42,14 @@ export const CLIENTE_VACIO: DatosCliente = {
   telefono: "",
   fecha_nacimiento: "",
   canal_adquisicion: "",
+  acepta_marketing: false,
   etiquetas: [],
   observaciones: "",
 };
 
 // Opciones del desplegable de canal (de dónde llegó el cliente).
 const CANALES = [
+  { valor: "web", label: "Reserva online" },
   { valor: "instagram", label: "Instagram" },
   { valor: "tiktok", label: "TikTok" },
   { valor: "referido", label: "Referido" },
@@ -153,7 +156,7 @@ export function CamposCliente({ datos, onCambio }: CamposClienteProps) {
           <Label>¿Cómo llegó?</Label>
           <Select
             value={datos.canal_adquisicion || undefined}
-            onValueChange={(v) => onCambio("canal_adquisicion", v)}
+            onValueChange={(v) => onCambio("canal_adquisicion", v ?? "")}
           >
             <SelectTrigger>
               <SelectValue placeholder="Elegí un canal" />
@@ -207,6 +210,23 @@ export function CamposCliente({ datos, onCambio }: CamposClienteProps) {
           />
         </div>
       </div>
+      {/* Consentimiento de marketing (Ley 25.326). Los recordatorios del turno
+          NO dependen de esto: son parte del servicio que el cliente pidió. */}
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border p-3">
+        <input
+          type="checkbox"
+          checked={datos.acepta_marketing}
+          onChange={(e) => onCambio("acepta_marketing", e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+        />
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          <b className="text-foreground">Acepta recibir promociones por email</b>
+          <br />
+          Necesario para mandarle campañas de cumpleaños o de recuperación. Los
+          recordatorios del turno le llegan igual.
+        </span>
+      </label>
+
     </div>
   );
 }

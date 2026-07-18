@@ -1,6 +1,6 @@
 """Schemas de autenticación: lo que entra y sale por los endpoints de login (E2)."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field, EmailStr
 
 
 class LoginRequest(BaseModel):
@@ -41,3 +41,16 @@ class UsuarioMe(BaseModel):
     empresa_id: int
 
     model_config = {"from_attributes": True}
+
+class OlvidePasswordRequest(BaseModel):
+    email: str = Field(max_length=200)
+
+
+class RestablecerPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    clave_nueva: str = Field(min_length=8, max_length=100)
+
+
+class CambiarPasswordRequest(BaseModel):
+    clave_actual: str = Field(max_length=100)
+    clave_nueva: str = Field(min_length=8, max_length=100)

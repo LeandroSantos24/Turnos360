@@ -2,6 +2,7 @@
 
 from sqlalchemy.orm import Session
 
+from app.services import mercadopago as mp
 from app.models import Empresa, Rubro
 from app.schemas.empresa import LandingConfig
 
@@ -60,3 +61,60 @@ def actualizar_landing(db: Session, empresa_id: int, datos: LandingConfig) -> di
     empresa.galeria = [u.strip() for u in (datos.galeria or []) if u and u.strip()][:12]
     db.commit()
     return obtener_landing(db, empresa_id)
+
+def config_senas(db: Session, empresa_id: int) -> dict:
+    """Estado de señas para el panel (sin exponer el token)."""
+    empresa = db.get(Empresa, empresa_id)
+    return {
+        "sena_activa": empresa.sena_activa,
+        "sena_monto": float(empresa.sena_monto) if empresa.sena_monto else None,
+        "cobro_modo": empresa.cobro_modo or "ninguno",
+        "mp_conectado": empresa.mp_credenciales is not None,
+    }
+
+
+def guardar_senas(db: Session, empresa_id: int, datos) -> dict:
+    """Guarda switch + monto; el token solo si vino uno nuevo (no se pisa con vacío)."""
+    empresa = db.get(Empresa, empresa_id)
+    empresa.cobro_modo = datos.cobro_modo
+    # sena_activa queda sincronizado (compatibilidad con lo ya construido).
+    empresa.sena_activa = datos.cobro_modo != "ninguno"
+    empresa.sena_monto = datos.sena_monto
+    if datos.mp_access_token and datos.mp_access_token.strip():
+        mp.guardar_token(empresa, datos.mp_access_token)
+    db.commit()
+    return config_senas(db, empresa_id)
+
+
+# ============================================================
+# Automatizaciones (campañas): defaults + get/put
+# ============================================================
+
+AUTOMS_DEFAULTS: dict = {
+    "recordatorio_24h": {"activa": True},
+    "recordatorio_2h": {"activa": False},
+    "cumple": {"activa": False, "dias_antes": 7, "mensaje": ""},
+    "resena_google": {"activa": False, "link": ""},
+    "inactivos": {"activa": False, "dias": 60, "mensaje": ""},
+}
+
+
+def automs_de(empresa) -> dict:
+    """Config de automatizaciones de la empresa, con defaults completados."""
+    guardado = empresa.automatizaciones or {}
+    resultado = {}
+    for clave, defaults in AUTOMS_DEFAULTS.items():
+        resultado[clave] = {**defaults, **(guardado.get(clave) or {})}
+    return resultado
+
+
+def config_automatizaciones(db: Session, empresa_id: int) -> dict:
+    empresa = db.get(Empresa, empresa_id)
+    return automs_de(empresa)
+
+
+def guardar_automatizaciones(db: Session, empresa_id: int, datos: dict) -> dict:
+    empresa = db.get(Empresa, empresa_id)
+    empresa.automatizaciones = datos
+    db.commit()
+    return automs_de(empresa)

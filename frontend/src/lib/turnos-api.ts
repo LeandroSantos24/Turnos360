@@ -25,6 +25,8 @@ export interface Turno {
   es_sobreturno: boolean;
   importe_previsto: number | null;
   cubierto_por_abono: boolean;
+  sena_estado: string | null; // null · "pendiente" · "pagada"
+  sena_monto: number | null;
   descuento_pct: number;
   cobrado: boolean;
   total: number;

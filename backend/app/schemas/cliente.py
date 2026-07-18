@@ -26,6 +26,8 @@ class ClienteBase(BaseModel):
     preferencias: dict = Field(default_factory=dict)
     etiquetas: list[str] = Field(default_factory=list)
     observaciones: str | None = None
+    # Consentimiento para campañas promocionales (Ley 25.326).
+    acepta_marketing: bool = False
 
 
 class ClienteCrear(ClienteBase):
@@ -52,8 +54,13 @@ class ClienteEditar(BaseModel):
 
 
 class ClienteOut(ClienteBase):
-    """Lo que la API devuelve: los campos del cliente + los que pone el sistema."""
+    """Lo que la API devuelve: los campos del cliente + los que pone el sistema.
 
+    email se relaja a str: la validación EmailStr es para la ENTRADA (crear /
+    editar). Al LEER, un dato viejo mal guardado no puede tumbar el listado.
+    """
+
+    email: str | None = None
     id: int
     empresa_id: int
     activo: bool

@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarCheck, MessageCircle, BarChart3 } from "lucide-react";
 
@@ -140,6 +141,14 @@ export default function LoginPage() {
               </p>
             )}
 
+            <div className="text-right">
+              <Link
+                href="/olvide-password"
+                className="text-sm text-gray-500 hover:text-[#00b894]"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
             <Button type="submit" className="w-full" disabled={cargando}>
               {cargando ? "Ingresando…" : "Ingresar"}
             </Button>

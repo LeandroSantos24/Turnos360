@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     # (ej: "https://app.turnos360.com,https://turnos360.com").
     cors_origins: str = "http://localhost:3000"
 
+    # URLs base (deploy: dominio real). public = vidriera/landing; api = backend.
+    public_base_url: str = "http://localhost:3000"
+    api_base_url: str = "http://localhost:8000"
+
+    # Email saliente (Gmail SMTP con contraseña de aplicación; gratis ~500/día).
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""          # turnos360.contacto@gmail.com
+    smtp_pass: str = ""          # contraseña de APLICACIÓN (no la de la cuenta)
+    smtp_from: str = ""          # opcional; default = smtp_user
+
     # --- JWT (E2) ---
     jwt_algoritmo: str = "HS256"
     access_token_minutos: int = 30      # token corto: viaja en cada request

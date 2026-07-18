@@ -14,8 +14,13 @@ from app.core.seguridad import (
 )
 from app.core.crypto import verificar_clave
 from app.core.rate_limit import limiter
+import datetime as dt
+import hashlib
+import secrets
+
+from app.core.crypto import hash_clave, verificar_clave as _verificar_clave
 from app.models import Empresa, Usuario
-from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
+from app.schemas.auth import CambiarPasswordRequest, OlvidePasswordRequest, RestablecerPasswordRequest, LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -104,3 +109,76 @@ def me(usuario: UsuarioActual) -> Usuario:
     con 401 antes de entrar acá (lo hace el guardián get_current_usuario).
     """
     return usuario
+
+# ============================================================
+# Recuperación y cambio de contraseña
+# ============================================================
+
+@router.post("/olvide-password")
+@limiter.limit("3/minute")
+def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> dict:
+    """Pide el email y manda un link de restablecimiento (si la cuenta existe).
+
+    SIEMPRE responde lo mismo: no revelamos si un email está registrado o no.
+    El token viaja por email; acá solo guardamos su hash, con 60 min de vida.
+    """
+    usuario = db.scalar(
+        select(Usuario).where(Usuario.email == datos.email, Usuario.activo.is_(True))
+    )
+    if usuario is not None:
+        token = secrets.token_urlsafe(32)
+        usuario.reset_token_hash = hashlib.sha256(token.encode()).hexdigest()
+        usuario.reset_token_expira = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
+            minutes=60
+        )
+        db.commit()
+        try:
+            from app.tasks.emails import enviar_reset_password
+
+            enviar_reset_password.delay(usuario.id, token)
+        except Exception:
+            pass
+    return {"detalle": "Si el email está registrado, te enviamos un link para restablecer la contraseña."}
+
+
+@router.post("/restablecer-password")
+@limiter.limit("5/minute")
+def restablecer_password(
+    request: Request, datos: RestablecerPasswordRequest, db: DB
+) -> dict:
+    """Cambia la clave usando el token del email. Un solo uso, expira en 60 min."""
+    token_hash = hashlib.sha256(datos.token.encode()).hexdigest()
+    usuario = db.scalar(
+        select(Usuario).where(
+            Usuario.reset_token_hash == token_hash,
+            Usuario.reset_token_expira > dt.datetime.now(dt.timezone.utc),
+            Usuario.activo.is_(True),
+        )
+    )
+    if usuario is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El link no es válido o ya venció. Pedí uno nuevo desde el login.",
+        )
+    usuario.hash_clave = hash_clave(datos.clave_nueva)
+    usuario.reset_token_hash = None
+    usuario.reset_token_expira = None
+    db.commit()
+    return {"detalle": "Contraseña actualizada. Ya podés entrar con la nueva."}
+
+
+@router.post("/cambiar-password")
+def cambiar_password(
+    datos: CambiarPasswordRequest, usuario: UsuarioActual, db: DB
+) -> dict:
+    """Cambio de clave estando logueado: pide la actual y setea la nueva."""
+    if not _verificar_clave(datos.clave_actual, usuario.hash_clave):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual no es correcta",
+        )
+    usuario.hash_clave = hash_clave(datos.clave_nueva)
+    usuario.reset_token_hash = None
+    usuario.reset_token_expira = None
+    db.commit()
+    return {"detalle": "Contraseña actualizada"}

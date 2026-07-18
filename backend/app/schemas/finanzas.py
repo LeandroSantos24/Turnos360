@@ -108,11 +108,22 @@ class CajaOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class MetodoResumen(BaseModel):
-    """Cuánto entró por cada método de pago (arqueo: dónde está la plata)."""
+class EgresoMetodoResumen(BaseModel):
+    """Gastos por método. Sin comisión: en un egreso se paga el monto completo."""
 
     metodo: str
+    cantidad: int = 0
     total: float
+
+
+class MetodoResumen(BaseModel):
+    """Cuánto entró por cada método (arqueo: dónde está la plata y qué come)."""
+
+    metodo: str
+    cantidad: int = 0        # cuántos cobros entraron por este método
+    total: float             # bruto
+    comision: float = 0.0    # lo que se come el método (MP, tarjeta…)
+    neto: float = 0.0        # total − comisión: lo que queda de verdad
 
 
 class CajaResumen(BaseModel):
@@ -126,6 +137,12 @@ class CajaResumen(BaseModel):
     diferencia: float | None = None # real − esperado
     cantidad_movimientos: int
     por_metodo: list[MetodoResumen] = []
+    egresos_por_metodo: list[EgresoMetodoResumen] = []
+    total_comisiones: float = 0.0   # suma de comisiones de todos los métodos
+    total_neto: float = 0.0         # ingresos − comisiones: la plata real
+    # El cajón físico SOLO tiene billetes: el arqueo se cuadra contra esto,
+    # no contra el total (que mezcla transferencias y tarjetas).
+    efectivo_esperado: float = 0.0
 
 
 # ─────────────────────────── Gastos (N-56) ──────────────────────────────────

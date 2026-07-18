@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Users, ExternalLink, Copy, Check } from "lucide-react";
+import { Plus, Users, ExternalLink, Copy, Check, Crown } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -16,6 +16,7 @@ import {
   listarRubros,
   crearEmpresa,
   pausarEmpresa,
+  setearSuscripcion,
   EmpresaAdmin,
   RubroAdmin,
 } from "@/lib/admin-api";
@@ -146,6 +147,16 @@ export default function AdminEmpresasPage() {
       cargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar");
+    }
+  }
+
+  async function renovar30(emp: EmpresaAdmin) {
+    try {
+      await setearSuscripcion(emp.id, { renovar_30: true });
+      toast.success(`Suscripción de ${emp.nombre} renovada por 30 días`);
+      cargar();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo renovar");
     }
   }
 
@@ -284,10 +295,14 @@ export default function AdminEmpresasPage() {
                       Pausada
                     </span>
                   )}
+                  <ChipSuscripcion estado={e.estado_suscripcion} plan={e.plan} />
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {e.rubro_nombre ?? "—"} · /{e.slug} · {e.cantidad_usuarios}{" "}
                   {e.cantidad_usuarios === 1 ? "usuario" : "usuarios"}
+                  {e.suscripcion_vence && (
+                    <> · vence {new Date(`${e.suscripcion_vence}T12:00:00`).toLocaleDateString("es-AR")}</>
+                  )}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -317,6 +332,14 @@ export default function AdminEmpresasPage() {
                 >
                   <ExternalLink className="mr-1.5 h-4 w-4" /> Ver página
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => renovar30(e)}
+                  title="Renovar la suscripción por 30 días desde hoy"
+                >
+                  <Crown className="mr-1.5 h-4 w-4" /> Renovar 30d
+                </Button>
                 <Link href={`/admin/empresas/${e.id}`}>
                   <Button variant="outline" size="sm">
                     <Users className="mr-1.5 h-4 w-4" /> Usuarios
@@ -328,5 +351,29 @@ export default function AdminEmpresasPage() {
         </div>
       )}
     </div>
+  );
+}
+/* ── Chip de estado de suscripción en la lista de empresas ── */
+function ChipSuscripcion({ estado, plan }: { estado: string; plan: string }) {
+  if (estado === "sin_vencimiento") {
+    return (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        {plan === "gratuito" ? "Gratuito" : "Sin vencimiento"}
+      </span>
+    );
+  }
+  const map: Record<string, { txt: string; color: string }> = {
+    activa: { txt: "Activa", color: "#10b981" },
+    prorroga: { txt: "En prórroga", color: "#f59e0b" },
+    vencida: { txt: "Vencida", color: "#ef4444" },
+  };
+  const s = map[estado] ?? map.activa;
+  return (
+    <span
+      className="rounded-full px-2 py-0.5 text-xs font-semibold"
+      style={{ background: `${s.color}22`, color: s.color }}
+    >
+      {s.txt}
+    </span>
   );
 }

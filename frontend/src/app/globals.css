@@ -13,6 +13,9 @@
 
 @layer base {
   :root {
+    /* Los controles nativos (desplegable del select, calendario del date)
+       los pinta el navegador: hay que declararle el esquema de color. */
+    color-scheme: light;
     /* Fondo claro, contenido sobre gris muy suave (como TurnosPro) */
     --background: 220 33% 98%;        /* #f8f9fc */
     --foreground: 222 47% 11%;        /* #0f172a navy texto */
@@ -55,6 +58,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     --background: 222 47% 8%;
     --foreground: 210 40% 98%;
     --card: 222 47% 11%;
@@ -106,3 +110,10 @@
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover { background: hsl(215 16% 60%); }
+/* Opciones de los <select> nativos: el popup lo dibuja el navegador/sistema
+   (en Chrome sobre Linux puede ignorar color-scheme), así que forzamos fondo
+   y texto con las variables del tema. Legible en claro y en oscuro. */
+select option {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}

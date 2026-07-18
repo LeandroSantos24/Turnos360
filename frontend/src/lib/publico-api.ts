@@ -46,7 +46,8 @@ export interface DatosReserva {
   servicio_id: number;
   recurso_id: number | null; // null = sin preferencia
   inicio: string; // ISO datetime (uno de los huecos)
-  cliente: { nombre: string; telefono: string; email?: string | null };
+  cliente: { nombre: string; telefono: string; email: string; acepta_marketing?: boolean };
+  cupon_codigo?: string | null;
 }
 
 export interface ReservaResultado {
@@ -56,6 +57,9 @@ export interface ReservaResultado {
   inicio: string;
   estado: string;
   mensaje: string;
+  /** Seña (si el negocio la tiene activa): checkout de MP y monto. */
+  pago_url: string | null;
+  sena_monto: number | null;
 }
 
 /** Datos de la página del negocio (GET /publico/{slug}). */
@@ -86,4 +90,22 @@ export function reservar(slug: string, datos: DatosReserva): Promise<ReservaResu
     `/publico/${encodeURIComponent(slug)}/reservar`,
     datos,
   );
+}
+
+export interface CuponValidado {
+  valido: boolean;
+  mensaje: string;
+  descuento: number;
+  precio_final: number | null;
+}
+
+export function validarCupon(
+  slug: string,
+  codigo: string,
+  servicioId: number,
+): Promise<CuponValidado> {
+  return api.post<CuponValidado>(`/publico/${encodeURIComponent(slug)}/cupon/validar`, {
+    codigo,
+    servicio_id: servicioId,
+  });
 }

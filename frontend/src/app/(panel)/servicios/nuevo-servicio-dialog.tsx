@@ -13,6 +13,7 @@
 
 import { useState } from "react";
 import { crearServicio } from "@/lib/servicios-api";
+import { SelectorRecursos } from "./selector-recursos";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
   // Carril de agenda
   const [enParalelo, setEnParalelo] = useState(false); // ¿convive con todo?
   const [grupo, setGrupo] = useState(""); // nombre del carril (si NO es en paralelo)
+  const [recursoIds, setRecursoIds] = useState<number[]>([]);
 
   function limpiar() {
     setNombre("");
@@ -63,6 +65,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
     setAgendable(true);
     setEnParalelo(false);
     setGrupo("");
+    setRecursoIds([]);
   }
 
   async function guardar(e: React.FormEvent) {
@@ -87,6 +90,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
         precio: precio ? Number(precio) : undefined,
         grupo_agenda: agendable ? grupoAgenda : null,
         agendable,
+        recurso_ids: recursoIds,
       });
       toast.success("Servicio creado");
       limpiar();
@@ -212,6 +216,8 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
                 </p>
               </div>
               )}
+
+              <SelectorRecursos seleccionados={recursoIds} onCambio={setRecursoIds} />
             </div>
           )}
 

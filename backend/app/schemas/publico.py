@@ -6,7 +6,9 @@ sin login. Ver app/routers/publico.py.
 
 import datetime as dt
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class ServicioPublico(BaseModel):
@@ -52,7 +54,19 @@ class ClientePublico(BaseModel):
 
     nombre: str = Field(min_length=1, max_length=120)
     telefono: str = Field(min_length=5, max_length=40)
-    email: str | None = Field(default=None, max_length=200)
+    # Email OBLIGATORIO: es por donde viajan la confirmación, el recordatorio y
+    # el aviso si el turno cambia. Sin email el cliente queda incomunicado.
+    email: str = Field(min_length=5, max_length=200)
+    # Tilde de consentimiento para campañas promocionales (Ley 25.326).
+    acepta_marketing: bool = False
+
+    @field_validator("email")
+    @classmethod
+    def _email_valido(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v):
+            raise ValueError("Escribí un email válido (ej: nombre@gmail.com)")
+        return v
 
 
 class ReservaPublicaCrear(BaseModel):
@@ -60,6 +74,7 @@ class ReservaPublicaCrear(BaseModel):
     recurso_id: int | None = None  # None = "sin preferencia" (cualquiera libre)
     inicio: dt.datetime
     cliente: ClientePublico
+    cupon_codigo: str | None = Field(default=None, max_length=40)
 
 
 class ReservaPublicaOut(BaseModel):
@@ -69,3 +84,6 @@ class ReservaPublicaOut(BaseModel):
     inicio: dt.datetime
     estado: str
     mensaje: str
+    # Seña (si el negocio la tiene activa): URL de Checkout Pro y monto.
+    pago_url: str | None = None
+    sena_monto: float | None = None

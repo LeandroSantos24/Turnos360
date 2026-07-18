@@ -61,6 +61,9 @@ class TurnoOut(BaseModel):
     recurso_nombre: str | None = None
     servicio_nombre: str | None = None
     servicio_grupo: str | None = None  # carril del servicio (corte/tintura/barba)
+    # Seña online (Mercado Pago): null = sin seña · pendiente · pagada
+    sena_estado: str | None = None
+    sena_monto: float | None = None
     model_config = {"from_attributes": True}
 class TurnosPagina(BaseModel):
     total: int
