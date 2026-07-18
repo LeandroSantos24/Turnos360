@@ -7,7 +7,9 @@ Nginx hay que pasar la IP real (X-Forwarded-For) o todos caen en el mismo bucket
 
 import datetime as dt
 
+from anyio import to_thread
 from fastapi import APIRouter, HTTPException, Query, Request
+from sqlalchemy import select
 
 from app.api.deps import DB
 from app.core.rate_limit import limiter
@@ -52,11 +54,25 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     except HTTPException:
         return {"ok": True}
 
+    # Idempotencia: MP reintenta la misma notificación varias veces. Si este
+    # pago ya quedó registrado en un turno de la empresa, cortamos acá y nos
+    # ahorramos la llamada saliente a la API de MP en cada reintento.
+    ya_procesado = db.scalar(
+        select(Turno).where(
+            Turno.empresa_id == empresa.id,
+            Turno.mp_payment_id == str(payment_id),
+        )
+    )
+    if ya_procesado is not None:
+        return {"ok": True}
+
     token = mp.token_de(empresa)
     if not token:
         return {"ok": True}
 
-    pago = mp.consultar_pago(token, str(payment_id))
+    # El cliente de MP es httpx sincrónico y este endpoint es async: la llamada
+    # va al threadpool para no frenar el event loop mientras responde MP.
+    pago = await to_thread.run_sync(mp.consultar_pago, token, str(payment_id))
     if not pago or pago.get("status") != "approved":
         return {"ok": True}
 
@@ -111,8 +127,15 @@ def reservar(
     return svc.reservar(db, slug, datos)
 
 @router.post("/{slug}/cupon/validar", response_model=CuponValidarOut)
-def validar_cupon_publico(slug: str, datos: CuponValidarIn, db: DB) -> CuponValidarOut:
-    """El wizard valida el código ANTES de reservar, para mostrar el descuento."""
+@limiter.limit("20/minute")
+def validar_cupon_publico(
+    request: Request, slug: str, datos: CuponValidarIn, db: DB
+) -> CuponValidarOut:
+    """El wizard valida el código ANTES de reservar, para mostrar el descuento.
+
+    Con rate limit: sin él, este endpoint permite fuerza bruta de códigos de
+    cupón (descubrir promociones probando "PROMO10", "VERANO", etc.).
+    """
     from app.services import cupones as svc_cupones
     from app.services.publico import resolver_empresa
 
@@ -124,7 +147,6 @@ def validar_cupon_publico(slug: str, datos: CuponValidarIn, db: DB) -> CuponVali
         return CuponValidarOut(valido=False, mensaje=mensaje)
     # precio final estimado (sobre el precio del servicio)
     from app.models.agenda import Servicio
-    from sqlalchemy import select
     servicio = db.scalar(
         select(Servicio).where(Servicio.id == datos.servicio_id, Servicio.empresa_id == empresa.id)
     )

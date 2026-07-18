@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str = PLACEHOLDER_SECRET
 
+    # Clave propia para la encriptación Fernet de las credenciales por empresa
+    # (Mercado Pago / WhatsApp / email). SEPARADA de SECRET_KEY a propósito:
+    # los JWT y las credenciales guardadas tienen ciclos de vida distintos, y
+    # rotar la firma de los tokens (p. ej. ante una sospecha de leak) no debe
+    # romper lo que ya está encriptado en la base.
+    # En dev puede quedar vacía (crypto deriva de SECRET_KEY, como siempre);
+    # en producción es OBLIGATORIA y distinta de SECRET_KEY.
+    fernet_key: str = ""
+
     # Orígenes permitidos por CORS. En dev, el front local; en producción, los
     # dominios reales separados por coma en la variable de entorno CORS_ORIGINS
     # (ej: "https://app.turnos360.com,https://turnos360.com").
@@ -46,14 +55,30 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
-    def _exigir_secret_en_produccion(self):
-        # Fail-fast: si arrancás en producción sin un SECRET_KEY real, el backend
+    def _exigir_secretos_en_produccion(self):
+        # Fail-fast: si arrancás en producción sin secretos reales, el backend
         # no levanta y te avisa, en vez de quedar inseguro en silencio.
-        if self.es_produccion and self.secret_key.strip() in ("", PLACEHOLDER_SECRET):
+        if not self.es_produccion:
+            return self
+
+        generar = 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+
+        if self.secret_key.strip() in ("", PLACEHOLDER_SECRET):
             raise ValueError(
                 "SECRET_KEY sin configurar en producción. Generá uno real con: "
-                'python -c "import secrets; print(secrets.token_urlsafe(48))" '
-                "y seteá la variable de entorno SECRET_KEY."
+                f"{generar} y seteá la variable de entorno SECRET_KEY."
+            )
+        if not self.fernet_key.strip():
+            raise ValueError(
+                "FERNET_KEY sin configurar en producción. Encripta las credenciales "
+                "de MP/WhatsApp/email y debe ser propia (no derivada de SECRET_KEY). "
+                f"Generá una con: {generar} y seteá la variable de entorno FERNET_KEY."
+            )
+        if self.fernet_key.strip() == self.secret_key.strip():
+            raise ValueError(
+                "FERNET_KEY no puede ser igual a SECRET_KEY: la separación existe "
+                "para poder rotar la firma de los JWT sin romper las credenciales "
+                "guardadas. Generá una FERNET_KEY propia."
             )
         return self
 

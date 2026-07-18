@@ -1,0 +1,47 @@
+# Imagen de PRODUCCIÓN del frontend (multi-stage, output standalone).
+# La de desarrollo sigue siendo ./Dockerfile (npm run dev + código montado).
+#
+# IMPORTANTE: NEXT_PUBLIC_API_URL se hornea en el bundle EN BUILD TIME (así
+# funcionan las variables NEXT_PUBLIC_* de Next). Se pasa como build-arg;
+# pasarla como env de runtime a un build ya hecho NO hace nada.
+#
+#   docker build -f Dockerfile.prod \
+#     --build-arg NEXT_PUBLIC_API_URL=https://api.turnos360.com.ar \
+#     -t turnos360-frontend .
+#
+# API_URL_INTERNA (la usa el server-side, ej. sitemap) sí es de runtime y se
+# pasa como environment en el compose, igual que hasta ahora.
+
+# ── 1. Dependencias ─────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# ── 2. Build ────────────────────────────────────────────────────
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# ── 3. Runtime (solo lo necesario, usuario sin privilegios) ─────
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+
+COPY --from=build /app/public ./public
+COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+CMD ["node", "server.js"]

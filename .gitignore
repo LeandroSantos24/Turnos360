@@ -17,6 +17,10 @@ out/
 .env.*
 !.env.example
 
+# Artefactos de runtime (los genera la app al correr; no se versionan)
+celerybeat-schedule
+*.tsbuildinfo
+
 # Editor / SO
 .vscode/
 .idea/

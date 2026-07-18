@@ -1,7 +1,9 @@
 """Encriptación de credenciales por empresa (Regla 7) y hash de claves.
 
-Las credenciales de WhatsApp/email se guardan como BYTEA encriptado con
-Fernet, cuya clave se deriva de SECRET_KEY. Las claves de usuario usan
+Las credenciales de MP/WhatsApp/email se guardan como BYTEA encriptado con
+Fernet. La clave Fernet sale de FERNET_KEY (propia, separada de la firma de
+los JWT); en desarrollo, si FERNET_KEY está vacía, se deriva de SECRET_KEY
+como siempre para no romper el entorno local. Las claves de usuario usan
 PBKDF2-HMAC-SHA256 con salt aleatorio.
 """
 
@@ -16,7 +18,10 @@ from app.core.config import settings
 
 
 def _fernet() -> Fernet:
-    key = hashlib.sha256(settings.secret_key.encode()).digest()
+    # FERNET_KEY propia si está configurada; si no (dev), deriva de SECRET_KEY.
+    # En producción, config.py exige FERNET_KEY, así que el fallback nunca corre.
+    origen = settings.fernet_key.strip() or settings.secret_key
+    key = hashlib.sha256(origen.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 

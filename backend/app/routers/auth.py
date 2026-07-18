@@ -16,6 +16,7 @@ from app.core.crypto import verificar_clave
 from app.core.rate_limit import limiter
 import datetime as dt
 import hashlib
+import logging
 import secrets
 
 from app.core.crypto import hash_clave, verificar_clave as _verificar_clave
@@ -23,6 +24,8 @@ from app.models import Empresa, Usuario
 from app.schemas.auth import CambiarPasswordRequest, OlvidePasswordRequest, RestablecerPasswordRequest, LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+log = logging.getLogger(__name__)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -137,7 +140,13 @@ def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> d
 
             enviar_reset_password.delay(usuario.id, token)
         except Exception:
-            pass
+            # La respuesta al usuario no cambia (no revelamos nada), pero esto
+            # TIENE que quedar en los logs: si el broker está caído, el email
+            # nunca se encoló y alguien se tiene que enterar.
+            log.exception(
+                "No se pudo encolar el email de restablecimiento (usuario %s)",
+                usuario.id,
+            )
     return {"detalle": "Si el email está registrado, te enviamos un link para restablecer la contraseña."}
 
 
