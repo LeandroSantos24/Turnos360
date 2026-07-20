@@ -46,15 +46,19 @@ function etiqueta(p: string): string {
 function ContenidoImprimirEstadisticas() {
   const sp = useSearchParams();
   const periodo = sp.get("periodo") ?? "mes";
+  // El panel arrastra acá el profesional filtrado: sin esto, filtrabas por un
+  // barbero y el impreso salía con los totales de todo el negocio.
+  const recursoIdParam = sp.get("recurso_id");
+  const recursoId = recursoIdParam ? Number(recursoIdParam) : null;
   const [datos, setDatos] = useState<EstadisticasFacturacion | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     const { desde, hasta } = rango(periodo);
-    obtenerFacturacion(desde.toISOString(), hasta.toISOString())
+    obtenerFacturacion(desde.toISOString(), hasta.toISOString(), recursoId)
       .then(setDatos)
       .catch(() => setError(true));
-  }, [periodo]);
+  }, [periodo, recursoId]);
 
   if (error) {
     return (
@@ -85,7 +89,12 @@ function ContenidoImprimirEstadisticas() {
         {/* Encabezado */}
         <div className="border-b-2 border-black pb-3">
           <h1 className="text-2xl font-bold">Estadísticas de facturación</h1>
-          <p className="mt-1 text-sm">{etiqueta(periodo)}</p>
+          <p className="mt-1 text-sm">
+            {etiqueta(periodo)}
+            {recursoId != null && datos?.por_profesional.length === 1
+              ? ` · ${datos.por_profesional[0].recurso}`
+              : ""}
+          </p>
         </div>
 
         {/* Totales */}

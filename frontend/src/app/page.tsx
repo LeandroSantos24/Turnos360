@@ -1,1602 +1,396 @@
 "use client";
-
-/**
- * Landing comercial de Turnos360 (https://turnos360.com.ar/). La página que
- * presenta el producto a los dueños de negocios: qué hace, cómo funciona y
- * cómo pedir una demo. El CTA es WhatsApp porque el onboarding es administrado
- * (no hay self-signup).
- *
- * Página pública: fondo blanco y colores explícitos (inmune al modo oscuro
- * del panel). Marca: teal + lima del logo, tipografías Syne + DM Sans.
- */
-
-import { Fragment, useEffect, useState } from "react";
+// Landing Turnos360 — reemplaza app/page.tsx
+// Copiá las imágenes a /public/img/ con estos nombres (ver README-integracion.md)
+import { useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
-import {
-  CalendarDays,
-  Globe,
-  Wallet,
-  BadgeCheck,
-  Users,
-  BarChart3,
-  MessageCircle,
-  Check,
-  ArrowRight,
-  Sparkles,
-  Scissors,
-  Brush,
-  Hand,
-  Waves,
-  Apple,
-  Mail,
-  Gift,
-  Bell,
-  CreditCard,
-  X,
-  ChevronDown,
-} from "lucide-react";
 
-/* ============================================================
-   COMPLETAR ANTES DEL DEPLOY
-   Número de WhatsApp para pedir demos, SIN "+" ni espacios.
-   Ej: Argentina móvil → 549 + código de área + número.
-   ============================================================ */
-const WHATSAPP_NUMERO = "5492613456599";
+const WA_NUMBER = "5492610000000"; // ← tu número real
+const WA_LINK = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent("Hola! Quiero una demo de Turnos360 para mi negocio.")}`;
 
-const EMAIL_CONTACTO = "turnos360.contacto@gmail.com"; // ← CONFIRMAR dirección exacta
-const MENSAJE_DEMO = "Hola! Quiero una demo de Turnos360 para mi negocio.";
-const LINK_DEMO = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(MENSAJE_DEMO)}`;
+const font = { sora: "'Sora', sans-serif", dm: "'DM Sans', sans-serif" };
 
-/* Marca (tomada del logo) */
-const TINTA = "#0c1015";
-const TINTA_SUAVE = "#4b5566";
-const BORDE = "#e9ecf1";
-const SUPERFICIE = "#f6f7f9";
-const TEAL = "#17a08a";
-const TEAL_OSCURO = "#0e8371";
-const LIMA = "#8bc540";
+const pains = [
+  { num: "01", title: "Los ausentes", body: "El que reserva y no viene te quema una hora que podías facturar. Es el dolor número uno del rubro." },
+  { num: "02", title: "El WhatsApp desbordado", body: "Contestás mensajes todo el día para agendar turnos, incluso fuera de horario y los domingos." },
+  { num: "03", title: "No sabés tus números", body: "Cuánto facturaste el mes, cuánto le toca a cada barbero, qué servicio deja más plata: ni idea real." },
+  { num: "04", title: "Clientes que se van", body: "No sabés quién hace tres meses que no viene. Y recuperarlo cuesta menos que conseguir uno nuevo." },
+];
 
-function hexA(hex: string, alpha: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+const features = [
+  { glyph: "$", title: "Seña online con Mercado Pago", body: "El cliente paga la seña al reservar. El que puso plata, viene. Tu arma directa contra los ausentes." },
+  { glyph: "≡", title: "Agenda con carriles paralelos", body: "Un corte, una tintura y una barba conviven en el mismo horario sin pisarse. Los competidores esto lo resuelven mal." },
+  { glyph: "◉", title: "Caja de verdad", body: "Apertura, cierre y arqueo. Pago dividido entre métodos, comisión por método y gastos del día." },
+  { glyph: "%", title: "Comisiones por profesional", body: "Cada barbero con su porcentaje. La liquidación sale sola, sin cuentas en papelitos." },
+  { glyph: "∞", title: "Membresías y gift cards", body: "\u201CPagás $50.000 y tenés los cortes del mes.\u201D Abonos, gift cards con QR y cupones para llenar horas flojas." },
+  { glyph: "✓", title: "Ficha de cada cliente", body: "Historial, gasto total, servicio favorito y etiquetas: VIP, frecuente o en riesgo de no volver." },
+];
 
-const EASE: [number, number, number, number] = [0.21, 0.6, 0.35, 1];
+const shots = [
+  { label: "Inicio", src: "/img/panel-inicio.png", caption: "Resumen del mes: turnos, ingresos previstos y tasa de ausencias de un vistazo." },
+  { label: "Estadísticas", src: "/img/panel-estadisticas.png", caption: "Facturación real, comisiones y ticket promedio, filtrado por profesional." },
+  { label: "Campañas", src: "/img/panel-campanas.png", caption: "Recordatorios y campañas automáticas: se prenden una vez y andan solas." },
+];
 
-/** Aparece al entrar en viewport (una sola vez). */
-function Reveal({
-  children,
-  delay = 0,
-  className,
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  const reduce = useReducedMotion();
+const steps = [
+  { num: "01", title: "Nos contás de tu negocio", body: "Por WhatsApp: tus servicios, precios, horarios y quiénes trabajan con vos. Nada técnico." },
+  { num: "02", title: "Te lo dejamos andando", body: "Cargamos todo, conectamos Mercado Pago y te entregamos tu página de reservas lista, con tu logo y tus colores." },
+  { num: "03", title: "Tus clientes reservan solos", body: "Compartís tu link, el sistema cobra la seña, manda recordatorios y vos ves los números cada noche." },
+];
+
+const rubros = [
+  { emoji: "💈", label: "Barberías" },
+  { emoji: "✂️", label: "Peluquerías" },
+  { emoji: "💅", label: "Salones de uñas" },
+  { emoji: "✨", label: "Centros de estética" },
+  { emoji: "🧖", label: "Spa" },
+  { emoji: "🥗", label: "Consultorios de nutrición" },
+];
+
+const planItems = [
+  "Agenda con carriles paralelos",
+  "Página de reservas propia (tu link y tu QR)",
+  "Seña online con Mercado Pago",
+  "Recordatorios automáticos anti-ausencias",
+  "Caja con apertura, cierre y arqueo",
+  "Comisiones por profesional",
+  "Membresías, gift cards y cupones",
+  "Estadísticas y ficha de cada cliente",
+  "Soporte por WhatsApp",
+];
+
+const fotos = [
+  { src: "/img/foto-barberia.jpg", alt: "Barbería" },
+  { src: "/img/foto-salon.jpg", alt: "Salón de uñas" },
+  { src: "/img/foto-estetica.jpg", alt: "Spa / estética" },
+];
+
+const faqs = [
+  { q: "¿Tengo que saber de computación?", a: "No. Nosotros damos de alta tu negocio, cargamos tus servicios, tu equipo y tu página. Vos entrás y ya está andando. Si algo no se entiende, nos escribís por WhatsApp y lo resolvemos." },
+  { q: "¿Mis clientes tienen que descargar una app?", a: "No. Reservan desde el link de tu página, en el navegador del celular. Compartís ese link en tu Instagram o tu estado de WhatsApp y listo." },
+  { q: "¿Me cobran comisión por cada turno?", a: "Cero. Pagás la cuota mensual y nada más. Si cobrás la seña con Mercado Pago, la plata va directo a tu cuenta y la única comisión es la de Mercado Pago, que no tocamos." },
+  { q: "¿Sirve si tengo varios barberos trabajando a la vez?", a: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada." },
+  { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
+  { q: "¿Puedo probarlo antes de pagar?", a: "Sí. Te hacemos una demo con tu negocio cargado de verdad — tus servicios, tu equipo, tu página — para que veas cómo te quedaría. Sin compromiso." },
+];
+
+function Monogram({ size = 30, invert = false }: { size?: number; invert?: boolean }) {
   return (
-    <motion.div
-      initial={reduce ? false : { opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.55, delay, ease: EASE }}
-      className={className}
-    >
-      {children}
-    </motion.div>
+    <div style={{ width: size, height: size, borderRadius: "50%", background: invert ? "#f5e9c9" : "#1c222c", color: invert ? "#1c222c" : "#f5e9c9", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: font.sora, fontWeight: 700, fontSize: size * 0.37, flexShrink: 0 }}>EF</div>
   );
 }
 
-function BotonDemo({ grande = false }: { grande?: boolean }) {
-  return (
-    <a
-      href={LINK_DEMO}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`inline-flex items-center justify-center gap-2 rounded-full font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] ${
-        grande ? "px-7 py-3.5 text-base" : "px-5 py-2.5 text-sm"
-      }`}
-      style={{
-        background: `linear-gradient(135deg, ${TEAL}, ${TEAL_OSCURO})`,
-        boxShadow: `0 10px 30px -10px ${hexA(TEAL, 0.55)}`,
-      }}
-    >
-      <MessageCircle className={grande ? "h-5 w-5" : "h-4 w-4"} />
-      Pedí una demo
-    </a>
-  );
-}
-
-/* ============ Mock del producto (CSS puro) ============ */
-
-function TurnoMock({
-  hora,
-  nombre,
-  servicio,
-  color,
-  alto,
-}: {
-  hora: string;
-  nombre: string;
-  servicio: string;
-  color: string;
-  alto: string;
-}) {
-  return (
-    <div
-      className={`rounded-lg border-l-[3px] px-2 py-1.5 ${alto}`}
-      style={{ borderLeftColor: color, background: hexA(color, 0.09) }}
-    >
-      <p className="text-[9px] font-semibold leading-tight" style={{ color: TINTA }}>
-        {hora} · {nombre}
-      </p>
-      <p className="text-[8px] leading-tight" style={{ color: TINTA_SUAVE }}>
-        {servicio}
-      </p>
-    </div>
-  );
-}
-
-function MockProducto() {
-  return (
-    <div className="relative mx-auto w-full max-w-2xl">
-      {/* Ventana del panel */}
-      <div
-        className="overflow-hidden rounded-2xl border bg-white"
-        style={{ borderColor: BORDE, boxShadow: "0 30px 80px -30px rgba(12,16,21,0.28)" }}
-      >
-        {/* Barra tipo ventana */}
-        <div
-          className="flex items-center gap-2 border-b px-4 py-2.5"
-          style={{ borderColor: BORDE, background: SUPERFICIE }}
-        >
-          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-          <p className="ml-2 text-[11px] font-medium" style={{ color: TINTA_SUAVE }}>
-            Agenda · Hoy
-          </p>
-          <span
-            className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold"
-            style={{ background: hexA(TEAL, 0.12), color: TEAL_OSCURO }}
-          >
-            12 turnos · $184.500 previstos
-          </span>
-        </div>
-
-        {/* Grilla de carriles */}
-        <div className="grid grid-cols-3 gap-2 p-3">
-          {[
-            {
-              titulo: "Corte",
-              color: TEAL,
-              turnos: [
-                { hora: "10:00", nombre: "Juan P.", servicio: "Corte fade", alto: "h-12" },
-                { hora: "10:45", nombre: "Marcos L.", servicio: "Corte + lavado", alto: "h-12" },
-                { hora: "11:30", nombre: "Tomás R.", servicio: "Corte clásico", alto: "h-10" },
-              ],
-            },
-            {
-              titulo: "Tintura",
-              color: "#8b5cf6",
-              turnos: [
-                { hora: "10:00", nombre: "Sofía M.", servicio: "Color completo", alto: "h-[104px]" },
-                { hora: "12:00", nombre: "Carla D.", servicio: "Mechas", alto: "h-16" },
-              ],
-            },
-            {
-              titulo: "Barba",
-              color: "#f59e0b",
-              turnos: [
-                { hora: "10:15", nombre: "Diego F.", servicio: "Perfilado", alto: "h-10" },
-                { hora: "11:00", nombre: "Lucas B.", servicio: "Barba + toalla", alto: "h-12" },
-                { hora: "12:00", nombre: "Nico S.", servicio: "Perfilado", alto: "h-10" },
-              ],
-            },
-          ].map((carril) => (
-            <div key={carril.titulo}>
-              <p
-                className="mb-1.5 text-center text-[9px] font-bold uppercase tracking-wider"
-                style={{ color: carril.color }}
-              >
-                {carril.titulo}
-              </p>
-              <div className="space-y-1.5">
-                {carril.turnos.map((t) => (
-                  <TurnoMock key={t.hora + t.nombre} {...t} color={carril.color} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tarjeta flotante: caja */}
-      <div
-        className="absolute -bottom-6 -right-3 hidden w-52 rotate-1 rounded-xl border bg-white p-3.5 md:block"
-        style={{ borderColor: BORDE, boxShadow: "0 20px 50px -20px rgba(12,16,21,0.3)" }}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: TINTA_SUAVE }}>
-          Caja del día
-        </p>
-        <p
-          className="mt-0.5 text-xl font-bold tabular-nums"
-          style={{ color: TINTA, fontFamily: "Syne, sans-serif" }}
-        >
-          $184.500
-        </p>
-        <div className="mt-2 space-y-1 text-[10px] tabular-nums" style={{ color: TINTA_SUAVE }}>
-          {[
-            ["Efectivo", "$92.000"],
-            ["Mercado Pago", "$61.500"],
-            ["Débito", "$31.000"],
-          ].map(([m, v]) => (
-            <div key={m} className="flex justify-between">
-              <span>{m}</span>
-              <span className="font-semibold" style={{ color: TINTA }}>
-                {v}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div
-          className="mt-2 flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-semibold"
-          style={{ background: hexA(LIMA, 0.16), color: "#4f7317" }}
-        >
-          <Check className="h-3 w-3" />
-          Arqueo sin diferencias
-        </div>
-      </div>
-
-      {/* Tarjeta flotante: reserva online */}
-      <div
-        className="absolute -left-4 -top-5 hidden -rotate-2 items-center gap-2 rounded-xl border bg-white px-3 py-2.5 md:flex"
-        style={{ borderColor: BORDE, boxShadow: "0 16px 40px -18px rgba(12,16,21,0.3)" }}
-      >
-        <span
-          className="flex h-7 w-7 items-center justify-center rounded-full"
-          style={{ background: hexA(TEAL, 0.12) }}
-        >
-          <Globe className="h-3.5 w-3.5" style={{ color: TEAL_OSCURO }} />
-        </span>
-        <div>
-          <p className="text-[10px] font-bold leading-tight" style={{ color: TINTA }}>
-            Nueva reserva online
-          </p>
-          <p className="text-[9px] leading-tight" style={{ color: TINTA_SUAVE }}>
-            Martina · Corte · mañana 16:30
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============ Secciones ============ */
-
-function Navbar() {
-  const [conFondo, setConFondo] = useState(false);
-  useEffect(() => {
-    const f = () => setConFondo(window.scrollY > 10);
-    f();
-    window.addEventListener("scroll", f, { passive: true });
-    return () => window.removeEventListener("scroll", f);
-  }, []);
+export default function Page() {
+  const [tab, setTab] = useState(0);
+  const [faq, setFaq] = useState(-1);
 
   return (
-    <header
-      className="fixed inset-x-0 top-0 z-40 transition-all"
-      style={{
-        background: conFondo ? "rgba(255,255,255,0.86)" : "transparent",
-        backdropFilter: conFondo ? "blur(12px)" : undefined,
-        WebkitBackdropFilter: conFondo ? "blur(12px)" : undefined,
-        borderBottom: conFondo ? `1px solid ${BORDE}` : "1px solid transparent",
-      }}
-    >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <a href="#" className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/marca/isotipo.png" alt="" className="h-10 w-auto" />
-          <span
-            className="text-[19px] font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Turnos<span style={{ color: TEAL }}>360</span>
-          </span>
-        </a>
-        <nav className="hidden items-center gap-7 text-sm font-medium md:flex" style={{ color: TINTA_SUAVE }}>
-          <a href="#funciones" className="transition-colors hover:text-black">
-            Funciones
-          </a>
-          <a href="#como-funciona" className="transition-colors hover:text-black">
-            Cómo funciona
-          </a>
-          <a href="#rubros" className="transition-colors hover:text-black">
-            Rubros
-          </a>
-          <a href="#precios" className="transition-colors hover:text-black">
-            Precios
-          </a>
-          <a href="#faq" className="transition-colors hover:text-black">
-            Preguntas
-          </a>
-        </nav>
-        <div className="flex items-center gap-2 sm:gap-4">
-          <Link
-            href="/login"
-            className="text-sm font-semibold transition-colors hover:text-black"
-            style={{ color: TINTA_SUAVE }}
-          >
-            <span className="sm:hidden">Entrar</span>
-            <span className="hidden sm:inline">Iniciar sesión</span>
-          </Link>
-          <BotonDemo />
+    <div style={{ fontFamily: font.dm, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
+      {/* NAV */}
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="/img/logo.png" alt="Turnos360" style={{ width: 38, height: 38, objectFit: "contain" }} />
+          <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
-      </div>
-    </header>
-  );
-}
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <a href="#funciones" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Funciones</a>
+          <a href="#como-funciona" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Cómo funciona</a>
+          <a href="#rubros" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Rubros</a>
+          <a href="#precios" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Precios</a>
+          <a href="#faq" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Preguntas</a>
+        </div>
+        <a href={WA_LINK} target="_blank" style={{ background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 15, padding: "10px 20px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none" }}>Pedí una demo</a>
+      </nav>
 
-function Hero() {
-  const reduce = useReducedMotion();
-  const contenedor = {
-    hidden: {},
-    visible: { transition: { staggerChildren: 0.1 } },
-  };
-  const item = {
-    hidden: { opacity: 0, y: 24 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
-  };
-
-  return (
-    <section className="relative overflow-hidden pb-24 pt-32 md:pt-40">
-      {/* Veladuras de marca */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `radial-gradient(700px 380px at 18% -5%, ${hexA(TEAL, 0.1)}, transparent 65%), radial-gradient(600px 340px at 88% 8%, ${hexA(LIMA, 0.1)}, transparent 65%)`,
-        }}
-      />
-      <motion.div
-        variants={contenedor}
-        initial={reduce ? "visible" : "hidden"}
-        animate="visible"
-        className="relative mx-auto max-w-6xl px-5"
-      >
-        <div className="mx-auto max-w-3xl text-center">
-          <motion.div variants={item}>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold"
-              style={{ borderColor: hexA(TEAL, 0.35), color: TEAL_OSCURO, background: hexA(TEAL, 0.07) }}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Gestión integral de turnos y clientes
-            </span>
-          </motion.div>
-
-          <motion.h1
-            variants={item}
-            className="mt-5 text-4xl font-bold leading-[1.08] tracking-tight md:text-6xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Tu negocio ordenado.
-            <br />
-            <span
-              style={{
-                background: `linear-gradient(90deg, ${TEAL}, ${LIMA})`,
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              Tus clientes reservan solos.
-            </span>
-          </motion.h1>
-
-          <motion.p
-            variants={item}
-            className="mx-auto mt-5 max-w-xl text-base leading-relaxed md:text-lg"
-            style={{ color: TINTA_SUAVE }}
-          >
-            Agenda inteligente, reservas online 24/7, caja, membresías y CRM en un solo
-            sistema. Pensado para barberías, peluquerías, uñas y estética.
-          </motion.p>
-
-          <motion.div variants={item} className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <BotonDemo grande />
-            <a
-              href="#funciones"
-              className="inline-flex items-center gap-1.5 rounded-full border px-6 py-3 text-sm font-semibold transition-colors"
-              style={{ borderColor: BORDE, color: TINTA }}
-            >
-              Ver funciones
-              <ArrowRight className="h-4 w-4" />
+      {/* HERO */}
+      <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)", padding: "clamp(48px,8vw,96px) clamp(16px,5vw,64px) clamp(40px,6vw,72px)", maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ flex: "1 1 420px", minWidth: 300 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho para barberías, peluquerías y salones de Argentina</div>
+          <h1 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
+          <p style={{ fontSize: "clamp(16px,2vw,19px)", lineHeight: 1.6, color: "#5d6578", margin: "0 0 28px", maxWidth: 520, textWrap: "pretty" as any }}>Con Turnos360 tus clientes reservan solos, pagan la seña con Mercado Pago y reciben recordatorios por WhatsApp. Vos atendés; el sistema agenda, cobra y te muestra los números.</p>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
+            <a href={WA_LINK} target="_blank" style={{ display: "flex", alignItems: "center", gap: 10, background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#8bc540" }} />
+              Hablemos por WhatsApp
             </a>
-          </motion.div>
-
-          <motion.div
-            variants={item}
-            className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium"
-            style={{ color: TINTA_SUAVE }}
-          >
-            {[
-              "Sin comisión por reserva",
-              "Te lo configuramos nosotros",
-              "Cancelás cuando quieras",
-            ].map((g) => (
-              <span key={g} className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5" strokeWidth={3} style={{ color: TEAL }} />
-                {g}
-              </span>
-            ))}
-          </motion.div>
-        </div>
-
-        <motion.div variants={item} className="mt-14 md:mt-16">
-          <MockProducto />
-        </motion.div>
-      </motion.div>
-    </section>
-  );
-}
-
-const FUNCIONES: { Icono: typeof CalendarDays; titulo: string; texto: string; badgeMP?: boolean }[] = [
-  {
-    Icono: CalendarDays,
-    titulo: "Agenda con carriles paralelos",
-    texto:
-      "Corte, tintura y barba conviven a la misma hora sin pisarse. La grilla refleja cómo trabaja tu equipo de verdad, con sobreturnos controlados.",
-  },
-  {
-    Icono: CreditCard,
-    titulo: "Cobro online al reservar",
-    texto:
-      "Vos elegís: una seña o el total del servicio. El que paga, aparece — y la plata va directo a TU cuenta de Mercado Pago, sin pasar por nadie.",
-    badgeMP: true,
-  },
-  {
-    Icono: Globe,
-    titulo: "Reservas online 24/7",
-    texto:
-      "Tu página pública con servicios, equipo, galería y reserva en 4 pasos. El turno cae directo en tu agenda, hasta cuando el local está cerrado.",
-  },
-  {
-    Icono: Bell,
-    titulo: "Recordatorios automáticos",
-    texto:
-      "Confirmación por email al reservar y recordatorio 24 horas antes, solos. El cliente se olvida menos y vos no perseguís a nadie.",
-  },
-  {
-    Icono: Wallet,
-    titulo: "Caja y arqueo de verdad",
-    texto:
-      "Apertura, cierre, pago dividido y comisión por método. Sabés cuánto entró por efectivo, Mercado Pago o tarjeta, y si la caja cierra sin diferencias.",
-  },
-  {
-    Icono: BadgeCheck,
-    titulo: "Membresías y abonos",
-    texto:
-      "La promo \"pagás el mes y venís siempre\" administrada sola: qué cubre cada plan, quién lo tiene activo y cuánto te rinde cada abono.",
-  },
-  {
-    Icono: Gift,
-    titulo: "Gift cards con QR",
-    texto:
-      "Generás la tarjeta con código único, la imprimís o la mandás por WhatsApp, y se canjea una sola vez. Imposible de falsificar.",
-  },
-  {
-    Icono: Users,
-    titulo: "Clientes con historial",
-    texto:
-      "Cada cliente con su ficha: visitas, gasto real, servicio favorito y observaciones. Reconocés al frecuente y detectás al que dejó de venir.",
-  },
-  {
-    Icono: BarChart3,
-    titulo: "Números para decidir",
-    texto:
-      "Facturación cobrada por día, semana y mes, ticket promedio y desglose por profesional. Lo previsto y lo real, separados.",
-  },
-  {
-    Icono: MessageCircle,
-    titulo: "WhatsApp a un toque",
-    texto:
-      "El teléfono de cada cliente abre el chat directo para confirmar o avisar. Sin copiar números ni salir del sistema.",
-  },
-];
-
-function Funciones() {
-  return (
-    <section id="funciones" className="scroll-mt-20 py-20" style={{ background: SUPERFICIE }}>
-      <div className="mx-auto max-w-6xl px-5">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <h2
-            className="text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Todo lo que tu negocio usa, en un solo lugar
-          </h2>
-          <p className="mt-3 text-base" style={{ color: TINTA_SUAVE }}>
-            Sin agenda de papel, sin planillas sueltas, sin cuentas a mano al final del día.
-          </p>
-        </Reveal>
-
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FUNCIONES.map((f, i) => (
-            <Reveal key={f.titulo} delay={Math.min(i * 0.05, 0.25)}>
-              <div
-                className="h-full rounded-2xl border bg-white p-6 transition-shadow hover:shadow-lg"
-                style={{ borderColor: BORDE }}
-              >
-                <span
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ background: hexA(TEAL, 0.11) }}
-                >
-                  <f.Icono className="h-5 w-5" style={{ color: TEAL_OSCURO }} />
-                </span>
-                <h3
-                  className="mt-4 text-lg font-bold"
-                  style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-                >
-                  {f.titulo}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-                  {f.texto}
-                </p>
-                {f.badgeMP && (
-                  <span
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"
-                    style={{ borderColor: BORDE, background: "#fff" }}
-                    title="Integrado con Mercado Pago"
-                  >
-                    {/* Isotipo simplificado de Mercado Pago (uso nominativo: indica la integración) */}
-                    <svg viewBox="0 0 32 22" className="h-4 w-6" aria-hidden>
-                      <ellipse cx="16" cy="11" rx="15" ry="10" fill="#00B1EA" />
-                      <path
-                        d="M8 10c2.5-2.6 5-3.8 7-2.2 1 .8 2.4 1 3.5.4 1.8-1 3.7-1.4 5.5-.4"
-                        fill="none"
-                        stroke="#fff"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M11 13.5c1.6 1.4 3.4 1.6 5 .6M17.5 14.8c1.4.9 3 .9 4.3.1"
-                        fill="none"
-                        stroke="#fff"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span className="text-xs font-semibold" style={{ color: "#2D3277" }}>
-                      Mercado Pago
-                    </span>
-                  </span>
-                )}
-              </div>
-            </Reveal>
-          ))}
-
-          {/* Tarjeta CTA que completa la grilla */}
-          <Reveal delay={0.3}>
-            <div
-              className="flex h-full flex-col items-start justify-between rounded-2xl p-6 text-white"
-              style={{ background: `linear-gradient(150deg, ${TEAL}, ${TEAL_OSCURO})` }}
-            >
-              <div>
-                <h3 className="text-lg font-bold" style={{ fontFamily: "Syne, sans-serif" }}>
-                  ¿Querés verlo con tus servicios y tu equipo?
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/85">
-                  Te lo mostramos andando con datos como los tuyos, sin compromiso.
-                </p>
-              </div>
-              <a
-                href={LINK_DEMO}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold transition-transform hover:scale-[1.02]"
-                style={{ color: TEAL_OSCURO }}
-              >
-                <MessageCircle className="h-4 w-4" />
-                Hablemos
-              </a>
-            </div>
-          </Reveal>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Integraciones() {
-  // Cada logo tiene una proporción distinta, así que fijar la misma altura los
-  // deja desparejos. Damos a cada uno su altura para que pesen visualmente igual.
-  const logos = [
-    { src: "/marca/integraciones/mercado-pago.png", alt: "Mercado Pago", cls: "h-11" },
-    { src: "/marca/integraciones/google-calendar.png", alt: "Google Calendar", cls: "h-8" },
-    { src: "/marca/integraciones/google-maps.png", alt: "Google Maps", cls: "h-6" },
-    { src: "/marca/integraciones/whatsapp.png", alt: "WhatsApp", cls: "h-7" },
-  ];
-  return (
-    <section className="relative overflow-hidden py-20">
-      {/* Fondo con un halo suave de marca */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 60% 50% at 50% 0%, rgba(23,160,138,0.06), transparent 70%)",
-        }}
-      />
-      <div className="relative mx-auto max-w-5xl px-5">
-        <Reveal>
-          <div className="text-center">
-            <span
-              className="text-xs font-bold uppercase tracking-[0.2em]"
-              style={{ color: TEAL_OSCURO }}
-            >
-              Integraciones
-            </span>
-            <h2
-              className="mx-auto mt-3 max-w-2xl text-3xl font-bold tracking-tight md:text-4xl"
-              style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-            >
-              Se conecta con las apps que{" "}
-              <span style={{ color: TEAL_OSCURO }}>ya usás</span>
-            </h2>
-            <p
-              className="mx-auto mt-4 max-w-xl text-base leading-relaxed"
-              style={{ color: TINTA_SUAVE }}
-            >
-              Cobrás las señas con Mercado Pago, tus clientes suman el turno a su
-              Google Calendar, te encuentran por Google Maps y les avisás por
-              WhatsApp. Todo desde el mismo lugar.
-            </p>
+            <a href="#como-funciona" style={{ color: "#1c222c", fontWeight: 700, fontSize: 16, padding: "15px 8px", textDecoration: "none" }}>Ver cómo funciona ↓</a>
           </div>
-        </Reveal>
-
-        <Reveal delay={0.1}>
-          <div
-            className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-3xl border md:grid-cols-4"
-            style={{
-              borderColor: BORDE,
-              background: BORDE,
-              boxShadow: "0 24px 60px -32px rgba(12,16,21,0.22)",
-            }}
-          >
-            {logos.map((l) => (
-              <div
-                key={l.alt}
-                className="flex items-center justify-center bg-white px-6 py-10 transition-colors hover:bg-[#f6f7f9]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={l.src}
-                  alt={l.alt}
-                  className={`${l.cls} w-auto max-w-[75%] object-contain`}
-                />
-              </div>
-            ))}
-          </div>
-        </Reveal>
-
-        <Reveal delay={0.16}>
-          <p className="mt-5 text-center text-sm" style={{ color: TINTA_SUAVE }}>
-            <span className="font-semibold" style={{ color: TINTA }}>
-              Sin comisión por reserva.
-            </span>{" "}
-            La plata de las señas va directo a tu cuenta de Mercado Pago.
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function Diferenciador() {
-  const puntos = [
-    "Caja diaria con arqueo, pago dividido y comisión por método de pago",
-    "Membresías y abonos con rentabilidad calculada sola",
-    "Historial y gasto real por cliente, no solo una lista de nombres",
-    "Estadísticas de lo cobrado de verdad, separado de lo agendado",
-    "Carriles paralelos: tu agenda modela cómo trabaja tu equipo",
-  ];
-  return (
-    <section className="py-20">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 lg:grid-cols-2">
-        <Reveal>
-          <h2
-            className="text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            No es solo una agenda:
-            <br />
-            es el <span style={{ color: TEAL_OSCURO }}>back-office completo</span>
-          </h2>
-          <p className="mt-4 text-base leading-relaxed" style={{ color: TINTA_SUAVE }}>
-            Cualquier app te da un calendario. Turnos360 además te dice cuánta plata entró,
-            por dónde entró, qué clientes valen oro y si el abono que vendés te conviene.
-            La parte del negocio que las agendas simples no tocan.
-          </p>
-          <ul className="mt-6 space-y-3">
-            {puntos.map((p) => (
-              <li key={p} className="flex items-start gap-2.5 text-sm" style={{ color: TINTA }}>
-                <span
-                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
-                  style={{ background: hexA(LIMA, 0.22) }}
-                >
-                  <Check className="h-3 w-3" style={{ color: "#4f7317" }} />
-                </span>
-                {p}
-              </li>
-            ))}
-          </ul>
-        </Reveal>
-
-        <Reveal delay={0.12}>
-          {/* Mini mock: rentabilidad de membresía */}
-          <div
-            className="rounded-2xl border bg-white p-5"
-            style={{ borderColor: BORDE, boxShadow: "0 24px 60px -28px rgba(12,16,21,0.25)" }}
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-bold" style={{ fontFamily: "Syne, sans-serif", color: TINTA }}>
-                Membresía · Cortes del mes
-              </p>
-              <span
-                className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide"
-                style={{ background: "#fef3c7", color: "#92400e" }}
-              >
-                PRO
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-              {[
-                ["Precio", "$50.000"],
-                ["Cortes usados", "6"],
-                ["Precio efectivo", "$8.333"],
-              ].map(([k, v]) => (
-                <div key={k} className="rounded-xl p-3" style={{ background: SUPERFICIE }}>
-                  <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: TINTA_SUAVE }}>
-                    {k}
-                  </p>
-                  <p
-                    className="mt-1 text-base font-bold tabular-nums"
-                    style={{ color: TINTA, fontFamily: "Syne, sans-serif" }}
-                  >
-                    {v}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 space-y-2">
-              {[
-                ["12 jun · Corte fade", "Cubierto por abono"],
-                ["19 jun · Corte + lavado", "Cubierto por abono"],
-                ["26 jun · Corte clásico", "Cubierto por abono"],
-              ].map(([t, e]) => (
-                <div
-                  key={t}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2 text-xs"
-                  style={{ borderColor: BORDE }}
-                >
-                  <span style={{ color: TINTA }}>{t}</span>
-                  <span className="font-semibold" style={{ color: TEAL_OSCURO }}>
-                    {e}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[11px]" style={{ color: TINTA_SUAVE }}>
-              El sistema calcula solo cuánto te rinde cada plan. El barbero cobra su comisión
-              aunque el corte esté cubierto.
-            </p>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function ComoFunciona() {
-  const pasos = [
-    {
-      n: "1",
-      titulo: "Nos contás de tu negocio",
-      texto: "Servicios, equipo y horarios. Una charla corta por WhatsApp alcanza para empezar.",
-    },
-    {
-      n: "2",
-      titulo: "Te lo dejamos andando",
-      texto:
-        "Configuramos todo nosotros y te entregamos el sistema listo, con tu página pública y tu equipo cargado.",
-    },
-    {
-      n: "3",
-      titulo: "Tus clientes reservan solos",
-      texto:
-        "Compartís tu link, las reservas caen en la agenda y vos ves la caja y los números todos los días.",
-    },
-  ];
-  return (
-    <section id="como-funciona" className="scroll-mt-20 py-20" style={{ background: SUPERFICIE }}>
-      <div className="mx-auto max-w-6xl px-5">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <h2
-            className="text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Arrancar es fácil: te acompañamos nosotros
-          </h2>
-          <p className="mt-3 text-base" style={{ color: TINTA_SUAVE }}>
-            Nada de configurar solo un sistema que no conocés.
-          </p>
-        </Reveal>
-
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
-          {pasos.map((p, i) => (
-            <Reveal key={p.n} delay={i * 0.08}>
-              <div className="h-full rounded-2xl border bg-white p-6" style={{ borderColor: BORDE }}>
-                <span
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-base font-bold text-white"
-                  style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_OSCURO})`, fontFamily: "Syne, sans-serif" }}
-                >
-                  {p.n}
-                </span>
-                <h3
-                  className="mt-4 text-lg font-bold"
-                  style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-                >
-                  {p.titulo}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-                  {p.texto}
-                </p>
-              </div>
-            </Reveal>
-          ))}
+          <p style={{ fontSize: 13, color: "#8b93a7", margin: "18px 0 0" }}>Sin autoservicio: te lo configuramos nosotros y te lo entregamos andando.</p>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function Rubros() {
-  const rubros: { Icono: typeof Scissors; nombre: string; texto: string; color: string }[] = [
-    { Icono: Scissors, nombre: "Barberías", texto: "Carriles por servicio: corte, tintura y barba a la vez.", color: TEAL },
-    { Icono: Brush, nombre: "Peluquerías", texto: "Agenda por estilista, membresías y caja diaria.", color: "#8b5cf6" },
-    { Icono: Hand, nombre: "Salones de uñas", texto: "Servicios con duración real y reservas online 24/7.", color: "#ec4899" },
-    { Icono: Sparkles, nombre: "Centros de estética", texto: "Tratamientos, paquetes y ficha de cada clienta.", color: LIMA },
-    { Icono: Waves, nombre: "Masajes y spa", texto: "Turnos por cabina o profesional, sin superponerse.", color: "#3b82f6" },
-    { Icono: Apple, nombre: "Nutricionistas", texto: "Ficha clínica, mediciones y evolución del paciente.", color: "#f59e0b" },
-  ];
-  return (
-    <section id="rubros" className="scroll-mt-20 py-20">
-      <div className="mx-auto max-w-5xl px-5">
-        <Reveal>
-          <h2
-            className="text-center text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Hecho para negocios que viven de sus turnos
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-center text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-            El sistema se adapta al rubro: los nombres, los campos del cliente y la forma de
-            agendar cambian según tu negocio, sin configurar nada raro.
-          </p>
-        </Reveal>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rubros.map(({ Icono, nombre, texto, color }, i) => (
-            <Reveal key={nombre} delay={i * 0.05}>
-              <div
-                className="h-full rounded-2xl border p-5 transition-transform hover:-translate-y-0.5"
-                style={{
-                  borderColor: BORDE,
-                  background: `linear-gradient(160deg, ${hexA(color, 0.07)}, #ffffff 55%)`,
-                }}
-              >
-                <span
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl"
-                  style={{ background: hexA(color, 0.14), color }}
-                >
-                  <Icono className="h-5 w-5" strokeWidth={2.2} />
-                </span>
-                <p className="mt-3 text-base font-bold" style={{ fontFamily: "Syne, sans-serif", color: TINTA }}>
-                  {nombre}
-                </p>
-                <p className="mt-1 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-                  {texto}
-                </p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-        <Reveal delay={0.2}>
-          <p className="mt-8 text-center text-sm" style={{ color: TINTA_SUAVE }}>
-            ¿Tenés otro rubro con turnos?{" "}
-            <a href={LINK_DEMO} target="_blank" rel="noopener noreferrer" className="font-semibold" style={{ color: TEAL_OSCURO }}>
-              Escribinos
-            </a>{" "}
-            y lo vemos juntos.
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function AppEnLaptop() {
-  // Mockup FIEL al panel real: sidebar con grupos, header de la agenda con
-  // selector y tabs, métricas del día y la grilla horaria con carriles.
-  const gruposMenu: { label: string; items: [string, boolean][] }[] = [
-    { label: "Principal", items: [["Inicio", false], ["Agenda", true], ["Clientes", false]] },
-    { label: "Negocio", items: [["Servicios", false], ["Recursos", false], ["Membresías", false], ["Gift cards", false], ["Campañas", false], ["Mi página", false]] },
-    { label: "Finanzas", items: [["Estadísticas", false], ["Caja", false]] },
-  ];
-  const metricas: { valor: string; label: string; color: string }[] = [
-    { valor: "5", label: "Turnos hoy", color: TEAL },
-    { valor: "3", label: "Confirmados", color: "#3b82f6" },
-    { valor: "1", label: "Pendientes", color: "#f59e0b" },
-    { valor: "$74.000", label: "Ingresos previstos", color: "#10b981" },
-  ];
-  const horas = ["09:00", "09:30", "10:00", "10:30"];
-  // turnos[hora][columna] — columnas: Corte / Barba / Color
-  const turnos: Record<string, Record<number, { n: string; s: string; pend?: boolean }>> = {
-    "09:00": { 0: { n: "Julián", s: "Corte fade" }, 1: { n: "Diego", s: "Barba + perfilado" } },
-    "09:30": { 0: { n: "Marcos", s: "Corte clásico" }, 2: { n: "Sofía", s: "Color global" } },
-    "10:00": { 0: { n: "Tomás", s: "Corte + lavado", pend: true } },
-    "10:30": { 1: { n: "Lucas", s: "Barba" } },
-  };
-
-  function Celda({ turno }: { turno?: { n: string; s: string; pend?: boolean } }) {
-    if (!turno) return <div className="border-b border-l" style={{ borderColor: "#eef1f5" }} />;
-    const col = turno.pend ? "#f59e0b" : "#10b981";
-    return (
-      <div className="border-b border-l p-[3px]" style={{ borderColor: "#eef1f5" }}>
-        <div
-          className="flex h-full items-center gap-1 rounded-[4px] border-l-2 px-1 py-[3px]"
-          style={{ background: hexA(col, 0.1), borderColor: col }}
-        >
-          <span
-            className="flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full text-[5px] font-bold text-white"
-            style={{ background: col }}
-          >
-            {turno.n[0]}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[6.5px] font-bold leading-tight" style={{ color: TINTA }}>
-              {turno.n}
-            </span>
-            <span className="block truncate text-[5.5px] leading-tight" style={{ color: TINTA_SUAVE }}>
-              {turno.s}
-            </span>
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <section className="overflow-hidden py-20" style={{ background: SUPERFICIE }}>
-      <div className="mx-auto max-w-5xl px-5">
-        <Reveal>
-          <h2
-            className="text-center text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Así se ve por dentro
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-center text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-            El panel completo del negocio: agenda en carriles, clientes, caja y estadísticas.
-            Pensado para usarse todo el día sin manual.
-          </p>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <div className="mx-auto mt-12 w-full max-w-3xl">
-            {/* Pantalla de la notebook */}
-            <div
-              className="relative overflow-hidden rounded-t-2xl border-[10px] border-b-0"
-              style={{ borderColor: "#1c222c", background: "#1c222c", boxShadow: "0 40px 90px -35px rgba(12,16,21,0.45)" }}
-            >
-              <span className="absolute left-1/2 top-1 z-10 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-black/60" />
-              <div className="flex overflow-hidden rounded-lg bg-white" style={{ aspectRatio: "16/9.6" }}>
-                {/* Sidebar del panel (fiel: grupos + item activo con pill) */}
-                <div className="flex w-[24%] flex-col p-2.5" style={{ background: "#0a0f1e" }}>
-                  <div className="mb-0.5 flex items-center gap-1.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/marca/isotipo.png" alt="" className="h-3.5 w-auto" />
-                    <span className="text-[8.5px] font-bold text-white" style={{ fontFamily: "Syne, sans-serif" }}>
-                      Turnos<span style={{ color: TEAL }}>360</span>
-                    </span>
-                  </div>
-                  <p className="mb-1 text-[6px] font-semibold" style={{ color: TEAL }}>
-                    dueño
-                  </p>
-                  {gruposMenu.map((g) => (
-                    <div key={g.label} className="mb-1">
-                      <p className="px-1 py-0.5 text-[5.5px] font-bold uppercase tracking-[0.14em]" style={{ color: "#5d6578" }}>
-                        {g.label}
-                      </p>
-                      {g.items.map(([it, activo]) => (
-                        <div
-                          key={it}
-                          className="rounded px-1.5 py-[2.5px] text-[7px] font-medium"
-                          style={
-                            activo
-                              ? { background: hexA("#00d4aa", 0.16), color: "#00f5c4" }
-                              : { color: "#8b93a7" }
-                          }
-                        >
-                          {it}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  <div className="mt-auto text-[6px]" style={{ color: "#8b93a7" }}>
-                    La Cueva · Dueño
-                  </div>
-                </div>
-
-                {/* Panel principal: la agenda real */}
-                <div className="flex-1 overflow-hidden p-2.5" style={{ background: "#f6f7f9" }}>
-                  {/* Header: título + selector + tabs + CTA */}
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] font-bold" style={{ fontFamily: "Syne, sans-serif", color: TINTA }}>
-                      Agenda
-                    </p>
-                    <span className="rounded border bg-white px-1.5 py-[2px] text-[6px]" style={{ borderColor: BORDE, color: TINTA }}>
-                      Lucas Estrella ⌄
-                    </span>
-                    <span className="ml-0.5 flex overflow-hidden rounded border text-[6px]" style={{ borderColor: BORDE }}>
-                      <span className="px-1.5 py-[2px] font-bold text-white" style={{ background: TEAL }}>Día</span>
-                      <span className="bg-white px-1.5 py-[2px]" style={{ color: TINTA_SUAVE }}>Semana</span>
-                      <span className="bg-white px-1.5 py-[2px]" style={{ color: TINTA_SUAVE }}>Mes</span>
-                      <span className="bg-white px-1.5 py-[2px]" style={{ color: TINTA_SUAVE }}>Equipo</span>
-                    </span>
-                    <span className="ml-auto rounded-full px-2 py-[3px] text-[6.5px] font-bold text-white" style={{ background: "#12b886" }}>
-                      + Nuevo turno
-                    </span>
-                  </div>
-
-                  {/* Métricas del día */}
-                  <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                    {metricas.map((m) => (
-                      <div key={m.label} className="rounded-md border bg-white p-1.5" style={{ borderColor: "#e9ecf1" }}>
-                        <span
-                          className="inline-block rounded px-1 py-[1px] text-[6px] font-bold"
-                          style={{ background: hexA(m.color, 0.14), color: m.color }}
-                        >
-                          ●
-                        </span>
-                        <p className="mt-0.5 text-[9px] font-extrabold tabular-nums" style={{ color: TINTA }}>
-                          {m.valor}
-                        </p>
-                        <p className="text-[5.5px]" style={{ color: TINTA_SUAVE }}>
-                          {m.label}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="mt-1.5 text-[6px] font-medium" style={{ color: TINTA_SUAVE }}>
-                    Lunes 13 de julio · Lucas Estrella
-                  </p>
-
-                  {/* Grilla horaria con carriles (como la real) */}
-                  <div className="mt-1 overflow-hidden rounded-md border bg-white" style={{ borderColor: "#e9ecf1" }}>
-                    <div className="grid" style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
-                      {/* Header de columnas */}
-                      <div className="border-b" style={{ borderColor: "#eef1f5", background: "#f8f9fb" }} />
-                      {["Corte", "Barba", "Color"].map((c) => (
-                        <p
-                          key={c}
-                          className="border-b border-l py-[3px] text-center text-[6.5px] font-bold"
-                          style={{ borderColor: "#eef1f5", background: "#f8f9fb", color: TINTA }}
-                        >
-                          {c}
-                        </p>
-                      ))}
-                      {/* Filas por hora */}
-                      {horas.map((h) => (
-                        <Fragment key={h}>
-                          <p className="border-b py-[7px] pr-1 text-right text-[5.5px] tabular-nums" style={{ borderColor: "#eef1f5", color: TINTA_SUAVE }}>
-                            {h}
-                          </p>
-                          <Celda turno={turnos[h]?.[0]} />
-                          <Celda turno={turnos[h]?.[1]} />
-                          <Celda turno={turnos[h]?.[2]} />
-                        </Fragment>
-                      ))}
-                    </div>
-                  </div>
+        <div style={{ flex: "1 1 380px", minWidth: 300, display: "flex", justifyContent: "center" }}>
+          <div style={{ position: "relative", width: "100%", maxWidth: 420 }}>
+            <div style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 24, boxShadow: "0 24px 60px rgba(28,34,44,0.12)", padding: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                <Monogram size={44} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Barbería El Faro</div>
+                  <div style={{ fontSize: 12.5, color: "#8b93a7" }}>turnos360.com.ar/elfaro</div>
                 </div>
               </div>
-            </div>
-            {/* Base de la notebook */}
-            <div
-              className="relative mx-auto h-3.5 rounded-b-xl"
-              style={{ width: "112%", marginLeft: "-6%", background: "linear-gradient(#dfe3e9, #b9bfc9)" }}
-            >
-              <span className="absolute left-1/2 top-0 h-1.5 w-16 -translate-x-1/2 rounded-b-md bg-[#a7adb8]" />
-            </div>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function Precios() {
-  const incluye = [
-    "0% de comisión por reserva — el precio es todo lo que pagás",
-    "Agenda y turnos ilimitados",
-    "Tu página de reservas online 24/7",
-    "Caja, gastos y estadísticas reales",
-    "Membresías y CRM de clientes",
-    "Usuarios y profesionales ilimitados",
-    "Onboarding acompañado: tu página queda lista con vos",
-  ];
-  return (
-    <section id="precios" className="scroll-mt-20 py-20">
-      <div className="mx-auto max-w-3xl px-5">
-        <Reveal>
-          <h2
-            className="text-center text-3xl font-bold tracking-tight md:text-4xl"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-          >
-            Precio simple, sin sorpresas
-          </h2>
-          <p className="mx-auto mt-4 max-w-md text-center text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-            Un solo plan con todo incluido. Sin límites de turnos, sin funciones
-            bloqueadas, sin comisiones por reserva, sin letra chica.
-          </p>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <div
-            className="mt-10 rounded-3xl border bg-white p-8 md:p-10"
-            style={{ borderColor: BORDE, boxShadow: "0 30px 80px -35px rgba(12,16,21,0.25)" }}
-          >
-            <div className="flex flex-wrap items-end justify-center gap-2 text-center">
-              <p
-                className="text-5xl font-bold tabular-nums tracking-tight md:text-6xl"
-                style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
-              >
-                $16.990
-              </p>
-              <p className="pb-1.5 text-sm font-medium" style={{ color: TINTA_SUAVE }}>
-                /mes por local
-              </p>
-            </div>
-            <ul className="mx-auto mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
-              {incluye.map((item) => (
-                <li key={item} className="flex items-start gap-2.5 text-sm" style={{ color: TINTA }}>
-                  <span
-                    className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                    style={{ background: hexA(TEAL, 0.14) }}
-                  >
-                    <Check className="h-3 w-3" style={{ color: TEAL_OSCURO }} strokeWidth={3} />
-                  </span>
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-9 flex flex-col items-center gap-3">
-              <BotonDemo grande />
-              <p className="text-xs" style={{ color: TINTA_SUAVE }}>
-                Sin permanencia · Pedí una demo y probalo antes de pagar
-              </p>
-            </div>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-
-/* ============================================================
-   COMPARATIVA — la sección firma.
-   Las seis apps de turnos del mercado venden lo mismo: agenda,
-   señas y recordatorios. Ninguna administra la plata del local.
-   Ser honestos en lo que empatamos hace creíble lo que sigue.
-   ============================================================ */
-const COMPARACION: { fila: string; ellos: boolean; detalle?: string }[] = [
-  { fila: "Agenda y reservas online 24/7", ellos: true },
-  { fila: "Recordatorios automáticos", ellos: true },
-  { fila: "Cobro al reservar (seña o total)", ellos: true },
-  { fila: "Página propia del negocio", ellos: true },
-  { fila: "Caja diaria con arqueo y cierre", ellos: false, detalle: "Cuánto entró por cada método y si el cajón cuadra" },
-  { fila: "Comisiones por profesional", ellos: false, detalle: "Cuánto le toca a cada barbero, calculado solo" },
-  { fila: "Membresías y abonos", ellos: false, detalle: "El plan mensual, con su rentabilidad real" },
-  { fila: "Gift cards con QR", ellos: false, detalle: "Se canjean una sola vez, imposibles de falsificar" },
-  { fila: "Agenda en carriles paralelos", ellos: false, detalle: "Corte, color y barba a la misma hora sin pisarse" },
-  { fila: "0% de comisión por reserva", ellos: false, detalle: "Lo que cobrás es tuyo. Pagás la cuota y nada más" },
-];
-
-
-/* ============================================================
-   EL CAMBIO — antes / después. El competidor real de Turnos360
-   no es otra app: es la libreta y el WhatsApp suelto. Mostrar
-   los dos mundos lado a lado hace tangible el salto.
-   ============================================================ */
-const SIN_SISTEMA: string[] = [
-  "Turnos anotados en la libreta o en chats de WhatsApp",
-  "Clientes que reservan y no aparecen",
-  "El teléfono suena mientras estás cortando",
-  "A fin de día no sabés cuánto entró ni cuánto le toca a cada uno",
-];
-const CON_SISTEMA: string[] = [
-  "Agenda en carriles, ordenada y accesible desde cualquier lado",
-  "Seña o cobro anticipado: el que paga, aparece",
-  "Tus clientes reservan solos desde tu página, 24/7",
-  "Caja cerrada con arqueo y la comisión de cada barbero calculada",
-];
-
-function ElCambio() {
-  return (
-    <section className="px-5 py-20">
-      <div className="mx-auto max-w-4xl">
-        <Reveal>
-          <div className="text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: TEAL }}>
-              El cambio
-            </p>
-            <h2
-              className="mt-3 text-3xl font-bold tracking-tight md:text-4xl"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
-              De la libreta al negocio en números
-            </h2>
-          </div>
-        </Reveal>
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
-          <Reveal delay={0.05}>
-            <div className="h-full rounded-2xl border p-6" style={{ borderColor: BORDE, background: SUPERFICIE }}>
-              <p className="text-sm font-bold" style={{ color: TINTA_SUAVE }}>
-                Sin sistema
-              </p>
-              <ul className="mt-4 space-y-3">
-                {SIN_SISTEMA.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
-                    <X className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} style={{ color: "#cfd5de" }} />
-                    {f}
-                  </li>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#5d6578", marginBottom: 10 }}>Elegí tu servicio</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "2px solid #12b886", background: "#f2fbf7", borderRadius: 12, padding: "12px 14px" }}>
+                  <span style={{ fontWeight: 700, fontSize: 14.5 }}>Corte + Barba</span>
+                  <span style={{ fontWeight: 700, fontSize: 14.5, color: "#0e8371" }}>$15.000</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #e9ecf1", borderRadius: 12, padding: "12px 14px" }}>
+                  <span style={{ fontWeight: 500, fontSize: 14.5, color: "#5d6578" }}>Corte clásico</span>
+                  <span style={{ fontSize: 14.5, color: "#8b93a7" }}>$11.000</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#5d6578", marginBottom: 10 }}>Mañana, jueves</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+                {["10:00", "11:30", "15:00"].map((h, i) => (
+                  <div key={h} style={{ flex: 1, textAlign: "center", borderRadius: 10, padding: "9px 0", fontSize: 14, ...(i === 1 ? { background: "#12b886", color: "#fff", fontWeight: 700 } : { border: "1px solid #e9ecf1", color: "#8b93a7" }) }}>{h}</div>
                 ))}
-              </ul>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#1c222c", borderRadius: 14, padding: "14px 16px" }}>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 14.5 }}>Reservar con seña</span>
+                <img src="/img/mercado-pago.png" alt="Mercado Pago" style={{ height: 26, background: "#fff", borderRadius: 6, padding: "3px 8px" }} />
+              </div>
             </div>
-          </Reveal>
-          <Reveal delay={0.12}>
-            <div
-              className="h-full rounded-2xl border p-6"
-              style={{ borderColor: hexA(TEAL, 0.35), background: hexA(TEAL, 0.05) }}
-            >
-              <p className="text-sm font-bold" style={{ color: TEAL_OSCURO }}>
-                Con Turnos360
-              </p>
-              <ul className="mt-4 space-y-3">
-                {CON_SISTEMA.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm font-medium leading-relaxed" style={{ color: TINTA }}>
-                    <span
-                      className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
-                      style={{ background: hexA(TEAL, 0.15) }}
-                    >
-                      <Check className="h-3 w-3" strokeWidth={3} style={{ color: TEAL }} />
-                    </span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
+            <div style={{ position: "absolute", top: -16, right: -8, background: "#fff", border: "1px solid #e9ecf1", borderRadius: 999, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 10px 24px rgba(28,34,44,0.10)" }}>
+              <img src="/img/whatsapp.png" alt="WhatsApp" style={{ height: 18 }} />
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>Recordatorio enviado</span>
             </div>
-          </Reveal>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Comparativa() {
-  return (
-    <section className="px-5 py-20" style={{ background: SUPERFICIE }}>
-      <div className="mx-auto max-w-4xl">
-        <Reveal>
-          <div className="text-center">
-            <p
-              className="text-xs font-bold uppercase tracking-[0.2em]"
-              style={{ color: TEAL }}
-            >
-              La diferencia
-            </p>
-            <h2
-              className="mt-3 text-3xl font-bold tracking-tight md:text-4xl"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
-              Las demás te llenan la agenda.
-              <br />
-              Turnos360 además te administra el negocio.
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm" style={{ color: TINTA_SUAVE }}>
-              Reservar turnos lo resuelve cualquiera, y nosotros también. La
-              pregunta es qué pasa después: la plata, las comisiones, los abonos.
-            </p>
+            <div style={{ position: "absolute", bottom: -14, left: -10, background: "#fff", border: "1px solid #e9ecf1", borderRadius: 999, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 10px 24px rgba(28,34,44,0.10)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#12b886" }} />
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>Seña cobrada · $5.000</span>
+            </div>
           </div>
-        </Reveal>
+        </div>
+      </header>
 
-        <Reveal delay={0.1}>
-          <div
-            className="mt-10 overflow-hidden rounded-2xl border bg-white"
-            style={{ borderColor: BORDE }}
-          >
-            {/* Encabezado */}
-            <div
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b px-5 py-3.5 text-xs font-semibold uppercase tracking-wide sm:gap-6 sm:px-6"
-              style={{ borderColor: BORDE, color: TINTA_SUAVE }}
-            >
-              <span>Función</span>
-              <span className="w-16 text-center sm:w-24">Las demás</span>
-              <span
-                className="w-16 rounded-full px-2 py-1 text-center sm:w-24"
-                style={{ background: hexA(TEAL, 0.12), color: TEAL_OSCURO }}
-              >
-                Turnos360
-              </span>
+      {/* INTEGRACIONES */}
+      <section style={{ padding: "8px clamp(16px,5vw,64px) 56px", maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "clamp(24px,4vw,56px)", borderTop: "1px solid #eef1f5", paddingTop: 32 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#8b93a7", letterSpacing: "0.06em", textTransform: "uppercase" }}>Se integra con</span>
+          <img src="/img/mercado-pago.png" alt="Mercado Pago" style={{ height: 44, opacity: 0.85 }} />
+          <img src="/img/whatsapp.png" alt="WhatsApp" style={{ height: 30, opacity: 0.85 }} />
+          <img src="/img/google-calendar.png" alt="Google Calendar" style={{ height: 32, opacity: 0.85 }} />
+          <img src="/img/google-maps.png" alt="Google Maps" style={{ height: 30, opacity: 0.85 }} />
+        </div>
+      </section>
+
+      {/* PROBLEMA */}
+      <section style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,88px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(24px,4vw,56px)", marginBottom: 40 }}>
+            <div style={{ flex: "1 1 380px", minWidth: 280 }}>
+              <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 640 }}>Si manejás el negocio con libreta y WhatsApp, esto te suena.</h2>
+              <p style={{ color: "#5d6578", fontSize: 17, margin: 0, maxWidth: 560 }}>Cuatro cosas que le pasan a casi todos los dueños del rubro.</p>
             </div>
-
-            {COMPARACION.map((c, i) => (
-              <div
-                key={c.fila}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-3.5 sm:gap-6 sm:px-6"
-                style={{
-                  borderTop: i === 0 ? "none" : `1px solid ${BORDE}`,
-                  background: c.ellos ? "transparent" : hexA(TEAL, 0.03),
-                }}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{c.fila}</p>
-                  {c.detalle && (
-                    <p className="mt-0.5 text-xs" style={{ color: TINTA_SUAVE }}>
-                      {c.detalle}
-                    </p>
-                  )}
-                </div>
-                <span className="flex w-16 justify-center sm:w-24">
-                  {c.ellos ? (
-                    <Check className="h-4 w-4" strokeWidth={3} style={{ color: "#9aa3b2" }} />
-                  ) : (
-                    <X className="h-4 w-4" strokeWidth={2.5} style={{ color: "#cfd5de" }} />
-                  )}
-                </span>
-                <span className="flex w-16 justify-center sm:w-24">
-                  <span
-                    className="flex h-6 w-6 items-center justify-center rounded-full"
-                    style={{ background: hexA(TEAL, 0.12) }}
-                  >
-                    <Check className="h-3.5 w-3.5" strokeWidth={3} style={{ color: TEAL }} />
-                  </span>
-                </span>
+            <img src="/img/duena-notebook.jpg" alt="Dueña revisando sus números en Turnos360" style={{ flex: "1 1 320px", minWidth: 280, maxWidth: 440, width: "100%", borderRadius: 20, objectFit: "cover", aspectRatio: "3 / 2", boxShadow: "0 20px 48px rgba(28,34,44,0.14)" }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+            {pains.map((p) => (
+              <div key={p.num} style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 18, padding: 24 }}>
+                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 26, color: "#12b886", marginBottom: 12 }}>{p.num}</div>
+                <div style={{ fontWeight: 700, fontSize: 16.5, marginBottom: 8 }}>{p.title}</div>
+                <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{p.body}</div>
               </div>
             ))}
           </div>
-        </Reveal>
+        </div>
+      </section>
 
-        <Reveal delay={0.15}>
-          <p className="mt-5 text-center text-xs" style={{ color: TINTA_SUAVE }}>
-            Comparado con las apps de turnos más usadas en Argentina, a julio de 2026.
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+      {/* FUNCIONALIDADES */}
+      <section id="funciones" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "inline-flex", background: "#fff7ec", color: "#b45309", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 16 }}>Lo que la agenda común no hace</div>
+        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 620 }}>Anotar turnos lo hace cualquiera. Esto es lo que te diferencia.</h2>
+        <p style={{ color: "#5d6578", fontSize: 17, margin: "0 0 40px", maxWidth: 600 }}>Turnos360 te dice cuánto ganaste, quién te lo generó y qué clientes dejaron de venir.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {features.map((f) => (
+            <div key={f.title} style={{ border: "1px solid #e9ecf1", borderRadius: 18, padding: 26, background: "#fff" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: "#eef9f4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, marginBottom: 16, color: "#0e8371", fontWeight: 700, fontFamily: font.sora }}>{f.glyph}</div>
+              <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{f.title}</div>
+              <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{f.body}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-/* ============================================================
-   PREGUNTAS FRECUENTES — las objeciones reales de la venta,
-   contestadas antes de la reunión.
-   ============================================================ */
-const FAQS: { p: string; r: string }[] = [
-  {
-    p: "¿Tengo que saber de computación?",
-    r: "No. Nosotros damos de alta tu negocio, cargamos tus servicios, tu equipo y tu página. Vos entrás y ya está andando. Si algo no se entiende, nos escribís por WhatsApp y lo resolvemos.",
-  },
-  {
-    p: "¿Mis clientes tienen que descargar una app?",
-    r: "No. Reservan desde el link de tu página, en el navegador del celular. Compartís ese link en tu Instagram o tu estado de WhatsApp y listo.",
-  },
-  {
-    p: "¿Me cobran comisión por cada turno?",
-    r: "Cero. Pagás la cuota mensual y nada más. Si cobrás la seña con Mercado Pago, la plata va directo a tu cuenta y la única comisión es la de Mercado Pago, que no tocamos.",
-  },
-  {
-    p: "¿Sirve si tengo varios barberos trabajando a la vez?",
-    r: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada.",
-  },
-  {
-    p: "¿Qué pasa con los que reservan y no vienen?",
-    r: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes.",
-  },
-  {
-    p: "¿Puedo probarlo antes de pagar?",
-    r: "Sí. Te hacemos una demo con tu negocio cargado de verdad — tus servicios, tu equipo, tu página — para que veas cómo te quedaría. Sin compromiso.",
-  },
-];
-
-function FAQ() {
-  const [abierta, setAbierta] = useState<number | null>(0);
-
-  return (
-    <section id="faq" className="px-5 py-20">
-      <div className="mx-auto max-w-3xl">
-        <Reveal>
-          <div className="text-center">
-            <p
-              className="text-xs font-bold uppercase tracking-[0.2em]"
-              style={{ color: TEAL }}
-            >
-              Preguntas frecuentes
-            </p>
-            <h2
-              className="mt-3 text-3xl font-bold tracking-tight md:text-4xl"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
-              Lo que todos preguntan
-            </h2>
+      {/* PANEL / TABS */}
+      <section style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Todo el negocio en un solo lugar</h2>
+          <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 8px", maxWidth: 560 }}>Agenda, clientes, caja y estadísticas desde el celular o la compu. Estas son pantallas reales del sistema.</p>
+          <img src="/img/notebook-mockup.png" alt="Turnos360 en una notebook" style={{ width: "100%", maxWidth: 720, mixBlendMode: "multiply", display: "block", margin: "0 auto 8px" }} />
+          <div style={{ display: "inline-flex", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 999, padding: 5, gap: 4, marginBottom: 28, flexWrap: "wrap", justifyContent: "center" }}>
+            {shots.map((s, i) => (
+              <button key={s.label} onClick={() => setTab(i)} style={{ border: "none", cursor: "pointer", fontFamily: font.dm, fontSize: 14.5, fontWeight: 700, padding: "9px 22px", borderRadius: 999, background: i === tab ? "#12b886" : "transparent", color: i === tab ? "#fff" : "#5d6578" }}>{s.label}</button>
+            ))}
           </div>
-        </Reveal>
+          <div style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 20, padding: "clamp(8px,1.5vw,16px)", boxShadow: "0 24px 60px rgba(28,34,44,0.10)", overflow: "hidden" }}>
+            <img src={shots[tab].src} alt="Panel de Turnos360" style={{ width: "100%", display: "block", borderRadius: 12 }} />
+          </div>
+          <p style={{ color: "#8b93a7", fontSize: 14, margin: "20px 0 0" }}>{shots[tab].caption}</p>
+        </div>
+      </section>
 
-        <div className="mt-10 space-y-3">
-          {FAQS.map((f, i) => {
-            const activa = abierta === i;
-            return (
-              <Reveal key={f.p} delay={i * 0.04}>
-                <div
-                  className="overflow-hidden rounded-2xl border bg-white"
-                  style={{ borderColor: activa ? hexA(TEAL, 0.4) : BORDE }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setAbierta(activa ? null : i)}
-                    aria-expanded={activa}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
-                  >
-                    <span className="text-sm font-semibold sm:text-base">{f.p}</span>
-                    <ChevronDown
-                      className="h-4 w-4 shrink-0 transition-transform duration-300"
-                      style={{
-                        color: activa ? TEAL : TINTA_SUAVE,
-                        transform: activa ? "rotate(180deg)" : "none",
-                      }}
-                    />
-                  </button>
-                  <div
-                    className="grid transition-all duration-300"
-                    style={{ gridTemplateRows: activa ? "1fr" : "0fr" }}
-                  >
-                    <div className="overflow-hidden">
-                      <p
-                        className="px-5 pb-4 text-sm leading-relaxed"
-                        style={{ color: TINTA_SUAVE }}
-                      >
-                        {f.r}
-                      </p>
-                    </div>
+      {/* COMPARTIR / REDES */}
+      <section style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,72px)" }}>
+          <div style={{ flex: "1 1 360px", minWidth: 280 }}>
+            <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 16px" }}>Tu página de reservas, donde quieras</h2>
+            <p style={{ color: "#5d6578", fontSize: 17, lineHeight: 1.6, margin: "0 0 24px", maxWidth: 480, textWrap: "pretty" as any }}>Cada negocio tiene su propia página con su logo, sus servicios y sus horarios. Ponela en la bio de Instagram, en el estado de WhatsApp o imprimí el QR y pegalo en el espejo del local. El cliente reserva solo, incluso a las 2 de la mañana.</p>
+            <a href={WA_LINK} target="_blank" style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#1c222c", color: "#fff", fontWeight: 700, fontSize: 16, padding: "14px 26px", borderRadius: 999, textDecoration: "none" }}>Quiero mi página</a>
+          </div>
+          <div style={{ flex: "1 1 380px", minWidth: 300, display: "flex", justifyContent: "center" }}>
+            <div style={{ position: "relative", width: "100%", maxWidth: 480, aspectRatio: "1.02" }}>
+              <div style={{ position: "absolute", inset: "4% 0 4% 6%", background: "radial-gradient(ellipse at center, #e3f6ee 0%, #eef9f4 70%)", borderRadius: "50%" }} />
+              {/* WhatsApp */}
+              <div style={{ position: "absolute", top: "8%", right: "6%", width: "52%", background: "#25d366", borderRadius: 20, padding: 16, transform: "rotate(3deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.16)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>WhatsApp</span></div>
+                  <img src="/img/whatsapp-icon.png" alt="WhatsApp" style={{ width: 28, height: 28, objectFit: "contain" }} />
+                </div>
+                <div style={{ height: 8, background: "rgba(255,255,255,0.45)", borderRadius: 99, margin: "14px 0 8px", width: "82%" }} />
+                <div style={{ height: 8, background: "rgba(255,255,255,0.45)", borderRadius: 99, width: "58%" }} />
+              </div>
+              {/* QR */}
+              <div style={{ position: "absolute", top: "22%", right: "16%", width: "52%", background: "#5d6578", borderRadius: 20, padding: 16, transform: "rotate(-2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.18)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>QR del local</span></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 5px)", gridTemplateRows: "repeat(4, 5px)", gap: 2 }}>
+                    {[1,1,0,1,1,0,1,0,0,1,1,1,1,0,1,1].map((on, i) => <span key={i} style={{ background: on ? "#fff" : "transparent" }} />)}
                   </div>
                 </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CTAFinal() {
-  return (
-    <section className="px-5 pb-20">
-      <Reveal className="mx-auto max-w-5xl">
-        <div
-          className="relative overflow-hidden rounded-3xl px-6 py-14 text-center text-white md:py-16"
-          style={{ background: `linear-gradient(140deg, ${TINTA} 30%, ${TEAL_OSCURO})` }}
-        >
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: `radial-gradient(500px 260px at 85% 15%, ${hexA(LIMA, 0.22)}, transparent 60%)`,
-            }}
-          />
-          <div className="relative">
-            <h2
-              className="mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-4xl"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
-              Dejá la libreta. Empezá a ver tu negocio en números.
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-white/75 md:text-base">
-              Escribinos y coordinamos una demo con tus servicios y tu equipo. Sin compromiso.
-            </p>
-            <div className="mt-7 flex justify-center">
-              <BotonDemo grande />
+                <div style={{ height: 8, background: "rgba(255,255,255,0.4)", borderRadius: 99, margin: "14px 0 8px", width: "76%" }} />
+                <div style={{ height: 8, background: "rgba(255,255,255,0.4)", borderRadius: 99, width: "52%" }} />
+              </div>
+              {/* TikTok */}
+              <div style={{ position: "absolute", top: "37%", right: "24%", width: "52%", background: "#16181f", borderRadius: 20, padding: 16, transform: "rotate(2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.22)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram invert /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>TikTok</span></div>
+                  <img src="/img/tiktok-icon.png" alt="TikTok" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                </div>
+                <div style={{ height: 8, background: "rgba(255,255,255,0.3)", borderRadius: 99, margin: "14px 0 8px", width: "80%" }} />
+                <div style={{ height: 8, background: "rgba(255,255,255,0.3)", borderRadius: 99, width: "55%" }} />
+              </div>
+              {/* Instagram */}
+              <div style={{ position: "absolute", top: "52%", right: "32%", width: "54%", background: "linear-gradient(135deg, #6228d7 0%, #ee2a7b 55%, #f9ce34 120%)", borderRadius: 20, padding: 18, transform: "rotate(-3deg)", boxShadow: "0 24px 56px rgba(238,42,123,0.35)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9 }}><Monogram size={34} /><span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Instagram</span></div>
+                  <img src="/img/instagram-icon.png" alt="Instagram" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain" }} />
+                </div>
+                <div style={{ height: 9, background: "rgba(255,255,255,0.5)", borderRadius: 99, margin: "16px 0 9px", width: "84%" }} />
+                <div style={{ height: 9, background: "rgba(255,255,255,0.5)", borderRadius: 99, width: "60%" }} />
+              </div>
+              <div style={{ position: "absolute", bottom: "6%", left: 0, background: "#fff", borderRadius: 999, padding: "13px 22px", fontWeight: 700, fontSize: 15, boxShadow: "0 16px 40px rgba(28,34,44,0.18)", whiteSpace: "nowrap" }}>turnos360.com.ar/<span style={{ color: "#12b886" }}>elfaro</span></div>
             </div>
           </div>
         </div>
-      </Reveal>
-    </section>
-  );
-}
+      </section>
 
-function Footer() {
-  return (
-    <footer className="border-t py-10" style={{ borderColor: BORDE }}>
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row">
-        <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/marca/isotipo.png" alt="" className="h-8 w-auto" />
-          <span className="text-base font-bold tracking-tight" style={{ fontFamily: "Syne, sans-serif", color: TINTA }}>
-            Turnos<span style={{ color: TEAL }}>360</span>
-          </span>
+      {/* COMO FUNCIONA */}
+      <section id="como-funciona" style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Nosotros te lo dejamos andando</h2>
+          <p style={{ color: "#8b93a7", fontSize: 17, margin: "0 0 44px", maxWidth: 560 }}>No hay que crear cuentas ni configurar nada solo. El alta la hacemos con vos, paso a paso.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
+            {steps.map((s) => (
+              <div key={s.num} style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: 28, background: "rgba(255,255,255,0.04)" }}>
+                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 14, color: "#8bc540", letterSpacing: "0.12em", marginBottom: 14 }}>PASO {s.num}</div>
+                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 21, color: "#fff", marginBottom: 10 }}>{s.title}</div>
+                <div style={{ color: "#b8bfcc", fontSize: 15, lineHeight: 1.6 }}>{s.body}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 36, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, border: "1px solid rgba(139,197,64,0.35)", background: "rgba(139,197,64,0.08)", borderRadius: 16, padding: "18px 22px" }}>
+            <span style={{ background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 12, padding: "5px 12px", borderRadius: 999, letterSpacing: "0.06em" }}>PILOTO</span>
+            <span style={{ color: "#e6eadf", fontSize: 15 }}>La configuración inicial se bonifica para los primeros negocios, a cambio de tu testimonio real.</span>
+          </div>
         </div>
-        <div className="text-center">
-          <p className="text-xs" style={{ color: TINTA_SUAVE }}>
-            © {new Date().getFullYear()} Turnos360 · Hecho en Mendoza, Argentina
-          </p>
-          <p className="mt-1 text-xs" style={{ color: TINTA_SUAVE }}>
-            <Link href="/terminos" className="underline underline-offset-2">
+      </section>
+
+      {/* RUBROS */}
+      <section id="rubros" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Hecho para tu rubro</h2>
+        <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 36px", maxWidth: 520 }}>Servicios con duración, profesional y precio. Si trabajás con turnos, Turnos360 es para vos.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12, maxWidth: 760, margin: "0 auto" }}>
+          {rubros.map((r) => (
+            <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid #e9ecf1", borderRadius: 999, padding: "12px 24px", fontWeight: 700, fontSize: 15.5, background: "#fff" }}>
+              <span style={{ fontSize: 22 }}>{r.emoji}</span>{r.label}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* PRECIOS */}
+      <section id="precios" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
+          <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 40px", maxWidth: 520 }}>Sin niveles, sin funciones bloqueadas, sin sorpresas. Todo lo que viste en esta página está adentro.</p>
+          <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "2px solid #12b886", borderRadius: 24, padding: "clamp(28px,4vw,40px)", boxShadow: "0 24px 60px rgba(18,184,134,0.14)", textAlign: "left" }}>
+            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>7 días de prueba gratis</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>$16.990</span>
+              <span style={{ color: "#5d6578", fontSize: 17, fontWeight: 500 }}>/ mes</span>
+            </div>
+            <div style={{ color: "#8b93a7", fontSize: 14, marginBottom: 24 }}>Precio en pesos argentinos. Cancelás cuando quieras.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 11, marginBottom: 28 }}>
+              {planItems.map((it) => (
+                <div key={it} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: "#1c222c" }}>
+                  <span style={{ color: "#12b886", fontWeight: 700, flexShrink: 0 }}>✓</span>{it}
+                </div>
+              ))}
+            </div>
+            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis 7 días</a>
+            <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0" }}>Arrancamos por WhatsApp: te lo dejamos configurado y andando.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* GALERIA */}
+      <section style={{ padding: "0 clamp(16px,5vw,64px) clamp(48px,7vw,80px)", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+          {fotos.map((f) => (
+            <img key={f.src} src={f.src} alt={f.alt} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: 20 }} />
+          ))}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" style={{ padding: "0 clamp(16px,5vw,64px) clamp(56px,8vw,96px)", maxWidth: 820, margin: "0 auto" }}>
+        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 8px", textAlign: "center" }}>Preguntas frecuentes</h2>
+        <p style={{ color: "#5d6578", fontSize: 17, margin: "0 0 32px", textAlign: "center" }}>Lo que todos preguntan antes de arrancar.</p>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {faqs.map((q, i) => (
+            <div key={q.q} style={{ borderBottom: "1px solid #e9ecf1" }}>
+              <button onClick={() => setFaq(faq === i ? -1 : i)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "18px 4px", fontFamily: font.dm, fontSize: 16.5, fontWeight: 700, color: "#1c222c" }}>
+                {q.q}
+                <span style={{ color: "#12b886", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>{faq === i ? "−" : "+"}</span>
+              </button>
+              {faq === i && <div style={{ color: "#5d6578", fontSize: 15, lineHeight: 1.6, padding: "0 4px 18px", maxWidth: 680 }}>{q.a}</div>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ borderTop: "1px solid #eef1f5", padding: "28px clamp(16px,5vw,64px)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="/img/logo.png" alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
+          <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 16 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Link href="/terminos" style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}>
               Términos y condiciones
             </Link>
-            {" · "}
-            <Link href="/privacidad" className="underline underline-offset-2">
+            <span style={{ color: "#cfd5de", fontSize: 13.5 }}>·</span>
+            <Link href="/privacidad" style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}>
               Política de privacidad
             </Link>
-          </p>
-          <a
-            href={`mailto:${EMAIL_CONTACTO}`}
-            className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold"
-            style={{ color: TEAL_OSCURO }}
-          >
-            <Mail className="h-3.5 w-3.5" />
-            {EMAIL_CONTACTO}
-          </a>
+          </div>
+          <span style={{ color: "#8b93a7", fontSize: 13.5, textAlign: "right" }}>
+            © {new Date().getFullYear()} Turnos360 · Hecho en Mendoza, Argentina ·{" "}
+            <a href="mailto:turnos360.contacto@gmail.com" style={{ color: "#5d6578" }}>
+              turnos360.contacto@gmail.com
+            </a>
+          </span>
         </div>
-        <div className="flex items-center gap-5">
-          <Link href="/login" className="text-xs font-semibold" style={{ color: TINTA_SUAVE }}>
-            Iniciar sesión
-          </Link>
-          <a
-            href={LINK_DEMO}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-semibold"
-            style={{ color: TEAL_OSCURO }}
-          >
-            Contacto por WhatsApp
-          </a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-export default function LandingComercial() {
-  return (
-    <div className="min-h-screen bg-white antialiased" style={{ color: TINTA }}>
-      <Navbar />
-      <main>
-        <Hero />
-        <Funciones />
-        <Integraciones />
-        <ElCambio />
-        <Diferenciador />
-        <Comparativa />
-        <ComoFunciona />
-        <AppEnLaptop />
-        <Rubros />
-        <Precios />
-        <FAQ />
-      </main>
-      <Footer />
+      </footer>
     </div>
   );
 }

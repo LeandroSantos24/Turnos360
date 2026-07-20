@@ -147,3 +147,113 @@ export function crearUsuario(
 export function actualizarUsuario(id: number, activo: boolean): Promise<UsuarioAdmin> {
   return adminApi.patch<UsuarioAdmin>(`/admin/usuarios/${id}`, { activo });
 }
+// ═══════════════════════════════════════════════════════════════════
+// Cobranza del SaaS (semáforo, resumen, pagos, prórrogas)
+// ═══════════════════════════════════════════════════════════════════
+
+export type SemaforoColor = "verde" | "amarillo" | "rojo" | "gris";
+
+export interface EmpresaCobranza {
+  id: number;
+  nombre: string;
+  slug: string;
+  activa: boolean;
+  plan: string;
+  suscripcion_vence: string | null;
+  precio_mensual: number | null;
+  razon_social: string | null;
+  cuit: string | null;
+  contacto_nombre: string | null;
+  contacto_email: string | null;
+  contacto_telefono: string | null;
+  notas_admin: string | null;
+  cantidad_usuarios: number;
+  cantidad_recursos: number;
+  limite_recursos: number | null;
+  capacidad_excedida: boolean;
+  ultimo_pago: string | null;
+  semaforo_color: SemaforoColor;
+  semaforo_dias_restantes: number | null;
+  semaforo_fin_prorroga: string | null;
+  semaforo_en_prorroga: boolean;
+  semaforo_detalle: string;
+}
+
+export interface ResumenCobranza {
+  cobrado_mes: number;
+  por_metodo: { metodo: string; total: number }[];
+  pendiente_estimado: number;
+  empresas_por_vencer: number;
+  por_vencer_sin_precio: number;
+  deuda_vencida: number;
+  empresas_vencidas: number;
+  mrr: number;
+  dias_aviso: number;
+}
+
+export interface PagoSuscripcion {
+  id: number;
+  fecha: string;
+  monto: number;
+  metodo: string;
+  periodo_desde: string | null;
+  periodo_hasta: string | null;
+  notas: string | null;
+}
+
+export function listarCobranza(filtros: {
+  buscar?: string;
+  color?: SemaforoColor | "";
+  plan?: string;
+} = {}): Promise<EmpresaCobranza[]> {
+  const p = new URLSearchParams();
+  if (filtros.buscar) p.set("buscar", filtros.buscar);
+  if (filtros.color) p.set("color", filtros.color);
+  if (filtros.plan) p.set("plan", filtros.plan);
+  const qs = p.toString();
+  return adminRequest<EmpresaCobranza[]>(`/admin/cobranza/empresas${qs ? `?${qs}` : ""}`);
+}
+
+export function resumenCobranza(): Promise<ResumenCobranza> {
+  return adminRequest<ResumenCobranza>("/admin/cobranza/resumen");
+}
+
+export function historialPagos(empresaId: number): Promise<PagoSuscripcion[]> {
+  return adminRequest<PagoSuscripcion[]>(`/admin/empresas/${empresaId}/pagos`);
+}
+
+export function registrarPago(
+  empresaId: number,
+  datos: { monto: number; metodo: string; fecha?: string; notas?: string; renovar?: boolean },
+): Promise<PagoSuscripcion> {
+  return adminRequest<PagoSuscripcion>(`/admin/empresas/${empresaId}/pagos`, {
+    method: "POST",
+    body: JSON.stringify(datos),
+  });
+}
+
+export function darProrroga(empresaId: number, dias: number): Promise<EmpresaCobranza> {
+  return adminRequest<EmpresaCobranza>(`/admin/empresas/${empresaId}/prorroga`, {
+    method: "POST",
+    body: JSON.stringify({ dias }),
+  });
+}
+
+export function guardarFicha(
+  empresaId: number,
+  datos: Partial<{
+    razon_social: string | null;
+    cuit: string | null;
+    contacto_nombre: string | null;
+    contacto_email: string | null;
+    contacto_telefono: string | null;
+    notas_admin: string | null;
+    precio_mensual: number | null;
+    limite_recursos: number | null;
+  }>,
+): Promise<EmpresaCobranza> {
+  return adminRequest<EmpresaCobranza>(`/admin/empresas/${empresaId}/ficha`, {
+    method: "PUT",
+    body: JSON.stringify(datos),
+  });
+}

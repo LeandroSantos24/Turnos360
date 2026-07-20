@@ -269,30 +269,29 @@ export function TurnoDetalle({
     <>
       <Sheet open={abierto} onOpenChange={(o) => !o && onCerrar()}>
         <SheetContent className="w-full overflow-y-auto p-6 sm:max-w-md">
-          <SheetHeader className="space-y-0 text-left">
-            <SheetTitle
-              className="text-xl font-bold"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
+          {/* El cliente ES el encabezado: antes el título ocupaba una línea
+              entera y el cliente vivía en un bloque aparte, dejando un hueco
+              grande arriba y empujando los adicionales fuera de la pantalla. */}
+          <SheetHeader className="gap-0 p-0 pr-8 text-left">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Detalle del turno
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-7">
-            {/* Cliente */}
-            <div className="flex items-center gap-4">
+            </p>
+            <div className="mt-3 flex items-center gap-3">
               <div
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-bold text-white"
                 style={{ backgroundColor: color, fontFamily: "Syne, sans-serif" }}
               >
                 {inicialDe(turno.cliente_nombre)}
               </div>
-              <div className="min-w-0">
-                <p className="truncate text-lg font-semibold leading-tight">
+              <div className="min-w-0 flex-1">
+                <SheetTitle
+                  className="truncate text-lg font-bold leading-tight"
+                  style={{ fontFamily: "Syne, sans-serif" }}
+                >
                   {turno.cliente_nombre}
-                </p>
+                </SheetTitle>
                 <span
-                  className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
                   style={{ backgroundColor: `${color}1a`, color }}
                 >
                   <span
@@ -303,7 +302,9 @@ export function TurnoDetalle({
                 </span>
               </div>
             </div>
+          </SheetHeader>
 
+          <div className="mt-4 space-y-5">
             {/* Datos del turno */}
             <div className="divide-y overflow-hidden rounded-2xl border bg-card">
               <Fila label="Horario">
@@ -316,7 +317,7 @@ export function TurnoDetalle({
               <Fila label="Profesional">{turno.recurso_nombre ?? "—"}</Fila>
               {turno.es_sobreturno && <Fila label="Sobreturno">Sí</Fila>}
               {turno.importe_previsto != null && (
-                <div className="flex items-center justify-between bg-muted/30 px-4 py-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-3.5 py-3">
                   <span className="text-sm text-muted-foreground">Importe</span>
                   <span className="flex items-center gap-2">
                     {turno.cubierto_por_abono && (
@@ -689,9 +690,9 @@ export function TurnoDetalle({
 /** Una fila de dato: etiqueta a la izquierda, valor a la derecha. */
 function Fila({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{children}</span>
+    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="truncate text-right font-medium">{children}</span>
     </div>
   );
 }

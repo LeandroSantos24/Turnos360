@@ -26,6 +26,17 @@ def facturacion(
     hasta: dt.datetime,
     empresa_id: EmpresaActual,
     db: DB,
+    recurso_id: int | None = None,
 ) -> EstadisticasFacturacion:
-    """Facturación real del rango [desde, hasta)."""
-    return svc.facturacion(db, empresa_id, desde, hasta)
+    """Facturación real del rango [desde, hasta).
+
+    recurso_id opcional: filtra TODO el panel a ese profesional (sus cobros,
+    sus servicios, sus horarios y su ausentismo). El servicio ya lo soportaba;
+    faltaba declararlo acá, así que el filtro que mandaba el panel se
+    descartaba en silencio y las tarjetas seguían mostrando el total.
+
+    No hace falta validar que el recurso sea de la empresa: el servicio cruza
+    siempre por empresa_id, así que un id ajeno devuelve vacío, nunca datos
+    de otro negocio.
+    """
+    return svc.facturacion(db, empresa_id, desde, hasta, recurso_id)

@@ -82,3 +82,91 @@ class UsuarioAdminOut(BaseModel):
 
 class UsuarioActualizar(BaseModel):
     activo: bool
+
+# ═══════════════════════════════════════════════════════════════════════
+# Cobranza del SaaS (tanda 1 del panel de super-admin)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class EmpresaCobranzaOut(BaseModel):
+    """Fila del listado con semáforo, uso y ficha comercial."""
+
+    id: int
+    nombre: str
+    slug: str
+    activa: bool
+    plan: str
+    suscripcion_vence: str | None = None
+    precio_mensual: float | None = None
+
+    razon_social: str | None = None
+    cuit: str | None = None
+    contacto_nombre: str | None = None
+    contacto_email: str | None = None
+    contacto_telefono: str | None = None
+    notas_admin: str | None = None
+
+    cantidad_usuarios: int = 0
+    cantidad_recursos: int = 0
+    limite_recursos: int | None = None
+    capacidad_excedida: bool = False
+    ultimo_pago: str | None = None
+
+    semaforo_color: str  # verde | amarillo | rojo | gris
+    semaforo_dias_restantes: int | None = None
+    semaforo_fin_prorroga: str | None = None
+    semaforo_en_prorroga: bool = False
+    semaforo_detalle: str
+
+
+class MetodoTotal(BaseModel):
+    metodo: str
+    total: float
+
+
+class ResumenCobranzaOut(BaseModel):
+    cobrado_mes: float
+    por_metodo: list[MetodoTotal] = Field(default_factory=list)
+    pendiente_estimado: float
+    empresas_por_vencer: int
+    por_vencer_sin_precio: int
+    deuda_vencida: float
+    empresas_vencidas: int
+    mrr: float
+    dias_aviso: int
+
+
+class PagoSuscripcionIn(BaseModel):
+    monto: float = Field(gt=0)
+    metodo: str = Field(default="transferencia", max_length=40)
+    fecha: dt.date | None = None
+    notas: str | None = Field(default=None, max_length=500)
+    # False = anotar el pago SIN mover el vencimiento (pago parcial, ajuste).
+    renovar: bool = True
+
+
+class PagoSuscripcionOut(BaseModel):
+    id: int
+    fecha: str
+    monto: float
+    metodo: str
+    periodo_desde: str | None = None
+    periodo_hasta: str | None = None
+    notas: str | None = None
+
+
+class ProrrogaIn(BaseModel):
+    dias: int = Field(gt=0, le=90, description="Días de gracia a sumar")
+
+
+class FichaComercialIn(BaseModel):
+    """Datos comerciales del negocio (solo los ve el super-admin)."""
+
+    razon_social: str | None = Field(default=None, max_length=160)
+    cuit: str | None = Field(default=None, max_length=20)
+    contacto_nombre: str | None = Field(default=None, max_length=120)
+    contacto_email: str | None = Field(default=None, max_length=160)
+    contacto_telefono: str | None = Field(default=None, max_length=40)
+    notas_admin: str | None = Field(default=None, max_length=2000)
+    precio_mensual: float | None = Field(default=None, ge=0)
+    limite_recursos: int | None = Field(default=None, ge=0, le=999)

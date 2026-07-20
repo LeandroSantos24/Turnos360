@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 
@@ -51,6 +52,28 @@ export default function AdminLayout({
               · Administración
             </span>
           </div>
+          <nav className="flex items-center gap-1">
+            <Link
+              href="/admin"
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                pathname === "/admin"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Empresas
+            </Link>
+            <Link
+              href="/admin/cobranza"
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                pathname.startsWith("/admin/cobranza")
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Cobranza
+            </Link>
+          </nav>
           <button
             onClick={() => {
               clearAdminToken();

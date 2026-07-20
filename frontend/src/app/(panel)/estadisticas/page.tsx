@@ -171,7 +171,8 @@ function ContenidoEstadisticas() {
             ))}
           </div>
           <a
-            href={`/imprimir/estadisticas?periodo=${periodo}`}
+            href={`/imprimir/estadisticas?periodo=${periodo}`
+              + (recursoId != null ? `&recurso_id=${recursoId}` : "")}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted/50"

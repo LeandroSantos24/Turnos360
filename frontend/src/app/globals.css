@@ -2,7 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fuentes de TurnosPro: Syne (títulos) + DM Sans (texto) */
+/* Fuentes del panel: Syne (títulos) + DM Sans (texto).
+   Sora se suma para la landing comercial (app/page.tsx): es la tipografía
+   de display del rediseño. Autohospedada con fontsource, igual que las
+   otras: sin pedidos a Google Fonts (más rápido y sin fuga de IPs de los
+   visitantes a un tercero). */
+@import "@fontsource/sora/500.css";
+@import "@fontsource/sora/600.css";
+@import "@fontsource/sora/700.css";
 @import "@fontsource/syne/400.css";
 @import "@fontsource/syne/500.css";
 @import "@fontsource/syne/600.css";

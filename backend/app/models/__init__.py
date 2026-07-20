@@ -31,6 +31,8 @@ from app.models.modulos.salud import *  # noqa: F401,F403  -> E13
 from app.models.items import ItemTurno
 from app.models.cupon import CuponDescuento
 
+from app.models.saas import PagoSuscripcion  # cobranza del SaaS (super-admin)
+
 __all__ = [
     "Base",
     "Rubro", "Empresa", "Sucursal", "Usuario", "SuperAdmin",
@@ -42,6 +44,7 @@ __all__ = [
     "Pago", "DeudaCliente", "ComisionProfesional",
     "PlantillaMensaje", "Mensaje",
     "LogAuditoria",
+    "PagoSuscripcion",
     "Turno",
     "ItemTurno",
 ]

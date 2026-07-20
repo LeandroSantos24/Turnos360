@@ -93,6 +93,24 @@ class Empresa(Base):
         String(20), default="gratuito", server_default="gratuito"
     )
     suscripcion_vence: Mapped[dt.date | None] = mapped_column(Date)
+
+    # ── Datos comerciales (los ve solo el super-admin) ──────────────────
+    # Ficha del cliente del SaaS: a quién le facturo y por cuánto. Nada de
+    # esto lo ve el negocio en su panel.
+    razon_social: Mapped[str | None] = mapped_column(String(160))
+    cuit: Mapped[str | None] = mapped_column(String(20))
+    contacto_nombre: Mapped[str | None] = mapped_column(String(120))
+    contacto_email: Mapped[str | None] = mapped_column(String(160))
+    contacto_telefono: Mapped[str | None] = mapped_column(String(40))
+    notas_admin: Mapped[str | None] = mapped_column(Text)
+
+    # Precio mensual pactado con ESTE negocio (puede diferir del precio de
+    # lista: pilotos bonificados, descuentos por referido). Es la base del
+    # MRR y del "pendiente estimado" de la cobranza.
+    precio_mensual: Mapped[float | None] = mapped_column(Numeric(12, 2))
+
+    # Tope de profesionales según el plan. None = sin límite.
+    limite_recursos: Mapped[int | None] = mapped_column()
     creada_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
