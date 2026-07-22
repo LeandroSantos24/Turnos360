@@ -10,11 +10,13 @@ salen de disponibilidad.calcular_huecos().
 """
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import Cliente, Empresa, Recurso, Servicio
 from app.models.enums import TipoRecurso
 from app.schemas.publico import ReservaPublicaCrear
@@ -105,6 +107,47 @@ def _elegibles(servicio: Servicio) -> list[Recurso]:
     return [r for r in servicio.recursos if r.activo]
 
 
+# Ventana de la reserva PÚBLICA. Solo aplica acá: desde el panel el negocio sí
+# puede cargar un turno de ayer (el que se olvidó de anotar) o de dentro de un
+# año, porque el que carga es el dueño y sabe lo que hace.
+DIAS_MAXIMOS_A_FUTURO = 180
+MARGEN_MINUTOS_PASADO = 5  # tolerancia por relojes desfasados del celular
+
+
+def _ahora_de_pared() -> dt.datetime:
+    """El "ahora" en la convención del motor: hora local, etiquetada UTC.
+
+    El motor guarda un turno de las 10:00 como 10:00+00:00 sin convertir. Si
+    comparásemos contra datetime.now(UTC), en un servidor con TZ=UTC el sistema
+    creería que son las 13:00 cuando en Mendoza son las 10:00, y rechazaría
+    como "pasados" turnos de las próximas tres horas.
+    """
+    local = dt.datetime.now(ZoneInfo(settings.zona_horaria))
+    return local.replace(tzinfo=dt.timezone.utc)
+
+
+def _validar_ventana(inicio: dt.datetime) -> None:
+    """La reserva web tiene que caer en el futuro y dentro de un plazo razonable.
+
+    El motor de disponibilidad solo mira horarios del recurso y solapamientos:
+    nunca compara contra "ahora". Sin este control, la vidriera acepta un turno
+    para hace 40 días (ensucia caja y estadísticas con turnos retroactivos) o
+    para el año 2099 (basura en la agenda que nadie va a limpiar).
+    """
+    ahora = _ahora_de_pared()
+    if inicio < ahora - dt.timedelta(minutes=MARGEN_MINUTOS_PASADO):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ese horario ya pasó. Elegí uno disponible.",
+        )
+    if inicio > ahora + dt.timedelta(days=DIAS_MAXIMOS_A_FUTURO):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Solo se puede reservar con hasta {DIAS_MAXIMOS_A_FUTURO} días "
+            "de anticipación.",
+        )
+
+
 def huecos(
     db: Session,
     slug: str,
@@ -131,7 +174,7 @@ def huecos(
                 status.HTTP_400_BAD_REQUEST, "Ese profesional no hace ese servicio"
             )
 
-    dias = max(1, min(dias, 60))
+    dias = max(1, min(dias, 31))
     resultado: list[dict] = []
     for i in range(dias):
         fecha = desde + dt.timedelta(days=i)
@@ -160,6 +203,8 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     creación al motor de turnos (que revalida el hueco y crea en PENDIENTE)."""
     empresa = resolver_empresa(db, slug)
     servicio = _servicio_publico(db, empresa.id, servicio_id=datos.servicio_id)
+
+    _validar_ventana(datos.inicio)
 
     elegibles = _elegibles(servicio)
     if not elegibles:
@@ -236,6 +281,26 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         db.flush()  # para tener cliente.id sin cerrar la transacción
     # Si ya existía (mismo tel + mismo nombre), lo reusamos tal cual.
 
+    # --- Cupón de descuento: se VALIDA ANTES de crear el turno ---
+    # El orden importa. turno_svc.crear() hace commit, así que validar el cupón
+    # después dejaba el turno guardado en la agenda del negocio aunque el
+    # cliente recibiera un 400 y creyera que no había reservado nada: turnos
+    # fantasma que el barbero ve y nadie va a ocupar.
+    # Se revalida server-side igual que antes (entre que el wizard lo mostró y
+    # el cliente confirmó, el cupón pudo vencerse o agotarse). El consumo del
+    # uso queda para después de crear el turno: si el horario se ocupó justo y
+    # sale 409, el cupón no se gasta.
+    from app.services import cupones as svc_cupones
+
+    cupon = None
+    descuento_pesos = 0.0
+    if datos.cupon_codigo:
+        cupon, descuento_pesos, mensaje_cupon = svc_cupones.validar_cupon(
+            db, empresa.id, datos.cupon_codigo, servicio.id
+        )
+        if cupon is None:
+            raise HTTPException(status_code=400, detail=mensaje_cupon)
+
     # Delegar al motor de turnos: revalida el hueco (409 si se ocupó) y crea
     # el turno en estado PENDIENTE. Un solo lugar que sabe crear turnos.
     turno = turno_svc.crear(
@@ -255,19 +320,8 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         cliente.acepta_marketing = True
         db.commit()
 
-    # --- Cupón de descuento (si el cliente cargó un código) ---
-    # Se revalida acá SIEMPRE (server-side): entre que el wizard lo validó y
-    # confirmó, pudo vencer o agotarse. Si no corre, la reserva se rechaza con
-    # el motivo — jamás se reserva "creyendo" tener un descuento que no corrió.
-    descuento_pesos = 0.0
-    if datos.cupon_codigo:
-        from app.services import cupones as svc_cupones
-
-        cupon, descuento_pesos, mensaje_cupon = svc_cupones.validar_cupon(
-            db, empresa.id, datos.cupon_codigo, servicio.id
-        )
-        if cupon is None:
-            raise HTTPException(status_code=400, detail=mensaje_cupon)
+    # Turno creado: recién ahora se aplica el descuento y se consume el uso.
+    if cupon is not None:
         precio_serv = float(servicio.precio or 0)
         turno.descuento_pct = svc_cupones.pct_equivalente(descuento_pesos, precio_serv)
         cupon.usos = (cupon.usos or 0) + 1

@@ -1,0 +1,34 @@
+# Lo que NO entra a la imagen del backend.
+#
+# Sin este archivo, el `COPY . .` del Dockerfile mete adentro de la imagen los
+# __pycache__ de la máquina de desarrollo, el estado del beat de Celery y —si
+# algún día aparece un .env dentro de backend/— las credenciales de producción,
+# que quedarían horneadas en una capa y viajarían con la imagen a donde vaya.
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Artefactos de runtime
+celerybeat-schedule
+celerybeat.pid
+*.log
+
+# Tests (no hacen falta en la imagen de producción)
+tests/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store

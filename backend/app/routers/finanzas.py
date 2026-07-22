@@ -3,12 +3,16 @@
 El empresa_id sale del token; el usuario actual queda registrado en cada
 operación (quién abrió/cerró la caja, quién cobró, quién cargó el gasto).
 
-Roles (criterio "lecturas abiertas, escrituras gateadas"):
-- Configurar métodos de pago (crear/editar/borrar) = dueño (gate_dueno).
-- Operar el día (abrir/cerrar caja, cobrar, gastos, categorías) = dueño +
-  recepción (gate_gestion).
-- LISTAR métodos de pago queda abierto: el flujo de cobro de recepción lo
-  necesita para elegir con qué se paga. Igual el resto de las lecturas.
+Roles:
+- TODO el módulo exige gate_gestion (dueño + admin + recepción) a nivel de
+  router. El PROFESIONAL queda afuera de finanzas por completo, que es lo que
+  promete el manual: "no ve la facturación del negocio". Antes el candado
+  estaba solo en el menú del panel; la API contestaba igual, así que un
+  empleado con las herramientas del navegador veía la caja entera.
+  Poner la dependencia en el router y no ruta por ruta es a propósito: el
+  próximo endpoint de finanzas nace protegido sin que haya que acordarse.
+- Configurar métodos de pago (crear/editar/borrar) = dueño (gate_dueno), que
+  se suma al gate del router y deja la intersección: solo el dueño.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -35,14 +39,14 @@ from app.schemas.finanzas import (
 )
 from app.services import finanzas as svc
 
-router = APIRouter(tags=["finanzas"])
+router = APIRouter(tags=["finanzas"], dependencies=[Depends(gate_gestion)])
 
 
 # ─────────────────────────── Métodos de pago ────────────────────────────────
 
 @router.get("/metodos-pago", response_model=list[MetodoPagoOut])
 def listar_metodos(empresa_id: EmpresaActual, db: DB) -> list[MetodoPagoOut]:
-    # Abierto: el cobro (recepción) necesita la lista para elegir método.
+    # Recepción incluida: el flujo de cobro necesita la lista de métodos.
     return svc.listar_metodos(db, empresa_id)
 
 

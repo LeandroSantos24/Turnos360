@@ -15,10 +15,19 @@ from app.routers import cupones
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico, giftcards
 
 
+# En producción la documentación interactiva queda cerrada. No da acceso a
+# nada por sí sola, pero publica el mapa completo de la API (85 rutas, sus
+# parámetros y sus schemas) y eso es trabajo de reconocimiento regalado.
+# En desarrollo sigue disponible en /docs como siempre.
+_docs = None if settings.es_produccion else "/docs"
+
 app = FastAPI(
     title="Turnos360 API",
     version="0.1.0",
     description="SaaS multiempresa de gestión de turnos · CRM · WhatsApp · Finanzas · Fidelización",
+    docs_url=_docs,
+    redoc_url=None if settings.es_produccion else "/redoc",
+    openapi_url=None if settings.es_produccion else "/openapi.json",
 )
 
 # Rate limiting: registramos el limiter y el handler que responde 429 al pasarse.
@@ -70,7 +79,7 @@ app.include_router(publico.router)
 
 @app.get("/", tags=["meta"])
 def root() -> dict:
-    return {"producto": "Turnos360", "version": app.version, "env": settings.env, "docs": "/docs"}
+    return {"producto": "Turnos360", "version": app.version, "docs": _docs}
 
 
 @app.get("/health", tags=["meta"])

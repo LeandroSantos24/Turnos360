@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     smtp_pass: str = ""          # contraseña de APLICACIÓN (no la de la cuenta)
     smtp_from: str = ""          # opcional; default = smtp_user
 
+    # Zona horaria de los negocios. El motor de agenda trabaja con "hora de
+    # pared etiquetada UTC" (un turno de las 10:00 se guarda como 10:00+00:00),
+    # así que para saber si un horario ya pasó hay que preguntar qué hora es
+    # ACÁ, no en UTC. Sin esto, en un servidor con TZ=UTC el sistema se cree
+    # 3 horas en el futuro respecto del local.
+    zona_horaria: str = "America/Argentina/Buenos_Aires"
+
     # --- JWT (E2) ---
     jwt_algoritmo: str = "HS256"
     access_token_minutos: int = 30      # token corto: viaja en cada request

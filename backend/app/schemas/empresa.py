@@ -1,11 +1,11 @@
-from typing import Literal
-
 """Schema de la configuración de la empresa actual (preset del rubro).
 
 Lo consume el frontend al iniciar sesión para saber:
 - qué módulos mostrar (preset["modulos"], ej. ficha_clinica),
 - cómo nombrar las cosas (preset["terminologia"], ej. cliente -> paciente).
 """
+
+from typing import Literal
 
 from pydantic import BaseModel, Field
 

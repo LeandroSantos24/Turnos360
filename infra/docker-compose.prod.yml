@@ -47,7 +47,9 @@ services:
       retries: 10
 
   backend:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
     restart: unless-stopped
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -88,7 +90,9 @@ services:
         condition: service_healthy
 
   worker:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
     restart: unless-stopped
     environment: *backend_env
     command: celery -A app.celery_app worker --loglevel=warning --concurrency=2
@@ -99,7 +103,9 @@ services:
         condition: service_healthy
 
   beat:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
     restart: unless-stopped
     environment: *backend_env
     # --schedule fuera del código: el archivo de estado del beat es runtime,

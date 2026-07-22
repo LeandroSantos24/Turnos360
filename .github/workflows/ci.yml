@@ -8,14 +8,56 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+
+    # La suite toca la base de verdad (aislamiento entre empresas, cobros,
+    # reserva pública). Antes el job corría pytest sin ninguna base, así que
+    # fallaba en cada push desde que se agregaron esos tests. Levantamos un
+    # Postgres y un Redis de servicio, como los que usa el docker compose.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: turnos360
+          POSTGRES_PASSWORD: turnos360
+          POSTGRES_DB: turnos360
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U turnos360 -d turnos360"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://turnos360:turnos360@localhost:5432/turnos360
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: clave-solo-para-ci-no-secreta
+      ENV: dev
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Instalar dependencias
         run: pip install -e "./backend[dev]"
+
       - name: Lint (ruff)
         run: ruff check backend/app backend/tests
+
+      - name: Migraciones (base limpia)
+        run: cd backend && alembic upgrade head
+
       - name: Tests
         run: cd backend && python -m pytest -q

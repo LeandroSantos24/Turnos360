@@ -76,6 +76,22 @@ class ReservaPublicaCrear(BaseModel):
     cliente: ClientePublico
     cupon_codigo: str | None = Field(default=None, max_length=40)
 
+    @field_validator("inicio")
+    @classmethod
+    def _normalizar_zona(cls, v: dt.datetime) -> dt.datetime:
+        """Deja el inicio en la convención del motor: hora de pared + tzinfo UTC.
+
+        El motor de disponibilidad compara contra datetimes con zona. Si llegaba
+        uno sin zona (un cliente de API que manda "2026-07-25T10:00:00" a secas,
+        que el schema aceptaba sin chistar), el primer `<` reventaba con
+        TypeError y el endpoint público devolvía un 500.
+
+        No se convierte la hora, se re-etiqueta: 10:00 sigue siendo las 10:00
+        de la agenda, venga como venga. Es la misma convención con la que el
+        motor guarda y calcula los huecos.
+        """
+        return v.replace(tzinfo=dt.timezone.utc)
+
 
 class ReservaPublicaOut(BaseModel):
     turno_id: int

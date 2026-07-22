@@ -4,11 +4,18 @@ Toda ruta exige token válido (vía EmpresaActual). El empresa_id sale del token
 y se le pasa al service: el usuario nunca elige sobre qué empresa opera (Regla 1).
 
 La ficha es 1:1 con el paciente, así que un solo PUT hace de crear y actualizar.
+
+Roles: historia clínica = dato sensible (Ley 25.326). El candado va a nivel de
+router y deja adentro al DUEÑO, al ADMIN y al PROFESIONAL —que es quien atiende
+y necesita la ficha de su paciente— y afuera a RECEPCIÓN, que administra turnos
+y cobros pero no tiene por qué leer antecedentes, mediciones ni adjuntos.
+Antes el módulo entero no tenía ningún control de rol.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DB, EmpresaActual
+from app.api.deps import DB, EmpresaActual, requiere_rol
+from app.models.enums import RolUsuario
 from app.schemas.salud import (
     AdjuntoCrear,
     AdjuntoOut,
@@ -21,7 +28,14 @@ from app.schemas.salud import (
 )
 from app.services import salud as svc
 
-router = APIRouter(prefix="/pacientes", tags=["salud"])
+# Dueño + admin + profesional. Recepción queda afuera de la historia clínica.
+gate_clinico = requiere_rol(
+    RolUsuario.DUENO, RolUsuario.ADMIN, RolUsuario.PROFESIONAL
+)
+
+router = APIRouter(
+    prefix="/pacientes", tags=["salud"], dependencies=[Depends(gate_clinico)]
+)
 
 
 @router.get("/{cliente_id}/ficha", response_model=FichaOut)

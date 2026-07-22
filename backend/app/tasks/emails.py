@@ -23,9 +23,8 @@ from sqlalchemy import extract, func, or_ as sa_or, select
 from app.celery_app import celery_app
 from app.core import mailer
 from app.db.session import SessionLocal
-from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno, Usuario
+from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno
 from app.models.enums import CanalMensaje, EstadoMensaje, EstadoTurno
-from app.core.config import settings
 from app.services.empresa import automs_de
 
 TEAL = "#17a08a"
@@ -49,9 +48,9 @@ def _plantilla(
     `marca` = nombre del negocio: él es el protagonista; Turnos360 firma abajo.
     """
     cuerpo = "".join(
-        f'<p style="margin:0 0 10px;font-size:15px;line-height:1.65;color:#2a3140;">{l}</p>'
-        for l in lineas
-        if l
+        f'<p style="margin:0 0 10px;font-size:15px;line-height:1.65;color:#2a3140;">{linea}</p>'
+        for linea in lineas
+        if linea
     )
     html_boton = ""
     if boton:

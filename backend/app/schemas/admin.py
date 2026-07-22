@@ -8,7 +8,7 @@ from app.models.enums import RolUsuario
 
 class AdminLogin(BaseModel):
     email: str
-    clave: str
+    clave: str = Field(min_length=1, max_length=100)
 
 
 class AdminToken(BaseModel):
@@ -27,7 +27,7 @@ class RubroOut(BaseModel):
 class DuenoCrear(BaseModel):
     nombre: str = Field(min_length=2)
     email: str
-    clave: str = Field(min_length=6)
+    clave: str = Field(min_length=8, max_length=100)
 
 
 class EmpresaCrear(BaseModel):
@@ -66,7 +66,7 @@ class SuscripcionAdminIn(BaseModel):
 class UsuarioCrear(BaseModel):
     nombre: str = Field(min_length=2)
     email: str
-    clave: str = Field(min_length=6)
+    clave: str = Field(min_length=8, max_length=100)
     rol: RolUsuario
 
 

@@ -1,6 +1,6 @@
 """Endpoints de la empresa actual: preset del rubro + landing pública editable."""
 
-from fastapi import APIRouter, Depends, HTTPException, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import DB, EmpresaActual, gate_dueno
 from app.schemas.empresa import SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, SenasConfigIn, SenasConfigOut

@@ -7,7 +7,9 @@ class LoginRequest(BaseModel):
     """Lo que el usuario envía para iniciar sesión."""
 
     email: EmailStr
-    clave: str
+    # Con tope: sin él se puede mandar una "contraseña" de varios MB y hacer
+    # trabajar al servidor de gordo por cada intento.
+    clave: str = Field(min_length=1, max_length=100)
 
 
 class RefreshRequest(BaseModel):

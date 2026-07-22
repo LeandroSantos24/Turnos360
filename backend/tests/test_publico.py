@@ -7,7 +7,6 @@ de tenant (un pago no puede marcar la seña de un turno de otra empresa).
 
 import datetime as dt
 
-from tests.conftest import token_de
 from app.models import Cliente
 from app.models.enums import EstadoTurno
 from app.models.turno import Turno

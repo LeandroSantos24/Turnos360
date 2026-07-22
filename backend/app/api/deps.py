@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
 
-from app.core.seguridad import decodificar_token
+from app.core.seguridad import SCOPE_EMPRESA, SCOPE_SUPERADMIN, decodificar_token
 from app.db.session import get_db
 from app.models import Empresa, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
@@ -51,9 +51,16 @@ def get_current_usuario(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # 1. Abrir y validar el token (firma, vencimiento, tipo 'access')
+    # 1. Abrir y validar el token (firma, vencimiento, tipo 'access' y ÁMBITO).
+    #    El scope es lo que impide que el token del panel de super-admin —que
+    #    lleva el id del super-admin en 'sub'— sea aceptado acá como si fuera
+    #    el Usuario que casualmente tiene ese mismo id numérico.
     try:
-        payload = decodificar_token(credenciales.credentials, tipo_esperado="access")
+        payload = decodificar_token(
+            credenciales.credentials,
+            tipo_esperado="access",
+            scope_esperado=SCOPE_EMPRESA,
+        )
         usuario_id = int(payload["sub"])
     except (InvalidTokenError, KeyError, ValueError):
         raise no_autorizado
@@ -61,6 +68,13 @@ def get_current_usuario(
     # 2. El usuario debe existir y estar activo
     usuario = db.get(Usuario, usuario_id)
     if usuario is None or not usuario.activo:
+        raise no_autorizado
+
+    # 2.5. La versión del token debe seguir siendo la vigente.
+    #      Cambiar o restablecer la contraseña incrementa usuario.token_version,
+    #      así que todas las sesiones emitidas antes (incluido el refresh de 7
+    #      días guardado en otro dispositivo) dejan de valer al instante.
+    if int(payload.get("tv", 0)) != int(usuario.token_version or 0):
         raise no_autorizado
 
     # 3. La empresa del usuario no debe estar pausada.
@@ -153,9 +167,11 @@ def get_current_superadmin(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = decodificar_token(credenciales.credentials, tipo_esperado="access")
-        if payload.get("scope") != "superadmin":
-            raise no_autorizado
+        payload = decodificar_token(
+            credenciales.credentials,
+            tipo_esperado="access",
+            scope_esperado=SCOPE_SUPERADMIN,
+        )
         sa_id = int(payload["sub"])
     except (InvalidTokenError, KeyError, ValueError):
         raise no_autorizado

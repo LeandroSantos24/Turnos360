@@ -15,7 +15,6 @@ from datetime import datetime
 from sqlalchemy import (
     Date,
     DateTime,
-    ForeignKey,
     Index,
     Numeric,
     String,

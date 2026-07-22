@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func, Numeric
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, Numeric
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -144,6 +144,12 @@ class Usuario(TenantMixin, Base):
     # Recuperación de contraseña: HASH del token de un solo uso + expiración.
     reset_token_hash: Mapped[str | None] = mapped_column(String(128))
     reset_token_expira: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Revocación de sesiones. Viaja dentro del JWT (claim 'tv') y se compara en
+    # cada request: al cambiar o restablecer la contraseña se incrementa, y todos
+    # los tokens emitidos antes —incluido el refresh de 7 días que pueda tener un
+    # atacante en otro dispositivo— dejan de servir en el acto.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # El recurso (silla/barbero) que opera este usuario, si es un profesional.
     # Decisión 1-a-1: un profesional ↔ un recurso. El FK vive en Recurso.usuario_id;

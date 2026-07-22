@@ -106,15 +106,24 @@ def vidriera(slug: str, db: DB) -> VidrieraOut:
 
 
 @router.get("/{slug}/horarios", response_model=list[HuecosDia])
+@limiter.limit("30/minute")
 def horarios(
+    request: Request,
     slug: str,
     db: DB,
     servicio_id: int = Query(...),
     recurso_id: int | None = Query(default=None),
     desde: dt.date | None = Query(default=None),
-    dias: int = Query(default=14, ge=1, le=60),
+    dias: int = Query(default=14, ge=1, le=31),
 ) -> list[HuecosDia]:
-    """Horarios de inicio libres por día. recurso_id vacío = cualquiera."""
+    """Horarios de inicio libres por día. recurso_id vacío = cualquiera.
+
+    CON rate limit y tope de 31 días: es el endpoint más caro del sistema y no
+    pide login. Cada día consultado recorre a todos los profesionales que hacen
+    el servicio, así que un pedido de 60 días con varios barberos disparaba
+    cientos de consultas SQL — repetirlo en bucle bastaba para voltear la base
+    sin necesidad de ninguna credencial.
+    """
     return svc.huecos(db, slug, servicio_id, recurso_id, desde or dt.date.today(), dias)
 
 

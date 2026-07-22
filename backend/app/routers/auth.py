@@ -1,6 +1,5 @@
 """Endpoints de autenticación: login y refresh (E2)."""
 
-from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Request, status
 from jwt.exceptions import InvalidTokenError
@@ -8,18 +7,18 @@ from sqlalchemy import select
 
 from app.api.deps import DB, UsuarioActual, verificar_empresa_activa
 from app.core.seguridad import (
+    SCOPE_EMPRESA,
     crear_access_token,
     crear_refresh_token,
     decodificar_token,
 )
-from app.core.crypto import verificar_clave
 from app.core.rate_limit import limiter
 import datetime as dt
 import hashlib
 import logging
 import secrets
 
-from app.core.crypto import hash_clave, verificar_clave as _verificar_clave
+from app.core.crypto import hash_clave, hash_senuelo, verificar_clave
 from app.models import Empresa, Usuario
 from app.schemas.auth import CambiarPasswordRequest, OlvidePasswordRequest, RestablecerPasswordRequest, LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
@@ -48,7 +47,7 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     # 2. Verificar que exista, esté activo y la clave coincida con el hash.
     #    Verificamos la clave SIEMPRE (aunque el usuario no exista) para no
     #    revelar por el tiempo de respuesta si un email está registrado o no.
-    hash_guardado = usuario.hash_clave if usuario else "pbkdf2$1$00$00"
+    hash_guardado = usuario.hash_clave if usuario else hash_senuelo()
     clave_ok = verificar_clave(datos.clave, hash_guardado)
 
     if usuario is None or not usuario.activo or not clave_ok:
@@ -63,9 +62,14 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     verificar_empresa_activa(empresa)
 
     # 4. Emitir los tokens con el empresa_id y rol fijados adentro
+    tv = int(usuario.token_version or 0)
     return TokenResponse(
-        access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value),
-        refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value),
+        access_token=crear_access_token(
+            usuario.id, usuario.empresa_id, usuario.rol.value, tv
+        ),
+        refresh_token=crear_refresh_token(
+            usuario.id, usuario.empresa_id, usuario.rol.value, tv
+        ),
     )
 
 
@@ -80,7 +84,11 @@ def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
 
     # 1. Validar el refresh token (firma, vencimiento, tipo 'refresh')
     try:
-        payload = decodificar_token(datos.refresh_token, tipo_esperado="refresh")
+        payload = decodificar_token(
+            datos.refresh_token,
+            tipo_esperado="refresh",
+            scope_esperado=SCOPE_EMPRESA,
+        )
         usuario_id = int(payload["sub"])
     except (InvalidTokenError, KeyError, ValueError):
         raise token_invalido
@@ -88,6 +96,12 @@ def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
     # 2. El usuario debe seguir existiendo y activo
     usuario = db.get(Usuario, usuario_id)
     if usuario is None or not usuario.activo:
+        raise token_invalido
+
+    # 2.5. El refresh no debe ser de una sesión revocada (cambio de contraseña).
+    #      Es el punto clave: sin esto, un refresh robado sobrevive al cambio
+    #      de clave durante 7 días y se renueva solo, indefinidamente.
+    if int(payload.get("tv", 0)) != int(usuario.token_version or 0):
         raise token_invalido
 
     # 3. La empresa no debe estar pausada: si no, no minteamos tokens nuevos.
@@ -98,9 +112,14 @@ def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
     verificar_empresa_activa(empresa)
 
     # 4. Emitir tokens frescos
+    tv = int(usuario.token_version or 0)
     return TokenResponse(
-        access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value),
-        refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value),
+        access_token=crear_access_token(
+            usuario.id, usuario.empresa_id, usuario.rol.value, tv
+        ),
+        refresh_token=crear_refresh_token(
+            usuario.id, usuario.empresa_id, usuario.rol.value, tv
+        ),
     )
 
 
@@ -172,16 +191,21 @@ def restablecer_password(
     usuario.hash_clave = hash_clave(datos.clave_nueva)
     usuario.reset_token_hash = None
     usuario.reset_token_expira = None
+    # Corta TODAS las sesiones abiertas. Este flujo es justo el que usa alguien
+    # que sospecha que le entraron a la cuenta: si no revocara, el atacante
+    # seguiría adentro con su refresh token por hasta 7 días.
+    usuario.token_version = int(usuario.token_version or 0) + 1
     db.commit()
     return {"detalle": "Contraseña actualizada. Ya podés entrar con la nueva."}
 
 
 @router.post("/cambiar-password")
+@limiter.limit("10/minute")
 def cambiar_password(
-    datos: CambiarPasswordRequest, usuario: UsuarioActual, db: DB
+    request: Request, datos: CambiarPasswordRequest, usuario: UsuarioActual, db: DB
 ) -> dict:
     """Cambio de clave estando logueado: pide la actual y setea la nueva."""
-    if not _verificar_clave(datos.clave_actual, usuario.hash_clave):
+    if not verificar_clave(datos.clave_actual, usuario.hash_clave):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La contraseña actual no es correcta",
@@ -189,5 +213,9 @@ def cambiar_password(
     usuario.hash_clave = hash_clave(datos.clave_nueva)
     usuario.reset_token_hash = None
     usuario.reset_token_expira = None
+    usuario.token_version = int(usuario.token_version or 0) + 1
     db.commit()
-    return {"detalle": "Contraseña actualizada"}
+    return {
+        "detalle": "Contraseña actualizada. Por seguridad se cerraron las "
+        "demás sesiones: volvé a entrar."
+    }

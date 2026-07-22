@@ -34,6 +34,7 @@ from app.models.cupon import CuponDescuento
 from app.models.saas import PagoSuscripcion  # cobranza del SaaS (super-admin)
 
 __all__ = [
+    "CuponDescuento",
     "Base",
     "Rubro", "Empresa", "Sucursal", "Usuario", "SuperAdmin",
     "Especialidad", "Recurso", "HorarioRecurso", "ExcepcionAgenda", "Servicio",

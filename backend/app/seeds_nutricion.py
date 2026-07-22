@@ -12,7 +12,6 @@ import datetime as dt
 
 from app.core.crypto import hash_clave
 from app.db.session import SessionLocal
-from app.seeds import _base_empresa  # reusa los catálogos financieros por empresa
 from app.models import (
     Cliente,
     Empresa,

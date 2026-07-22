@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import secrets
+from functools import lru_cache
 
 from cryptography.fernet import Fernet
 
@@ -52,3 +53,18 @@ def verificar_clave(clave: str, almacenada: str) -> bool:
         return secrets.compare_digest(dk.hex(), esperado)
     except (ValueError, AttributeError):
         return False
+
+
+@lru_cache(maxsize=1)
+def hash_senuelo() -> str:
+    """Hash de descarte para verificar contra usuarios que NO existen.
+
+    Tiene que costar lo MISMO que un hash real: si el señuelo usara menos
+    iteraciones, el login respondería en 3 ms para un email inexistente y en
+    240 ms para uno registrado, y ese salto de dos órdenes de magnitud permite
+    enumerar la lista de clientes con un script trivial.
+
+    Se calcula una sola vez por proceso (lru_cache) sobre una clave aleatoria
+    que nadie conoce, así que jamás puede coincidir con una contraseña real.
+    """
+    return hash_clave(secrets.token_urlsafe(32))

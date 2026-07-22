@@ -106,36 +106,40 @@ def _franjas_del_dia(
 
 def _turnos_ocupados(
     db: Session, empresa_id: int, recurso_id: int, fecha: dt.date
-) -> list[tuple[dt.datetime, dt.datetime, str | None]]:
-    """Intervalos [inicio, fin, grupo_agenda) de los turnos que ocupan al recurso ese día.
+) -> list[tuple[int, dt.datetime, dt.datetime, str | None]]:
+    """Turnos que ocupan al recurso ese día: (id, inicio, fin, grupo_agenda).
 
     El grupo_agenda viene del servicio del turno: dos turnos solo se bloquean
     entre sí si comparten el mismo grupo (corte vs tintura vs barba son carriles
     paralelos que conviven). Un turno cuyo servicio no tiene grupo (None) bloquea
     con cualquiera (comportamiento clásico).
+
+    Devuelve el id del turno porque quien excluye (al mover un turno) tiene que
+    poder identificarlo sin adivinar: antes se lo buscaba por fecha_inicio, y
+    con dos turnos que arrancan a la misma hora en carriles distintos —el caso
+    normal de una peluquería— esa búsqueda devolvía cualquiera de los dos.
+
+    Una sola consulta con LEFT JOIN al servicio: antes se hacía un db.get() por
+    turno, y el endpoint público de horarios llegaba a cientos de consultas.
     """
     inicio_dia = dt.datetime.combine(fecha, dt.time.min, tzinfo=dt.timezone.utc)
     fin_dia = inicio_dia + dt.timedelta(days=1)
-    turnos = db.scalars(
-        select(Turno).where(
+    filas = db.execute(
+        select(Turno.id, Turno.fecha_inicio, Turno.fecha_fin, Servicio.grupo_agenda)
+        .outerjoin(Servicio, Servicio.id == Turno.servicio_id)
+        .where(
             Turno.empresa_id == empresa_id,
             Turno.recurso_id == recurso_id,
             Turno.estado.in_(ESTADOS_OCUPAN),
             Turno.fecha_inicio >= inicio_dia,
             Turno.fecha_inicio < fin_dia,
         )
-    )
-    resultado = []
-    for t in turnos:
-        if not (t.fecha_inicio and t.fecha_fin):
-            continue
-        # Traer el grupo del servicio de este turno
-        grupo = None
-        if t.servicio_id:
-            serv = db.get(Servicio, t.servicio_id)
-            grupo = serv.grupo_agenda if serv else None
-        resultado.append((t.fecha_inicio, t.fecha_fin, grupo))
-    return resultado
+    ).all()
+    return [
+        (tid, ini, fin, grupo)
+        for tid, ini, fin, grupo in filas
+        if ini and fin
+    ]
 
 
 def calcular_huecos(
@@ -183,7 +187,7 @@ def calcular_huecos(
             # ¿Choca con algún turno ocupado del mismo carril?
             choca = any(
                 _bloquean_entre_si(actual, fin, grupo_agenda, ini_o, fin_o, grupo_o)
-                for ini_o, fin_o, grupo_o in ocupados
+                for _id_o, ini_o, fin_o, grupo_o in ocupados
             )
             if not choca:
                 huecos.append(actual)
@@ -230,18 +234,13 @@ def esta_disponible(
         return False
 
     # 3. ¿Choca con un turno ya ocupado del mismo carril? (excluyendo el propio si se mueve)
-    for ini_o, fin_o, grupo_o in _turnos_ocupados(db, empresa_id, recurso_id, fecha):
-        # nota: _turnos_ocupados no filtra por id; el filtro de exclusión va acá
-        if excluir_turno_id is not None:
-            turno_o = db.scalar(
-                select(Turno).where(
-                    Turno.fecha_inicio == ini_o,
-                    Turno.recurso_id == recurso_id,
-                    Turno.empresa_id == empresa_id,
-                )
-            )
-            if turno_o and turno_o.id == excluir_turno_id:
-                continue
+    #    La exclusión es por id, directa. Antes se resolvía buscando un turno con
+    #    la misma fecha_inicio: con dos turnos a la misma hora en carriles
+    #    distintos, esa consulta devolvía uno cualquiera de los dos y el motor
+    #    podía saltearse un choque real (o rechazar un movimiento válido).
+    for id_o, ini_o, fin_o, grupo_o in _turnos_ocupados(db, empresa_id, recurso_id, fecha):
+        if excluir_turno_id is not None and id_o == excluir_turno_id:
+            continue
         if _bloquean_entre_si(inicio, fin, grupo_agenda, ini_o, fin_o, grupo_o):
             return False
 

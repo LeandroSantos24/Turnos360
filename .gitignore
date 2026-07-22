@@ -16,6 +16,7 @@ out/
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # Artefactos de runtime (los genera la app al correr; no se versionan)
 celerybeat-schedule
