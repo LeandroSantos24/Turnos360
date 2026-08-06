@@ -15,7 +15,7 @@ Reglas de negocio (definidas por Leandro):
 import datetime as dt
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_ as sa_or, select
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, PagoSuscripcion, Recurso, Usuario
@@ -32,13 +32,33 @@ def semaforo_de(empresa: Empresa, hoy: dt.date | None = None) -> dict:
     hoy = hoy or dt.date.today()
     vence = empresa.suscripcion_vence
 
+    # La prueba se evalúa PRIMERO: un negocio en prueba no debe pintarse de
+    # rojo por no tener vencimiento, ni de verde como si estuviera pagando.
+    if empresa.prueba_hasta is not None and hoy <= empresa.prueba_hasta:
+        restantes = (empresa.prueba_hasta - hoy).days
+        return {
+            "color": "azul",
+            "dias_restantes": restantes,
+            "fin_prorroga": None,
+            "en_prorroga": False,
+            "detalle": (
+                "Prueba · último día"
+                if restantes == 0
+                else f"Prueba · {restantes} día{'s' if restantes != 1 else ''}"
+            ),
+        }
+
     if vence is None:
         return {
             "color": "gris",
             "dias_restantes": None,
             "fin_prorroga": None,
             "en_prorroga": False,
-            "detalle": "Sin vencimiento",
+            "detalle": (
+                "Prueba terminada · sin convertir"
+                if empresa.prueba_hasta is not None
+                else "Sin vencimiento"
+            ),
         }
 
     dias = (vence - hoy).days
@@ -187,6 +207,13 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
     # días, según el precio pactado de cada empresa que vence en esa ventana.
     # Las empresas sin precio cargado NO suman (no inventamos plata): se
     # informan aparte para que sepas que el número está incompleto.
+    # Filtro común: un negocio dentro de su período de prueba no debe nada y
+    # tampoco es ingreso recurrente. Si contara, el MRR quedaría inflado con
+    # plata que todavía no existe y la deuda vencida mostraría morosos falsos.
+    no_en_prueba = sa_or(
+        Empresa.prueba_hasta.is_(None), Empresa.prueba_hasta < hoy
+    )
+
     limite = hoy + dt.timedelta(days=DIAS_AVISO)
     por_vencer = list(
         db.scalars(
@@ -195,6 +222,7 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
                 Empresa.suscripcion_vence.is_not(None),
                 Empresa.suscripcion_vence >= hoy,
                 Empresa.suscripcion_vence <= limite,
+                no_en_prueba,
             )
         ).all()
     )
@@ -208,6 +236,7 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
                 Empresa.activa.is_(True),
                 Empresa.suscripcion_vence.is_not(None),
                 Empresa.suscripcion_vence < hoy,
+                no_en_prueba,
             )
         ).all()
     )
@@ -217,11 +246,22 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
     # prórroga. No incluye las bonificadas (precio None) ni las pausadas.
     mrr = db.scalar(
         select(func.coalesce(func.sum(Empresa.precio_mensual), 0)).where(
-            Empresa.activa.is_(True), Empresa.precio_mensual.is_not(None)
+            Empresa.activa.is_(True),
+            Empresa.precio_mensual.is_not(None),
+            no_en_prueba,
         )
     ) or Decimal(0)
 
+    en_prueba = db.scalar(
+        select(func.count(Empresa.id)).where(
+            Empresa.activa.is_(True),
+            Empresa.prueba_hasta.is_not(None),
+            Empresa.prueba_hasta >= hoy,
+        )
+    )
+
     return {
+        "empresas_en_prueba": int(en_prueba or 0),
         "cobrado_mes": float(cobrado),
         "por_metodo": por_metodo,
         "pendiente_estimado": pendiente,

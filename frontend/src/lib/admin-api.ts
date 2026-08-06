@@ -120,6 +120,8 @@ export function crearEmpresa(datos: {
   slug: string;
   rubro_id: number;
   dueno: { nombre: string; email: string; clave: string };
+  /** Días de prueba con los que arranca. 0 = cliente que ya paga. */
+  dias_prueba?: number;
 }): Promise<EmpresaAdmin> {
   return adminApi.post<EmpresaAdmin>("/admin/empresas", datos);
 }
@@ -151,7 +153,8 @@ export function actualizarUsuario(id: number, activo: boolean): Promise<UsuarioA
 // Cobranza del SaaS (semáforo, resumen, pagos, prórrogas)
 // ═══════════════════════════════════════════════════════════════════
 
-export type SemaforoColor = "verde" | "amarillo" | "rojo" | "gris";
+/** azul = dentro del período de prueba (ni al día ni moroso). */
+export type SemaforoColor = "verde" | "amarillo" | "rojo" | "gris" | "azul";
 
 export interface EmpresaCobranza {
   id: number;

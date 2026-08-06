@@ -48,6 +48,7 @@ const COLORES: Record<SemaforoColor, { punto: string; chip: string; label: strin
   amarillo: { punto: "bg-amber-500", chip: "bg-amber-500/10 text-amber-700 dark:text-amber-400", label: "Por vencer" },
   rojo: { punto: "bg-red-500", chip: "bg-red-500/10 text-red-700 dark:text-red-400", label: "Vencida" },
   gris: { punto: "bg-muted-foreground/40", chip: "bg-muted text-muted-foreground", label: "Sin vencimiento" },
+  azul: { punto: "bg-sky-500", chip: "bg-sky-500/10 text-sky-700 dark:text-sky-400", label: "En prueba" },
 };
 
 const FILTROS: { valor: SemaforoColor | ""; label: string }[] = [
@@ -55,6 +56,7 @@ const FILTROS: { valor: SemaforoColor | ""; label: string }[] = [
   { valor: "rojo", label: "Vencidas" },
   { valor: "amarillo", label: "Por vencer" },
   { valor: "verde", label: "Al día" },
+  { valor: "azul", label: "En prueba" },
   { valor: "gris", label: "Sin vencimiento" },
 ];
 

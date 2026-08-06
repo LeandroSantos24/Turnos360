@@ -37,5 +37,12 @@ celery_app.conf.update(
             "task": "app.tasks.emails.enviar_inactivos",
             "schedule": crontab(hour=12, minute=30),
         },
+        # Cobranza del SaaS: avisos de vencimiento a los negocios. 13:00 UTC
+        # (~10:00 Argentina), después de los otros para no amontonar envíos
+        # en el límite diario de Gmail.
+        "vencimientos": {
+            "task": "app.tasks.emails.avisar_vencimientos",
+            "schedule": crontab(hour=13, minute=0),
+        },
     },
 )

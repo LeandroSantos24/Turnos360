@@ -383,15 +383,24 @@ def enviar_recordatorio_2h(turno_id: int) -> None:
 
 
 @celery_app.task(name="app.tasks.emails.pedir_resena")
-def pedir_resena(turno_id: int) -> None:
-    """Al finalizar el turno: pedido de reseña en Google (si está activa)."""
+def pedir_resena(turno_id: int, manual: bool = False) -> None:
+    """Pedido de reseña en Google.
+
+    Sale solo al finalizar el turno cuando la campaña está activa, y también
+    a pedido desde la agenda (`manual=True`). En el caso manual se saltea el
+    switch de la campaña —el dueño ya decidió mandarlo apretando el botón—
+    pero el link sigue siendo obligatorio: sin él el mail no tiene a dónde
+    llevar al cliente.
+    """
     with SessionLocal() as db:
         ctx = _cargar(db, turno_id)
         if not ctx or not ctx["cliente"] or not ctx["cliente"].email:
             return
         empresa = ctx["empresa"]
         cfg = automs_de(empresa).get("resena_google", {})
-        if not cfg.get("activa") or not cfg.get("link"):
+        if not cfg.get("link"):
+            return
+        if not manual and not cfg.get("activa"):
             return
         html = _plantilla(
             "¿Cómo estuvo tu visita? ⭐",
@@ -683,3 +692,163 @@ def enviar_prueba_campana(empresa_id: int, tipo: str, destino: str) -> None:
             f"[PRUEBA] {asunto}",
             html, f"prueba_campana tipo={tipo}",
         )
+
+
+# ============================================================
+# Cobranza del SaaS: avisos de vencimiento al negocio
+# ============================================================
+
+# Hitos del ciclo, en días respecto de suscripcion_vence.
+# Negativo = después del vencimiento (dentro de la prórroga).
+_HITOS_VENCIMIENTO = {
+    10: ("aviso", "Tu suscripción vence en 10 días"),
+    3: ("aviso", "Tu suscripción vence en 3 días"),
+    0: ("vence", "Tu suscripción vence hoy"),
+    -3: ("gracia", "Tu suscripción venció · te quedan 7 días"),
+    -8: ("ultimo", "Últimos 2 días antes de que se corte el servicio"),
+}
+
+
+def _email_del_dueno(db, empresa) -> str | None:
+    """A quién le escribimos. Primero el dueño; si no hay, el mail público.
+
+    Se busca el usuario con rol dueño y no el email_publico a secas porque el
+    público suele ser el del local (lo atiende recepción) y esto es plata: va
+    a quien decide.
+    """
+    from app.models import Usuario
+    from app.models.enums import RolUsuario
+
+    duenio = db.scalar(
+        select(Usuario).where(
+            Usuario.empresa_id == empresa.id,
+            Usuario.rol == RolUsuario.DUENO,
+            Usuario.activo.is_(True),
+        )
+    )
+    if duenio and (duenio.email or "").strip():
+        return duenio.email.strip()
+    return (empresa.email_publico or "").strip() or None
+
+
+def _datos_de_pago_html() -> list[str]:
+    """Líneas con el CBU y el alias, si están configurados.
+
+    Van DENTRO del mail a propósito: si el negocio tiene que entrar al panel
+    para buscar el CBU, el aviso pierde la mitad de su efecto.
+    """
+    from app.core.config import settings
+
+    lineas = []
+    if settings.cobro_alias or settings.cobro_cbu:
+        partes = []
+        if settings.cobro_alias:
+            partes.append(f"<b>Alias:</b> {settings.cobro_alias}")
+        if settings.cobro_cbu:
+            partes.append(f"<b>CBU:</b> {settings.cobro_cbu}")
+        if settings.cobro_titular:
+            partes.append(f"<b>Titular:</b> {settings.cobro_titular}")
+        lineas.append(" &nbsp;·&nbsp; ".join(partes))
+    return lineas
+
+
+@celery_app.task(name="app.tasks.emails.avisar_vencimientos")
+def avisar_vencimientos() -> None:
+    """Avisa a cada negocio que su suscripción está por vencer o venció.
+
+    Corre una vez por día. No es una campaña del negocio: es la cobranza de
+    Turnos360, así que NO tiene switch en el panel del cliente.
+
+    Se manda a lo sumo un mail por hito y por ciclo de vencimiento. La clave
+    de deduplicación incluye la fecha de vencimiento, así que cuando el
+    negocio paga y la fecha se corre, el ciclo siguiente vuelve a avisar.
+    """
+    from app.core.config import settings
+    from app.services.suscripcion import DIAS_PRORROGA
+
+    hoy = dt.date.today()
+    with SessionLocal() as db:
+        empresas = db.scalars(select(Empresa).where(Empresa.activa.is_(True))).all()
+        for empresa in empresas:
+            vence = empresa.suscripcion_vence
+            if vence is None:
+                continue
+            # En período de prueba no se cobra: avisarle de un vencimiento que
+            # no existe es la mejor forma de que no convierta.
+            if empresa.prueba_hasta is not None and hoy <= empresa.prueba_hasta:
+                continue
+
+            dias = (vence - hoy).days
+            hito = _HITOS_VENCIMIENTO.get(dias)
+            if hito is None:
+                continue
+            clave, asunto = hito
+
+            # Una sola vez por hito y por ciclo.
+            log = f"aviso_vencimiento {clave} vence={vence}"
+            ya = db.scalar(
+                select(Mensaje).where(
+                    Mensaje.empresa_id == empresa.id,
+                    Mensaje.contenido == log,
+                    Mensaje.estado == EstadoMensaje.ENVIADO,
+                )
+            )
+            if ya is not None:
+                continue
+
+            destino = _email_del_dueno(db, empresa)
+            if not destino:
+                continue
+
+            corte = vence + dt.timedelta(days=DIAS_PRORROGA)
+            monto = (
+                f"${float(empresa.precio_mensual):,.0f}".replace(",", ".")
+                if empresa.precio_mensual is not None
+                else None
+            )
+
+            if dias > 0:
+                lineas = [
+                    f"Hola! Te escribimos para avisarte que tu suscripción a "
+                    f"Turnos360 vence el <b>{vence.strftime('%d/%m/%Y')}</b>.",
+                ]
+            elif dias == 0:
+                lineas = [
+                    "Hola! Tu suscripción a Turnos360 vence <b>hoy</b>.",
+                ]
+            else:
+                lineas = [
+                    f"Hola! Tu suscripción venció el "
+                    f"<b>{vence.strftime('%d/%m/%Y')}</b>.",
+                ]
+
+            if monto:
+                lineas.append(f"El importe es de <b>{monto}</b>.")
+
+            lineas.append(
+                f"Tu cuenta sigue funcionando con normalidad hasta el "
+                f"<b>{corte.strftime('%d/%m/%Y')}</b>. Después de esa fecha, la "
+                "agenda y tu página dejan de estar disponibles."
+            )
+            lineas += _datos_de_pago_html()
+            lineas.append(
+                "Cuando transfieras, mandanos el comprobante y registramos el "
+                "pago: tu vencimiento se corre 30 días."
+            )
+
+            boton = None
+            if settings.cobro_whatsapp:
+                url = (
+                    f"https://wa.me/{settings.cobro_whatsapp}"
+                    "?text=Hola!%20Te%20paso%20el%20comprobante%20de%20Turnos360."
+                )
+                boton = ("Mandar el comprobante", url)
+
+            html = _plantilla(
+                titulo=asunto,
+                lineas=lineas,
+                pie="Turnos360 · Gestión de turnos para tu negocio",
+                boton=boton,
+                marca="Turnos360",
+            )
+            _mandar(db, empresa, destino, asunto, html, log)

@@ -1,5 +1,7 @@
 """Lógica del panel de super-administración: empresas, usuarios y rubros."""
 
+import datetime as dt
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -41,6 +43,9 @@ def listar_empresas(db: Session) -> list[Empresa]:
         est = estado_suscripcion(empresa)
         empresa.estado_suscripcion = est["estado"]
         empresa.suscripcion_vence = est["vence"]
+        empresa.prueba_hasta = (
+            str(empresa.prueba_hasta) if empresa.prueba_hasta else None
+        )
         salida.append(empresa)
     return salida
 
@@ -67,6 +72,7 @@ def setear_suscripcion(
 
     est = estado_suscripcion(empresa)
     empresa.estado_suscripcion = est["estado"]
+    empresa.prueba_hasta = str(empresa.prueba_hasta) if empresa.prueba_hasta else None
     empresa.suscripcion_vence = est["vence"]
     empresa.cantidad_usuarios = 0
     return empresa
@@ -89,11 +95,18 @@ def crear_empresa(db: Session, datos) -> Empresa:
     if rubro is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Rubro no encontrado")
 
+    # La prueba arranca al crear la empresa. Se guarda la fecha de fin, no los
+    # días: así "faltan 3 días" se calcula siempre contra el calendario y no
+    # depende de cuándo se corra ningún proceso.
+    dias = int(getattr(datos, "dias_prueba", 0) or 0)
+    prueba_hasta = dt.date.today() + dt.timedelta(days=dias) if dias > 0 else None
+
     empresa = Empresa(
         rubro_id=datos.rubro_id,
         nombre=datos.nombre,
         slug=datos.slug,
         config_pack={},
+        prueba_hasta=prueba_hasta,
     )
     db.add(empresa)
     db.flush()

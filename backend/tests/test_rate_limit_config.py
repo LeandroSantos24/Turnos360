@@ -27,6 +27,11 @@ def test_endpoints_sensibles_siguen_limitados():
         "app.routers.admin.login",
         "app.routers.publico.reservar",
         "app.routers.publico.validar_cupon_publico",
+        # Sumados en la tanda 2: toda la superficie pública queda limitada.
+        "app.routers.publico.horarios",
+        "app.routers.publico.vidriera",
+        "app.routers.publico.slugs",
+        "app.routers.publico.mp_webhook",
     }
     faltan = esperados - marcados
     assert not faltan, f"Endpoints que perdieron su rate limit: {sorted(faltan)}"

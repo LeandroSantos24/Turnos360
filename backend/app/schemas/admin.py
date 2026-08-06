@@ -1,6 +1,9 @@
 """Schemas del panel de super-administración."""
 
-from pydantic import BaseModel, Field
+import re
+import unicodedata
+
+from pydantic import BaseModel, Field, field_validator
 import datetime as dt
 
 from app.models.enums import RolUsuario
@@ -33,8 +36,30 @@ class DuenoCrear(BaseModel):
 class EmpresaCrear(BaseModel):
     nombre: str = Field(min_length=2)
     slug: str = Field(min_length=2)
+
+    @field_validator("slug", mode="after")
+    @classmethod
+    def _normalizar_slug(cls, v: str) -> str:
+        """El slug es parte de la URL pública: se normaliza acá, no se confía
+        en que el formulario lo haya hecho. Un PUT directo con "Mi Negocio!"
+        dejaba una vidriera en una URL rota e irrecuperable sin tocar la base.
+        """
+        sin_tildes = "".join(
+            c
+            for c in unicodedata.normalize("NFD", v.lower())
+            if unicodedata.category(c) != "Mn"
+        )
+        limpio = re.sub(r"[^a-z0-9]+", "-", sin_tildes).strip("-")
+        if len(limpio) < 2:
+            raise ValueError(
+                "El identificador tiene que tener al menos 2 letras o números."
+            )
+        return limpio
     rubro_id: int
     dueno: DuenoCrear
+    # Días de prueba con los que arranca el negocio. 0 = sin prueba (cliente
+    # que ya paga). 14 es el valor que ofrece la landing.
+    dias_prueba: int = Field(default=14, ge=0, le=90)
 
 
 class EmpresaAdminOut(BaseModel):
@@ -47,6 +72,7 @@ class EmpresaAdminOut(BaseModel):
     plan: str = "gratuito"
     suscripcion_vence: str | None = None
     estado_suscripcion: str = "sin_vencimiento"  # activa | prorroga | vencida | ...
+    prueba_hasta: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -125,6 +151,9 @@ class MetodoTotal(BaseModel):
 
 
 class ResumenCobranzaOut(BaseModel):
+    # Cuántas cuentas están en prueba ahora. Es el número que dice si el
+    # embudo se está moviendo; no suma a ninguna de las tarjetas de plata.
+    empresas_en_prueba: int = 0
     cobrado_mes: float
     por_metodo: list[MetodoTotal] = Field(default_factory=list)
     pendiente_estimado: float

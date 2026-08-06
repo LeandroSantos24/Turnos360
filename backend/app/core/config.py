@@ -47,6 +47,23 @@ class Settings(BaseSettings):
     # 3 horas en el futuro respecto del local.
     zona_horaria: str = "America/Argentina/Buenos_Aires"
 
+    # --- Datos de cobranza de Turnos360 (los TUYOS, no los del negocio) ------
+    # Se le muestran al dueño en "Mi suscripción" para que te transfiera.
+    # Van por entorno y NO hardcodeados: el repo es público y el CUIT/CUIL es
+    # dato personal — una vez que entra en un commit queda en el historial de
+    # git para siempre, aunque después se borre del archivo.
+    cobro_cbu: str = ""
+    cobro_alias: str = ""
+    cobro_titular: str = ""
+    cobro_cuit: str = ""
+    cobro_banco: str = ""
+    # Link de pago de Mercado Pago (el permanente de tu cuenta). Vacío = solo
+    # se ofrece transferencia.
+    cobro_mp_link: str = ""
+    # WhatsApp al que el negocio manda el comprobante de la transferencia.
+    # Formato wa.me: 5492613456599
+    cobro_whatsapp: str = ""
+
     # --- JWT (E2) ---
     jwt_algoritmo: str = "HS256"
     access_token_minutos: int = 30      # token corto: viaja en cada request

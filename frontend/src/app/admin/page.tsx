@@ -23,6 +23,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -42,13 +43,26 @@ import {
 
 const SYNE = { fontFamily: "Syne, sans-serif" } as const;
 
-function slugify(s: string): string {
-  return s
+/**
+ * Texto libre -> slug de URL.
+ *
+ * El parámetro `final` es el arreglo de un bug feo: recortar el guión del
+ * FINAL en cada tecleo borraba el guión recién creado por el espacio, y la
+ * letra siguiente quedaba pegada. Tipeando "barberia el faro" a mano salía
+ * "barberiaelfaro"; pegando el mismo texto salía "barberia-el-faro". Dos
+ * resultados distintos para el mismo nombre, según cómo lo hubieras escrito.
+ *
+ *   final = false -> mientras se tipea: conserva el guión del final.
+ *   final = true  -> al guardar: recorta los guiones de las puntas.
+ */
+function slugify(s: string, final = false): string {
+  const base = s
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+/, "");
+  return final ? base.replace(/-+$/, "") : base;
 }
 
 export default function AdminEmpresasPage() {
@@ -67,6 +81,8 @@ export default function AdminEmpresasPage() {
   const [dNombre, setDNombre] = useState("");
   const [dEmail, setDEmail] = useState("");
   const [dClave, setDClave] = useState("");
+  // 14 días es lo que ofrece la landing. 0 = el negocio ya arranca pagando.
+  const [diasPrueba, setDiasPrueba] = useState(14);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -93,12 +109,13 @@ export default function AdminEmpresasPage() {
     setDNombre("");
     setDEmail("");
     setDClave("");
+    setDiasPrueba(14);
   }
 
   async function guardar() {
     if (
       !nombre.trim() ||
-      !slug.trim() ||
+      !slugify(slug, true) ||
       !rubroId ||
       !dNombre.trim() ||
       !dEmail.trim() ||
@@ -111,9 +128,10 @@ export default function AdminEmpresasPage() {
     try {
       await crearEmpresa({
         nombre: nombre.trim(),
-        slug: slug.trim(),
+        slug: slugify(slug, true),
         rubro_id: Number(rubroId),
         dueno: { nombre: dNombre.trim(), email: dEmail.trim(), clave: dClave },
+        dias_prueba: diasPrueba,
       });
       toast.success("Empresa creada");
       setAbierto(false);
@@ -260,6 +278,30 @@ export default function AdminEmpresasPage() {
                       onChange={(e) => setDClave(e.target.value)}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Período de prueba</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {[0, 7, 14, 30].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDiasPrueba(d)}
+                        className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                          diasPrueba === d
+                            ? "border-transparent bg-foreground text-background"
+                            : "bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {d === 0 ? "Sin prueba" : `${d} días`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Durante la prueba el negocio no cuenta en el MRR ni en la
+                    deuda vencida, y en Cobranza aparece en azul.
+                  </p>
                 </div>
               </div>
             </div>
