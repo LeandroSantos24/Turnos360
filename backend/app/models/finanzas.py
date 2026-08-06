@@ -3,7 +3,7 @@
 import datetime as dt
 from datetime import datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -54,6 +54,12 @@ class MovimientoFinanciero(TenantMixin, Base):
     __table_args__ = (
         Index("ix_movfin_empresa_fecha", "empresa_id", "fecha"),
         Index("ix_movfin_empresa_tipo_categoria", "empresa_id", "tipo", "categoria_id"),
+        # Los totales de caja filtran SIEMPRE por anulado = false. El índice lo
+        # crea la migración a3d5f81c92e7; declararlo TAMBIÉN acá no es
+        # redundancia: sin esto el próximo --autogenerate lo detecta como
+        # "índice que sobra en la base" y escribe un DROP INDEX en la migración
+        # nueva, silenciosamente.
+        Index("ix_movfin_caja_activos", "empresa_id", "caja_id", "anulado"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -67,6 +73,17 @@ class MovimientoFinanciero(TenantMixin, Base):
     metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodo_pago.id"))
     categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categoria_financiera.id"))
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"))
+
+    # --- Anulación auditada ------------------------------------------------
+    # Un movimiento nunca se borra: se anula. Borrarlo hacía imposible auditar
+    # una diferencia de arqueo, porque no quedaba rastro de que hubiera
+    # existido. Anulado = sigue en el listado, no suma a ningún total.
+    anulado: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"))
+    motivo_anulacion: Mapped[str | None] = mapped_column(String(200))
 
 
 class Pago(TenantMixin, Base):

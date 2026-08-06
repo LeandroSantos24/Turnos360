@@ -7,6 +7,7 @@ a ella para poder cerrarla con cifras reales.
 
 import datetime as dt
 
+from fastapi import HTTPException, status
 from sqlalchemy import or_ as sa_or, func, select
 from sqlalchemy.orm import Session
 
@@ -138,6 +139,7 @@ def _totales_caja(
                 MovimientoFinanciero.empresa_id == empresa_id,
                 MovimientoFinanciero.caja_id == caja_id,
                 MovimientoFinanciero.tipo == tipo,
+                MovimientoFinanciero.anulado.is_(False),
             )
         )
         return float(v or 0)
@@ -146,6 +148,7 @@ def _totales_caja(
         select(func.count(MovimientoFinanciero.id)).where(
             MovimientoFinanciero.empresa_id == empresa_id,
             MovimientoFinanciero.caja_id == caja_id,
+            MovimientoFinanciero.anulado.is_(False),
         )
     )
     return _suma(TipoMovimiento.INGRESO), _suma(TipoMovimiento.EGRESO), int(cantidad or 0)
@@ -178,6 +181,7 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
             MovimientoFinanciero.empresa_id == empresa_id,
             MovimientoFinanciero.caja_id == caja.id,
             MovimientoFinanciero.tipo == TipoMovimiento.INGRESO,
+            MovimientoFinanciero.anulado.is_(False),
         )
         .group_by(MetodoPago.nombre)
         .order_by(func.sum(MovimientoFinanciero.monto).desc())
@@ -212,6 +216,7 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
             MovimientoFinanciero.empresa_id == empresa_id,
             MovimientoFinanciero.caja_id == caja.id,
             MovimientoFinanciero.tipo == TipoMovimiento.EGRESO,
+            MovimientoFinanciero.anulado.is_(False),
         )
         .group_by(MetodoPago.nombre)
         .order_by(func.sum(MovimientoFinanciero.monto).desc())
@@ -242,6 +247,7 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
                 MovimientoFinanciero.empresa_id == empresa_id,
                 MovimientoFinanciero.caja_id == caja.id,
                 MovimientoFinanciero.tipo == tipo,
+                MovimientoFinanciero.anulado.is_(False),
                 sa_or(
                     func.lower(MetodoPago.nombre) == "efectivo",
                     MovimientoFinanciero.metodo_pago_id.is_(None),
@@ -415,16 +421,107 @@ def _resolver_metodos(db: Session, movs: list[MovimientoFinanciero]) -> None:
 
 
 def listar_movimientos(
-    db: Session, empresa_id: int, tipo: TipoMovimiento | None = None
-) -> list[MovimientoFinanciero]:
-    q = select(MovimientoFinanciero).where(
-        MovimientoFinanciero.empresa_id == empresa_id
-    )
+    db: Session,
+    empresa_id: int,
+    tipo: TipoMovimiento | None = None,
+    *,
+    offset: int = 0,
+    limite: int = 30,
+) -> tuple[int, list[MovimientoFinanciero]]:
+    """Devuelve (total, página) de movimientos, del más nuevo al más viejo.
+
+    Antes traía TODOS los movimientos de la empresa desde el principio de los
+    tiempos. Es la tabla que más rápido crece del sistema: un cobro por turno
+    más los gastos. Una barbería con 20 turnos por día llega a ~7.000 filas en
+    el primer año, y las devolvía todas en cada carga de la pantalla de caja,
+    resolviendo además el método de pago de cada una.
+
+    El orden es por fecha descendente y desempata por id: sin el desempate,
+    dos movimientos con la misma fecha pueden cambiar de orden entre página y
+    página, y en un listado paginado eso significa filas duplicadas o
+    salteadas.
+    """
+    condiciones = [MovimientoFinanciero.empresa_id == empresa_id]
     if tipo is not None:
-        q = q.where(MovimientoFinanciero.tipo == tipo)
-    movs = list(db.scalars(q.order_by(MovimientoFinanciero.fecha.desc())))
+        condiciones.append(MovimientoFinanciero.tipo == tipo)
+
+    total = db.scalar(
+        select(func.count(MovimientoFinanciero.id)).where(*condiciones)
+    ) or 0
+
+    movs = list(
+        db.scalars(
+            select(MovimientoFinanciero)
+            .where(*condiciones)
+            .order_by(
+                MovimientoFinanciero.fecha.desc(),
+                MovimientoFinanciero.id.desc(),
+            )
+            .offset(offset)
+            .limit(limite)
+        )
+    )
     _resolver_metodos(db, movs)
-    return movs
+    return int(total), movs
+
+
+def anular_movimiento(
+    db: Session,
+    empresa_id: int,
+    movimiento_id: int,
+    usuario_id: int,
+    motivo: str | None,
+) -> MovimientoFinanciero:
+    """Anula un movimiento: queda registrado pero deja de sumar a los totales.
+
+    NO se borra a propósito. Borrarlo hacía imposible auditar una diferencia
+    de arqueo, porque no quedaba rastro de que el movimiento hubiera existido.
+
+    Dos cosas que NO se pueden anular por acá, y el motivo:
+
+    1. Un movimiento con un Pago asociado (el cobro de un turno). Anularlo
+       dejaría el turno cobrado pero la plata fuera de la caja: dos fuentes de
+       verdad en desacuerdo. Esos se revierten reabriendo el turno, que es el
+       flujo que ya existe y que sí ajusta las dos puntas.
+    2. Un movimiento de una caja YA CERRADA. El arqueo de ese día quedó
+       firmado con una diferencia contada a mano; cambiarle los números
+       después convierte un cierre auditado en uno que no cuadra con nada.
+    """
+    mov = db.get(MovimientoFinanciero, movimiento_id)
+    if mov is None or mov.empresa_id != empresa_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Movimiento no encontrado")
+
+    if mov.anulado:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ese movimiento ya está anulado")
+
+    pago = db.scalar(
+        select(Pago).where(
+            Pago.movimiento_id == mov.id, Pago.empresa_id == empresa_id
+        )
+    )
+    if pago is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este movimiento es el cobro de un turno. Para revertirlo, reabrí "
+            "el turno desde la agenda: así se ajustan el turno y la caja juntos.",
+        )
+
+    if mov.caja_id is not None:
+        caja = db.get(Caja, mov.caja_id)
+        if caja is not None and caja.estado == EstadoCaja.CERRADA:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "La caja de ese día ya está cerrada. Cargá un movimiento de "
+                "ajuste en la caja actual en vez de tocar un arqueo firmado.",
+            )
+
+    mov.anulado = True
+    mov.anulado_en = dt.datetime.now(dt.timezone.utc)
+    mov.anulado_por_id = usuario_id
+    mov.motivo_anulacion = (motivo or "").strip()[:200] or None
+    db.commit()
+    db.refresh(mov)
+    return mov
 
 
 # ─────────────────────────── Historial comercial ───────────────────────────

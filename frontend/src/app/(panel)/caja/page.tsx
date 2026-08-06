@@ -17,6 +17,7 @@ import {
   abrirCaja,
   cerrarCaja,
   listarMovimientos,
+  anularMovimiento,
   listarCajas,
   CajaResumen,
   Caja,
@@ -58,6 +59,17 @@ function fechaHora(iso: string | null): string {
 export default function CajaPage() {
   const [resumen, setResumen] = useState<CajaResumen | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  // Los anulados quedan ocultos por defecto: el uso diario es ver la caja
+  // real. Se muestran cuando hay que auditar una diferencia de arqueo.
+  const [verAnulados, setVerAnulados] = useState(false);
+  // La tabla de movimientos es la que más rápido crece del sistema (un cobro
+  // por turno + los gastos). Se traen de a 30 y se suman con "Ver más".
+  const PAGINA = 30;
+  const [totalMovs, setTotalMovs] = useState(0);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [aAnular, setAAnular] = useState<Movimiento | null>(null);
+  const [motivoAnul, setMotivoAnul] = useState("");
+  const [anulando, setAnulando] = useState(false);
   const [cajas, setCajas] = useState<Caja[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abriendo, setAbriendo] = useState(false);
@@ -72,11 +84,12 @@ export default function CajaPage() {
     try {
       const [r, m, cs] = await Promise.all([
         cajaActual(),
-        listarMovimientos(),
+        listarMovimientos({ limite: PAGINA }),
         listarCajas(),
       ]);
       setResumen(r);
-      setMovimientos(m);
+      setMovimientos(m.items);
+      setTotalMovs(m.total);
       setCajas(cs);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Error al cargar");
@@ -312,7 +325,20 @@ export default function CajaPage() {
             </div>
           )}
 
-          <h2 className="mb-3 text-lg font-bold">Movimientos</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold">Movimientos</h2>
+            {movimientos.some((m) => m.anulado) && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={verAnulados}
+                  onChange={(e) => setVerAnulados(e.target.checked)}
+                  className="h-4 w-4 accent-current"
+                />
+                Ver anulados
+              </label>
+            )}
+          </div>
           {movimientos.length === 0 ? (
             <div className="rounded-2xl border bg-card p-10 text-center">
               <p className="text-sm text-muted-foreground">
@@ -321,10 +347,15 @@ export default function CajaPage() {
             </div>
           ) : (
             <div className="divide-y overflow-hidden rounded-2xl border bg-card">
-              {movimientos.map((m) => {
+              {movimientos
+                .filter((m) => verAnulados || !m.anulado)
+                .map((m) => {
                 const esIngreso = m.tipo === "ingreso";
                 return (
-                  <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    key={m.id}
+                    className={`flex items-center gap-3 px-4 py-3 ${m.anulado ? "opacity-55" : ""}`}
+                  >
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                         esIngreso
@@ -339,8 +370,13 @@ export default function CajaPage() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
+                      <p className={`truncate text-sm font-medium ${m.anulado ? "line-through" : ""}`}>
                         {m.concepto ?? (esIngreso ? "Ingreso" : "Gasto")}
+                        {m.anulado && (
+                          <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground no-underline">
+                            Anulado
+                          </span>
+                        )}
                         {m.metodo_pago && (
                           <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
                             {m.metodo_pago}
@@ -352,17 +388,66 @@ export default function CajaPage() {
                           {m.descripcion}
                         </p>
                       )}
+                      {m.anulado && m.motivo_anulacion && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          Motivo: {m.motivo_anulacion}
+                        </p>
+                      )}
                     </div>
                     <span
-                      className="text-sm font-semibold tabular-nums"
-                      style={{ color: esIngreso ? "#10b981" : "#ef4444" }}
+                      className={`text-sm font-semibold tabular-nums ${m.anulado ? "line-through" : ""}`}
+                      style={{ color: m.anulado ? undefined : esIngreso ? "#10b981" : "#ef4444" }}
                     >
                       {esIngreso ? "+" : "−"}
                       {pesos(m.monto)}
                     </span>
+                    {!m.anulado && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-muted-foreground"
+                        onClick={() => {
+                          setAAnular(m);
+                          setMotivoAnul("");
+                        }}
+                      >
+                        Anular
+                      </Button>
+                    )}
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {movimientos.length < totalMovs && (
+            <div className="mt-3 flex flex-col items-center gap-1.5">
+              <Button
+                variant="outline"
+                disabled={cargandoMas}
+                onClick={async () => {
+                  setCargandoMas(true);
+                  try {
+                    const p = await listarMovimientos({
+                      offset: movimientos.length,
+                      limite: PAGINA,
+                    });
+                    setMovimientos((prev) => [...prev, ...p.items]);
+                    setTotalMovs(p.total);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : "No se pudo cargar",
+                    );
+                  } finally {
+                    setCargandoMas(false);
+                  }
+                }}
+              >
+                {cargandoMas ? "Cargando…" : "Ver más movimientos"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Mostrando {movimientos.length} de {totalMovs}
+              </p>
             </div>
           )}
         </>
@@ -503,6 +588,75 @@ export default function CajaPage() {
             </Button>
             <Button onClick={confirmarCerrar} disabled={procesando}>
               {procesando ? "Cerrando…" : "Cerrar caja"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Anular movimiento */}
+      <Dialog open={aAnular !== null} onOpenChange={(o) => !o && setAAnular(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Anular movimiento</DialogTitle>
+          </DialogHeader>
+          {aAnular && (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-muted/40 p-3.5 text-sm">
+                <p className="font-medium">
+                  {aAnular.concepto ?? (aAnular.tipo === "ingreso" ? "Ingreso" : "Gasto")}
+                </p>
+                <p className="mt-0.5 tabular-nums text-muted-foreground">
+                  {aAnular.tipo === "ingreso" ? "+" : "−"}
+                  {pesos(aAnular.monto)}
+                  {aAnular.metodo_pago && ` · ${aAnular.metodo_pago}`}
+                </p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                El movimiento no se borra: queda en el listado marcado como
+                anulado y deja de sumar a los totales de la caja. Se registra
+                que lo anulaste vos y cuándo.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="motivo">Motivo (opcional)</Label>
+                <Input
+                  id="motivo"
+                  maxLength={200}
+                  placeholder="Lo cargué dos veces"
+                  value={motivoAnul}
+                  onChange={(e) => setMotivoAnul(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Dentro de seis meses, cuando estés buscando por qué no cerró
+                  un arqueo, esta línea es lo único que te lo va a explicar.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAAnular(null)} disabled={anulando}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={anulando}
+              onClick={async () => {
+                if (!aAnular) return;
+                setAnulando(true);
+                try {
+                  await anularMovimiento(aAnular.id, motivoAnul.trim() || undefined);
+                  toast.success("Movimiento anulado");
+                  setAAnular(null);
+                  await cargar();
+                } catch (err) {
+                  toast.error(
+                    err instanceof ApiError ? err.message : "No se pudo anular",
+                  );
+                } finally {
+                  setAnulando(false);
+                }
+              }}
+            >
+              {anulando ? "Anulando…" : "Anular movimiento"}
             </Button>
           </DialogFooter>
         </DialogContent>

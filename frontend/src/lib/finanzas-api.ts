@@ -157,6 +157,12 @@ export interface Movimiento {
   metodo_pago_id: number | null;
   metodo_pago: string | null;
   categoria_id: number | null;
+  usuario_id: number | null;
+  /** Anulado = sigue en el listado pero no suma a ningún total. */
+  anulado: boolean;
+  anulado_en: string | null;
+  anulado_por_id: number | null;
+  motivo_anulacion: string | null;
 }
 
 export interface GastoCrear {
@@ -170,8 +176,27 @@ export interface GastoCrear {
 export function registrarGasto(datos: GastoCrear): Promise<Movimiento> {
   return api.post<Movimiento>("/gastos", datos);
 }
-export function listarMovimientos(tipo?: "ingreso" | "egreso"): Promise<Movimiento[]> {
-  return api.get<Movimiento[]>(tipo ? `/movimientos?tipo=${tipo}` : "/movimientos");
+export interface MovimientosPagina {
+  total: number;
+  items: Movimiento[];
+}
+
+/** Página de movimientos, del más nuevo al más viejo. */
+export function listarMovimientos(opciones?: {
+  tipo?: "ingreso" | "egreso";
+  offset?: number;
+  limite?: number;
+}): Promise<MovimientosPagina> {
+  const q = new URLSearchParams();
+  if (opciones?.tipo) q.set("tipo", opciones.tipo);
+  q.set("offset", String(opciones?.offset ?? 0));
+  q.set("limite", String(opciones?.limite ?? 30));
+  return api.get<MovimientosPagina>(`/movimientos?${q.toString()}`);
+}
+
+/** Anula un movimiento (solo dueño). No lo borra: queda auditado. */
+export function anularMovimiento(id: number, motivo?: string): Promise<Movimiento> {
+  return api.post<Movimiento>(`/movimientos/${id}/anular`, { motivo: motivo ?? null });
 }
 
 /* ─────────── Historial comercial del cliente ─────────── */

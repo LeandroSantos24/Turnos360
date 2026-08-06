@@ -35,6 +35,8 @@ from app.schemas.finanzas import (
     MetodoPagoEditar,
     MetodoPagoOut,
     MovimientoOut,
+    MovimientosPagina,
+    AnularMovimientoIn,
     PagoOut,
 )
 from app.services import finanzas as svc
@@ -192,13 +194,38 @@ def registrar_gasto(
     return svc.registrar_gasto(db, empresa_id, datos, usuario.id)
 
 
-@router.get("/movimientos", response_model=list[MovimientoOut])
+@router.post(
+    "/movimientos/{movimiento_id}/anular",
+    response_model=MovimientoOut,
+    dependencies=[Depends(gate_dueno)],
+)
+def anular_movimiento(
+    movimiento_id: int,
+    datos: AnularMovimientoIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> MovimientoOut:
+    """Anula un movimiento de caja. Solo el dueño: es plata.
+
+    El movimiento no se borra, queda marcado con quién lo anuló y cuándo.
+    """
+    return svc.anular_movimiento(db, empresa_id, movimiento_id, usuario.id, datos.motivo)
+
+
+@router.get("/movimientos", response_model=MovimientosPagina)
 def listar_movimientos(
     empresa_id: EmpresaActual,
     db: DB,
     tipo: TipoMovimiento | None = Query(default=None),
-) -> list[MovimientoOut]:
-    return svc.listar_movimientos(db, empresa_id, tipo)
+    offset: int = Query(default=0, ge=0),
+    limite: int = Query(default=30, ge=1, le=200),
+):
+    """Movimientos paginados, del más nuevo al más viejo."""
+    total, items = svc.listar_movimientos(
+        db, empresa_id, tipo, offset=offset, limite=limite
+    )
+    return {"total": total, "items": items}
 
 
 # ─────────────────────────── Historial comercial ───────────────────────────

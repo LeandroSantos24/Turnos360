@@ -172,8 +172,28 @@ class MovimientoOut(BaseModel):
     metodo_pago_id: int | None
     metodo_pago: str | None = None  # nombre resuelto por el service
     categoria_id: int | None
+    usuario_id: int | None = None
+    # Anulación: el movimiento sigue en el listado pero no suma a los totales.
+    anulado: bool = False
+    anulado_en: dt.datetime | None = None
+    anulado_por_id: int | None = None
+    motivo_anulacion: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class MovimientosPagina(BaseModel):
+    """Una página de movimientos + el total, para paginar en el frontend."""
+
+    total: int
+    items: list[MovimientoOut]
+
+
+class AnularMovimientoIn(BaseModel):
+    """Motivo de la anulación. Opcional, pero es lo que hace útil la auditoría
+    dentro de seis meses: 'lo cargué dos veces' vale más que un campo vacío."""
+
+    motivo: str | None = Field(default=None, max_length=200)
 
 
 # ─────────────────────────── Historial comercial (N-62) ─────────────────────
