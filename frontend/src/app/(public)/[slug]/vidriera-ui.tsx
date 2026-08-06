@@ -12,7 +12,6 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   MapPin,
   Clock,
-  MessageCircle,
   Globe,
   Mail,
   Phone,
@@ -32,6 +31,7 @@ import {
   IconoFacebook,
   IconoLinkedin,
   IconoTiktok,
+  IconoWhatsApp,
   type IconoRed,
 } from "@/components/iconos-redes";
 
@@ -44,6 +44,8 @@ export const TINTA_SUAVE = "#4b5566";
 export const BORDE = "#e9ecf1";
 export const SUPERFICIE = "#f6f7f9";
 export const ACENTO_DEFAULT = "#0ca88c";
+/** Verde oficial de WhatsApp: el botón se reconoce por el color, no por el texto. */
+export const VERDE_WHATSAPP = "#25D366";
 
 /** Curva de easing compartida (tuple tipado: framer-motion 12 es estricto). */
 const EASE: [number, number, number, number] = [0.21, 0.6, 0.35, 1];
@@ -57,6 +59,18 @@ export function hexA(hex: string | null | undefined, alpha: number): string {
   const g = parseInt(v.slice(2, 4), 16);
   const b = parseInt(v.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Deja pasar SOLO URLs http(s) absolutas y sin comillas ni paréntesis.
+ * La portada termina dentro de un url(...) de CSS: una URL con comillas
+ * podría romper la declaración. Además evita que un dato mal pegado
+ * (una ruta de Windows, un javascript:) llegue al navegador.
+ */
+export function urlImagenSegura(u: string | null | undefined): string | null {
+  const s = (u ?? "").trim();
+  if (!/^https?:\/\/[^\s"'()<>]+$/i.test(s)) return null;
+  return s;
 }
 
 export function acentoDe(v: Vidriera): string {
@@ -174,7 +188,7 @@ function Eyebrow({ acento, children }: { acento: string; children: React.ReactNo
 function TituloSeccion({ children }: { children: React.ReactNode }) {
   return (
     <h2
-      className="text-2xl font-bold tracking-tight md:text-3xl"
+      className="mt-3 text-2xl font-bold leading-tight tracking-tight md:text-3xl"
       style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
     >
       {children}
@@ -273,12 +287,18 @@ function Monograma({ v, acento, tam }: { v: Vidriera; acento: string; tam: strin
 
 export function TopBar({ v, acento, onReservar }: { v: Vidriera; acento: string; onReservar: () => void }) {
   const [conFondo, setConFondo] = useState(false);
+  const portada = urlImagenSegura(v.portada_url);
   useEffect(() => {
     const f = () => setConFondo(window.scrollY > 24);
     f();
     window.addEventListener("scroll", f, { passive: true });
     return () => window.removeEventListener("scroll", f);
   }, []);
+
+  // Arriba de todo, sin fondo, la barra flota sobre el hero. Si el negocio
+  // cargó portada, ese hero es una foto oscurecida: el nombre en tinta negra
+  // se vuelve ilegible, así que ahí va en blanco.
+  const sobreFoto = Boolean(portada) && !conFondo;
 
   return (
     <header
@@ -294,8 +314,12 @@ export function TopBar({ v, acento, onReservar }: { v: Vidriera; acento: string;
         <div className="flex min-w-0 items-center gap-3">
           <Monograma v={v} acento={acento} tam="h-9 w-9 text-xs" />
           <span
-            className="truncate text-base font-bold"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+            className="truncate text-base font-bold transition-colors"
+            style={{
+              fontFamily: "Syne, sans-serif",
+              color: sobreFoto ? "#ffffff" : TINTA,
+              textShadow: sobreFoto ? "0 1px 12px rgba(0,0,0,0.45)" : undefined,
+            }}
           >
             {v.nombre}
           </span>
@@ -317,6 +341,12 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
   const reduce = useReducedMotion();
   const estado = useMemo(() => estadoApertura(v.horarios_atencion), [v.horarios_atencion]);
   const wa = linkWhatsApp(v);
+  const portada = urlImagenSegura(v.portada_url);
+
+  // Con portada el hero pasa a fondo oscuro: todo el texto se invierte a
+  // blanco. Sin portada queda el hero claro de siempre.
+  const tituloColor = portada ? "#ffffff" : TINTA;
+  const textoColor = portada ? "rgba(255,255,255,0.88)" : TINTA_SUAVE;
 
   const contenedor = {
     hidden: {},
@@ -328,15 +358,66 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
   };
 
   return (
-    <section className="relative overflow-hidden pt-28 pb-16 md:pt-36 md:pb-24">
-      {/* Veladura sutil del acento arriba: vida sin dejar de ser fondo blanco */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-40 h-[420px]"
-        style={{
-          background: `radial-gradient(60% 60% at 50% 0%, ${hexA(acento, 0.1)} 0%, transparent 70%)`,
-        }}
-      />
+    <section
+      className={`relative overflow-hidden ${
+        portada
+          ? "pb-28 pt-28 md:pb-40 md:pt-44"
+          : "pb-16 pt-28 md:pb-24 md:pt-36"
+      }`}
+    >
+      {portada ? (
+        /* Toda la portada (foto + velo + tinte) va DENTRO de un contenedor con
+           máscara. La máscara desvanece la imagen real hasta transparente y
+           deja ver el blanco de la página.
+
+           El intento anterior superponía una capa blanca encima de la foto:
+           eso no la desvanece, la LAVA — sobre una foto oscura da un gris
+           lechoso que se nota más que el corte que venía a tapar. Con máscara
+           no hay color intermedio: la foto simplemente deja de estar. */
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            // Los últimos stops están juntos a propósito: el desvanecido
+            // arranca recién al 64% y se acelera al final. Repartido parejo
+            // se lee como una banda gris cruzando la foto en diagonal.
+            WebkitMaskImage:
+              "linear-gradient(180deg, #000 0%, #000 64%, rgba(0,0,0,0.88) 78%, rgba(0,0,0,0.55) 88%, rgba(0,0,0,0.18) 95%, transparent 100%)",
+            maskImage:
+              "linear-gradient(180deg, #000 0%, #000 64%, rgba(0,0,0,0.88) 78%, rgba(0,0,0,0.55) 88%, rgba(0,0,0,0.18) 95%, transparent 100%)",
+          }}
+        >
+          {/* Foto del negocio */}
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${portada})` }}
+          />
+          {/* Velo oscuro. Sin esto, sobre una foto clara el texto blanco
+              desaparece y el hero queda ilegible. Cierra parejo: el trabajo de
+              apagar el borde lo hace la máscara, no un negro más fuerte. */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(8,11,15,0.68) 0%, rgba(8,11,15,0.50) 42%, rgba(8,11,15,0.66) 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: hexA(acento, 0.12) }}
+          />
+        </div>
+      ) : (
+        /* Veladura sutil del acento arriba: vida sin dejar de ser fondo blanco */
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-40 h-[420px]"
+          style={{
+            background: `radial-gradient(60% 60% at 50% 0%, ${hexA(acento, 0.1)} 0%, transparent 70%)`,
+          }}
+        />
+      )}
+
       <motion.div
         variants={contenedor}
         initial={reduce ? "visible" : "hidden"}
@@ -350,7 +431,11 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
         <motion.h1
           variants={item}
           className="mt-6 text-[2.6rem] font-extrabold leading-[1.05] tracking-tight md:text-6xl"
-          style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+          style={{
+            fontFamily: "Syne, sans-serif",
+            color: tituloColor,
+            textShadow: portada ? "0 2px 24px rgba(0,0,0,0.45)" : undefined,
+          }}
         >
           {v.nombre}
         </motion.h1>
@@ -384,7 +469,7 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
           <motion.p
             variants={item}
             className="mt-3 flex items-center gap-1.5 text-sm"
-            style={{ color: TINTA_SUAVE }}
+            style={{ color: textoColor }}
           >
             <MapPin className="h-4 w-4" />
             {v.direccion}
@@ -401,10 +486,19 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
               href={wa}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border px-6 py-3.5 text-base font-semibold transition-colors hover:bg-[#f6f7f9]"
-              style={{ borderColor: BORDE, color: TINTA }}
+              className="inline-flex items-center gap-2 rounded-full border px-6 py-3.5 text-base font-semibold transition-colors"
+              style={
+                portada
+                  ? {
+                      borderColor: "rgba(255,255,255,0.35)",
+                      color: "#ffffff",
+                      background: "rgba(255,255,255,0.10)",
+                      backdropFilter: "blur(6px)",
+                    }
+                  : { borderColor: BORDE, color: TINTA, background: "#ffffff" }
+              }
             >
-              <MessageCircle className="h-5 w-5" style={{ color: acento }} />
+              <IconoWhatsApp className="h-5 w-5" style={{ color: VERDE_WHATSAPP }} />
               WhatsApp
             </a>
           )}
@@ -829,11 +923,11 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
       </Reveal>
 
       {/* Garantías */}
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 md:mt-14">
         {garantias.map((g, i) => (
           <Reveal key={g.titulo} delay={i * 0.06}>
             <div
-              className="h-full rounded-2xl border bg-white p-5"
+              className="h-full rounded-2xl border bg-white p-6"
               style={{ borderColor: BORDE }}
             >
               <div
@@ -842,10 +936,10 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
               >
                 <g.Icono className="h-5 w-5" style={{ color: acento }} />
               </div>
-              <p className="mt-3 font-semibold" style={{ color: TINTA }}>
+              <p className="mt-4 font-semibold leading-snug" style={{ color: TINTA }}>
                 {g.titulo}
               </p>
-              <p className="mt-1 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
+              <p className="mt-2 text-sm leading-relaxed" style={{ color: TINTA_SUAVE }}>
                 {g.texto}
               </p>
             </div>
@@ -856,7 +950,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
       {/* Franja de integraciones (logos de marca reales) */}
       <Reveal delay={0.1}>
         <div
-          className="mt-8 rounded-2xl border bg-white px-5 py-7"
+          className="mt-16 rounded-2xl border bg-white px-5 py-9 md:mt-20"
           style={{ borderColor: BORDE }}
         >
           <p
@@ -865,30 +959,30 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
           >
             Conectado con las apps que ya usás
           </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-12 gap-y-7">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/marca/integraciones/mercado-pago.png"
               alt="Mercado Pago"
-              className="h-9 w-auto object-contain"
+              className="max-h-7 w-auto max-w-[130px] object-contain"
             />
             <img
               src="/marca/integraciones/google-calendar.png"
               alt="Google Calendar"
-              className="h-7 w-auto object-contain"
+              className="max-h-6 w-auto max-w-[130px] object-contain"
             />
             {tieneMapa && (
               <img
                 src="/marca/integraciones/google-maps.png"
                 alt="Google Maps"
-                className="h-5 w-auto object-contain"
+                className="max-h-5 w-auto max-w-[130px] object-contain"
               />
             )}
             {tieneWhatsApp && (
               <img
                 src="/marca/integraciones/whatsapp.png"
                 alt="WhatsApp"
-                className="h-6 w-auto object-contain"
+                className="max-h-6 w-auto max-w-[130px] object-contain"
               />
             )}
             <div className="flex items-center gap-1.5">
@@ -911,12 +1005,25 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
 
 export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
   const redes = Object.entries(v.redes || {}).filter(([, val]) => val && val.trim() !== "");
+  const wa = linkWhatsApp(v);
   const tieneAlgo = redes.length > 0 || v.telefono_publico || v.email_publico;
   if (!tieneAlgo) return null;
 
   return (
-    <section className="mx-auto max-w-5xl px-5 pb-14 pt-4 md:pb-20">
+    <section className="mx-auto max-w-5xl px-5 pb-16 pt-10 md:pb-24 md:pt-12">
       <Reveal className="flex flex-wrap items-center gap-2.5">
+        {wa && (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
+            style={{ borderColor: BORDE, color: TINTA }}
+          >
+            <IconoWhatsApp className="h-4 w-4" style={{ color: VERDE_WHATSAPP }} />
+            WhatsApp
+          </a>
+        )}
         {v.telefono_publico && (
           <a
             href={`tel:${v.telefono_publico.replace(/\s/g, "")}`}

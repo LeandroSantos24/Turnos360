@@ -107,6 +107,19 @@ def obtener_turno(turno_id: int, empresa_id: EmpresaActual, db: DB) -> TurnoOut:
 
 
 @router.post(
+    "/{turno_id}/pedir-resena",
+    dependencies=[Depends(gate_gestion)],
+)
+def pedir_resena(turno_id: int, empresa_id: EmpresaActual, db: DB) -> dict:
+    """Le manda al cliente el pedido de reseña en Google, ahora.
+
+    Distinto de la campaña automática: esta se dispara a mano, para el cliente
+    que el dueño eligió y mientras todavía está en el local.
+    """
+    return svc.pedir_resena_manual(db, empresa_id, turno_id)
+
+
+@router.post(
     "",
     response_model=TurnoOut,
     status_code=status.HTTP_201_CREATED,

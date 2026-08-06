@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import DB, EmpresaActual, gate_dueno
-from app.schemas.empresa import SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, SenasConfigIn, SenasConfigOut
+from app.schemas.empresa import MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
 
 router = APIRouter(prefix="/empresa", tags=["empresa"])
@@ -29,6 +29,49 @@ def leer_landing(empresa_id: EmpresaActual, db: DB) -> LandingConfig:
 def guardar_landing(datos: LandingConfig, empresa_id: EmpresaActual, db: DB) -> LandingConfig:
     """Guarda el contenido de la landing. Solo el dueño (config del negocio)."""
     return svc.actualizar_landing(db, empresa_id, datos)
+
+@router.get(
+    "/reglas-reserva",
+    response_model=ReglasReservaConfig,
+    dependencies=[Depends(gate_dueno)],
+)
+def leer_reglas_reserva(empresa_id: EmpresaActual, db: DB) -> ReglasReservaConfig:
+    """Reglas de la reserva pública (anticipación, ventana, qué datos pedir)."""
+    return svc.obtener_reglas_reserva(db, empresa_id)
+
+
+@router.put(
+    "/reglas-reserva",
+    response_model=ReglasReservaConfig,
+    dependencies=[Depends(gate_dueno)],
+)
+def guardar_reglas_reserva(
+    datos: ReglasReservaConfig, empresa_id: EmpresaActual, db: DB
+) -> ReglasReservaConfig:
+    """Solo el dueño: cambia cómo le entran los turnos al negocio."""
+    return svc.actualizar_reglas_reserva(db, empresa_id, datos)
+
+
+@router.get(
+    "/seguimiento",
+    response_model=SeguimientoConfig,
+    dependencies=[Depends(gate_dueno)],
+)
+def leer_seguimiento(empresa_id: EmpresaActual, db: DB) -> SeguimientoConfig:
+    """Meta Pixel y Google Tag del negocio."""
+    return svc.obtener_seguimiento(db, empresa_id)
+
+
+@router.put(
+    "/seguimiento",
+    response_model=SeguimientoConfig,
+    dependencies=[Depends(gate_dueno)],
+)
+def guardar_seguimiento(
+    datos: SeguimientoConfig, empresa_id: EmpresaActual, db: DB
+) -> SeguimientoConfig:
+    return svc.actualizar_seguimiento(db, empresa_id, datos)
+
 
 @router.get("/senas", response_model=SenasConfigOut, dependencies=[Depends(gate_dueno)])
 def ver_senas(empresa_id: EmpresaActual, db: DB) -> SenasConfigOut:
@@ -87,6 +130,21 @@ def probar_campana(
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo encolar el envío")
     return {"detalle": f"Te mandamos la prueba a {destino}. Puede tardar un minuto."}
+
+
+@router.get(
+    "/mi-suscripcion",
+    response_model=MiSuscripcionOut,
+    dependencies=[Depends(gate_dueno)],
+)
+def leer_mi_suscripcion(empresa_id: EmpresaActual, db: DB) -> MiSuscripcionOut:
+    """Plan, vencimiento, historial de pagos y datos para transferir.
+
+    Solo el dueño: es información comercial del negocio, no operativa.
+    """
+    from app.services.suscripcion import mi_suscripcion
+
+    return MiSuscripcionOut(**mi_suscripcion(db, empresa_id))
 
 
 @router.get("/suscripcion", response_model=SuscripcionOut)

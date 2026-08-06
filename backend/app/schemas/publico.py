@@ -34,6 +34,13 @@ class VidrieraOut(BaseModel):
     telefono_publico: str | None = None
     email_publico: str | None = None
     logo_url: str | None = None
+    portada_url: str | None = None
+    reserva_anticipacion_min: int = 0
+    reserva_pide_telefono: bool = True
+    reserva_pide_nacimiento: bool = False
+    reserva_permite_cancelar: bool = True
+    meta_pixel_id: str | None = None
+    google_tag_id: str | None = None
     color_marca: str | None = None
     horarios_atencion: dict | None = None
     redes: dict = {}

@@ -29,6 +29,7 @@ router = APIRouter(prefix="/publico", tags=["publico"])
 
 
 @router.post("/mp/webhook/{slug}")
+@limiter.limit("120/minute")
 async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     """Notificaciones de Mercado Pago (pagos de señas).
 
@@ -48,6 +49,15 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
             payment_id = None
     if "payment" not in tipo or not payment_id:
         return {"ok": True}  # topic que no manejamos (merchant_order, etc.)
+
+    # El corte de idempotencia de más abajo solo frena IDs que YA vimos. Con
+    # IDs inventados distintos, cada request se lo saltaba y disparaba una
+    # llamada saliente a la API de MP: un amplificador gratis para tumbar el
+    # backend. Los payment_id de MP son enteros; lo que no lo sea muere acá,
+    # sin tocar la red ni la base.
+    payment_id = str(payment_id)
+    if not payment_id.isdigit() or len(payment_id) > 24:
+        return {"ok": True}
 
     try:
         empresa = svc.resolver_empresa(db, slug)
@@ -91,7 +101,8 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
 
 
 @router.get("/slugs", response_model=list[str])
-def slugs(db: DB) -> list[str]:
+@limiter.limit("20/minute")
+def slugs(request: Request, db: DB) -> list[str]:
     """Slugs de las empresas activas (para el sitemap).
 
     OJO: registrado ANTES de /{slug} para que "slugs" no se tome como empresa.
@@ -100,8 +111,14 @@ def slugs(db: DB) -> list[str]:
 
 
 @router.get("/{slug}", response_model=VidrieraOut)
-def vidriera(slug: str, db: DB) -> VidrieraOut:
-    """Datos de la página del negocio: info + servicios + equipo."""
+@limiter.limit("60/minute")
+def vidriera(request: Request, slug: str, db: DB) -> VidrieraOut:
+    """Datos de la página del negocio: info + servicios + equipo.
+
+    Era el único endpoint público que quedaba sin límite, y es el más golpeado:
+    tres consultas por llamada. 60/min por IP no molesta a nadie navegando la
+    vidriera (se pide una vez al abrir) y corta el polleo automatizado.
+    """
     return svc.vidriera(db, slug)
 
 

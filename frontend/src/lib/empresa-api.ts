@@ -51,6 +51,8 @@ export interface LandingConfig {
   telefono_publico: string | null;
   email_publico: string | null;
   logo_url: string | null;
+  /** Foto de fondo de la cabecera de la vidriera. */
+  portada_url: string | null;
   color_marca: string | null;
   horarios_atencion: HorariosAtencion | null;
   redes: Redes;
@@ -66,6 +68,93 @@ export function obtenerLanding(): Promise<LandingConfig> {
 /** Guarda el contenido de la landing (PUT /empresa/landing). Solo dueño. */
 export function guardarLanding(datos: LandingConfig): Promise<LandingConfig> {
   return api.put<LandingConfig>("/empresa/landing", datos);
+}
+
+// ============================================================
+// Reglas de la reserva pública (solo dueño)
+// ============================================================
+
+export interface ReglasReserva {
+  /** Minutos mínimos entre "ahora" y el turno. 0 = sin restricción. */
+  anticipacion_min: number;
+  /** Días hacia adelante que se puede reservar. */
+  dias_max: number;
+  /** Cierre fijo de agenda (yyyy-MM-dd). Manda la más restrictiva. */
+  fecha_limite: string | null;
+  permite_cancelar: boolean;
+  pide_telefono: boolean;
+  pide_nacimiento: boolean;
+}
+
+export function leerReglasReserva(): Promise<ReglasReserva> {
+  return api.get<ReglasReserva>("/empresa/reglas-reserva");
+}
+
+export function guardarReglasReserva(datos: ReglasReserva): Promise<ReglasReserva> {
+  return api.put<ReglasReserva>("/empresa/reglas-reserva", datos);
+}
+
+// ============================================================
+// Mi suscripción (solo dueño)
+// ============================================================
+
+export interface PagoSuscripcion {
+  fecha: string | null;
+  monto: number;
+  metodo: string;
+  periodo_desde: string | null;
+  periodo_hasta: string | null;
+}
+
+export interface DatosCobro {
+  cbu: string | null;
+  alias: string | null;
+  titular: string | null;
+  cuit: string | null;
+  banco: string | null;
+  mp_link: string | null;
+  whatsapp: string | null;
+}
+
+export interface MiSuscripcion {
+  plan: string;
+  /** activa | prorroga | vencida | sin_vencimiento */
+  estado: string;
+  vence: string | null;
+  dias_restantes: number | null;
+  en_prorroga: boolean;
+  mensaje: string;
+  /** Hasta cuándo puede pagar sin que se corte (vencimiento + gracia). */
+  corte: string | null;
+  dias_hasta_corte: number | null;
+  precio_mensual: number | null;
+  dias_prorroga: number;
+  ultimo_monto: number | null;
+  pagos: PagoSuscripcion[];
+  cobro: DatosCobro;
+}
+
+export function leerMiSuscripcion(): Promise<MiSuscripcion> {
+  return api.get<MiSuscripcion>("/empresa/mi-suscripcion");
+}
+
+// ============================================================
+// Seguimiento publicitario (Meta Pixel / Google Tag, solo dueño)
+// ============================================================
+
+export interface SeguimientoConfig {
+  meta_pixel_id: string | null;
+  google_tag_id: string | null;
+}
+
+export function leerSeguimiento(): Promise<SeguimientoConfig> {
+  return api.get<SeguimientoConfig>("/empresa/seguimiento");
+}
+
+export function guardarSeguimiento(
+  datos: SeguimientoConfig,
+): Promise<SeguimientoConfig> {
+  return api.put<SeguimientoConfig>("/empresa/seguimiento", datos);
 }
 
 // ============================================================
@@ -143,6 +232,9 @@ export interface Suscripcion {
   dias_restantes: number | null;
   en_prorroga: boolean;
   mensaje: string;
+  /** Hasta cuándo puede pagar sin que se corte (vencimiento + gracia). */
+  corte: string | null;
+  dias_hasta_corte: number | null;
 }
 
 export function obtenerSuscripcion(): Promise<Suscripcion> {

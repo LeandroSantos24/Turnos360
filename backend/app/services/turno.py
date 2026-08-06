@@ -13,7 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Cliente, Recurso, Servicio, Turno
+from app.models import Cliente, Empresa, Recurso, Servicio, Turno
 from app.models.items import ItemTurno
 from app.models.enums import EstadoTurno
 from app.schemas.turno import TurnoCambiarEstado, TurnoCrear, TurnoMover
@@ -358,3 +358,66 @@ def _abono_cubre_servicio(
         return False
     cubiertos = plan.servicios_cubiertos or []
     return servicio_id in cubiertos
+
+
+def pedir_resena_manual(db: Session, empresa_id: int, turno_id: int) -> dict:
+    """Manda el pedido de reseña a este cliente, ahora.
+
+    Existe además de la campaña automática porque no son lo mismo: la
+    automática le escribe a todos, y el botón se lo manda solo a quien el
+    dueño eligió, mientras el cliente todavía está en el local y contento. Esa
+    reseña es la que llega a cinco estrellas.
+
+    Las validaciones se hacen ACÁ y no dentro de la task de Celery: la task
+    corre en otro proceso y falla en silencio, así que el dueño apretaría el
+    botón, vería "enviado" y el mail no saldría nunca.
+    """
+    from app.models.enums import EstadoMensaje
+    from app.models.mensajeria import Mensaje
+    from app.services.empresa import automs_de
+
+    turno = db.get(Turno, turno_id)
+    if turno is None or turno.empresa_id != empresa_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Turno no encontrado")
+
+    if turno.estado != EstadoTurno.FINALIZADO:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "La reseña se pide cuando el turno está finalizado.",
+        )
+
+    cliente = db.get(Cliente, turno.cliente_id) if turno.cliente_id else None
+    if cliente is None or not (cliente.email or "").strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Este cliente no tiene email cargado. Agregalo en su ficha y volvé a intentar.",
+        )
+
+    empresa = db.get(Empresa, empresa_id)
+    cfg = automs_de(empresa).get("resena_google", {})
+    if not (cfg.get("link") or "").strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Falta el link de tu ficha de Google. Cargalo en Campañas → Reseña en Google.",
+        )
+
+    # No pedirle dos veces por el mismo turno: es la forma más rápida de que
+    # un cliente contento deje de estarlo.
+    ya = db.scalar(
+        select(Mensaje).where(
+            Mensaje.empresa_id == empresa_id,
+            Mensaje.turno_id == turno_id,
+            Mensaje.contenido.like("pedido_resena%"),
+            Mensaje.estado == EstadoMensaje.ENVIADO,
+        )
+    )
+    if ya is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya se le pidió la reseña por este turno.",
+        )
+
+    from app.tasks.emails import pedir_resena
+
+    pedir_resena.delay(turno_id, manual=True)
+    return {"ok": True, "email": cliente.email}

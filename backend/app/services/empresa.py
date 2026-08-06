@@ -1,5 +1,6 @@
 """Configuración de la empresa actual: arma el preset efectivo para el front."""
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.services import mercadopago as mp
@@ -40,6 +41,7 @@ def obtener_landing(db: Session, empresa_id: int) -> dict:
         "telefono_publico": empresa.telefono_publico,
         "email_publico": empresa.email_publico,
         "logo_url": empresa.logo_url,
+        "portada_url": empresa.portada_url,
         "color_marca": empresa.color_marca,
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
@@ -55,6 +57,7 @@ def actualizar_landing(db: Session, empresa_id: int, datos: LandingConfig) -> di
     empresa.telefono_publico = datos.telefono_publico
     empresa.email_publico = datos.email_publico
     empresa.logo_url = datos.logo_url
+    empresa.portada_url = datos.portada_url
     empresa.color_marca = datos.color_marca
     empresa.horarios_atencion = datos.horarios_atencion
     empresa.redes = datos.redes or {}
@@ -118,3 +121,61 @@ def guardar_automatizaciones(db: Session, empresa_id: int, datos: dict) -> dict:
     empresa.automatizaciones = datos
     db.commit()
     return automs_de(empresa)
+
+
+# ===== REGLAS DE LA RESERVA PÚBLICA =====
+
+_CAMPOS_REGLAS = (
+    "anticipacion_min",
+    "dias_max",
+    "fecha_limite",
+    "permite_cancelar",
+    "pide_telefono",
+    "pide_nacimiento",
+)
+
+
+def obtener_reglas_reserva(db: Session, empresa_id: int) -> dict:
+    """Reglas actuales del negocio (pantalla de configuración)."""
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    return {c: getattr(empresa, f"reserva_{c}") for c in _CAMPOS_REGLAS}
+
+
+def actualizar_reglas_reserva(db: Session, empresa_id: int, datos) -> dict:
+    """Guarda las reglas. El schema ya validó los rangos."""
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    for c in _CAMPOS_REGLAS:
+        setattr(empresa, f"reserva_{c}", getattr(datos, c))
+    db.commit()
+    db.refresh(empresa)
+    return {c: getattr(empresa, f"reserva_{c}") for c in _CAMPOS_REGLAS}
+
+
+# ===== SEGUIMIENTO PUBLICITARIO =====
+
+def obtener_seguimiento(db: Session, empresa_id: int) -> dict:
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    return {
+        "meta_pixel_id": empresa.meta_pixel_id,
+        "google_tag_id": empresa.google_tag_id,
+    }
+
+
+def actualizar_seguimiento(db: Session, empresa_id: int, datos) -> dict:
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    empresa.meta_pixel_id = datos.meta_pixel_id
+    empresa.google_tag_id = datos.google_tag_id
+    db.commit()
+    db.refresh(empresa)
+    return {
+        "meta_pixel_id": empresa.meta_pixel_id,
+        "google_tag_id": empresa.google_tag_id,
+    }

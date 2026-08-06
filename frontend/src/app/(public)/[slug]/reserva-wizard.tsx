@@ -23,7 +23,6 @@ import {
   User,
   Users,
   CalendarDays,
-  MessageCircle,
   CalendarPlus,
   Loader2,
   AlertCircle,
@@ -39,7 +38,18 @@ import {
 } from "@/lib/publico-api";
 import { ApiError } from "@/lib/api";
 import { horaDe } from "@/lib/turno-visual";
-import { BORDE, SUPERFICIE, TINTA, TINTA_SUAVE, hexA, precioFmt, linkWhatsApp } from "./vidriera-ui";
+import {
+  BORDE,
+  SUPERFICIE,
+  TINTA,
+  TINTA_SUAVE,
+  VERDE_WHATSAPP,
+  hexA,
+  precioFmt,
+  linkWhatsApp,
+} from "./vidriera-ui";
+import { IconoWhatsApp } from "@/components/iconos-redes";
+import { registrarReservaConfirmada } from "@/components/scripts-seguimiento";
 
 type Paso = 1 | 2 | 3 | 4 | 5;
 
@@ -240,18 +250,31 @@ export function ReservaWizard({
     if (abierto && paso === 3) cargarHuecos();
   }, [abierto, paso, cargarHuecos]);
 
-  /* Días con horas disponibles, filtrando las horas que ya pasaron hoy. */
+  /* Días con horas disponibles.
+   *
+   * Se descartan los horarios que el backend va a rechazar igual: los que ya
+   * pasaron y los que caen antes de la anticipación mínima que configuró el
+   * negocio. Sin este filtro el cliente elegía un horario visible, completaba
+   * todos sus datos y recién ahí comía el error — la peor forma de perder una
+   * reserva. */
   const dias = useMemo(() => {
     if (!huecos) return [];
-    const hoy = format(new Date(), "yyyy-MM-dd");
-    const ahora = format(new Date(), "HH:mm");
+    const anticipacion = Math.max(0, v.reserva_anticipacion_min || 0);
+    const corte = new Date(Date.now() + anticipacion * 60_000);
+    const fechaCorte = format(corte, "yyyy-MM-dd");
+    const horaCorte = format(corte, "HH:mm");
     return huecos
       .map((d) => ({
         ...d,
-        horas: d.fecha === hoy ? d.horas.filter((h) => horaDe(h) > ahora) : d.horas,
+        horas:
+          d.fecha < fechaCorte
+            ? []
+            : d.fecha === fechaCorte
+              ? d.horas.filter((h) => horaDe(h) >= horaCorte)
+              : d.horas,
       }))
       .filter((d) => d.horas.length > 0);
-  }, [huecos]);
+  }, [huecos, v.reserva_anticipacion_min]);
 
   useEffect(() => {
     if (dias.length > 0 && diaSel === null) setDiaSel(dias[0].fecha);
@@ -289,6 +312,10 @@ export function ReservaWizard({
       });
       setResultado(r);
       setPaso(5);
+      // Conversión para las campañas del negocio. Sin este evento el pixel
+      // mide visitas pero no sabe cuáles terminaron en turno, que es lo único
+      // que sirve para decidir si la publicidad rinde. Nunca rompe la reserva.
+      registrarReservaConfirmada(servicio?.precio ?? null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError("Ese horario se acaba de ocupar. Elegí otro, por favor.");
@@ -529,7 +556,7 @@ export function ReservaWizard({
                           className="inline-flex items-center gap-1.5 text-sm font-semibold"
                           style={{ color: acento }}
                         >
-                          <MessageCircle className="h-4 w-4" />
+                          <IconoWhatsApp className="h-4 w-4" style={{ color: VERDE_WHATSAPP }} />
                           Consultanos por WhatsApp
                         </a>
                       )}
@@ -939,7 +966,7 @@ export function ReservaWizard({
                       className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold"
                       style={{ color: acento }}
                     >
-                      <MessageCircle className="h-4 w-4" />
+                      <IconoWhatsApp className="h-4 w-4" style={{ color: VERDE_WHATSAPP }} />
                       ¿Dudas? Escribinos por WhatsApp
                     </a>
                   )}

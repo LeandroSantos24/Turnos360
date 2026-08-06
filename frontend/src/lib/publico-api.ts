@@ -29,6 +29,15 @@ export interface Vidriera {
   telefono_publico: string | null;
   email_publico: string | null;
   logo_url: string | null;
+  /** Foto de fondo del hero. null = hero blanco de siempre. */
+  portada_url: string | null;
+  /** Minutos mínimos de anticipación: el wizard no ofrece horarios más cerca. */
+  reserva_anticipacion_min: number;
+  reserva_pide_telefono: boolean;
+  reserva_pide_nacimiento: boolean;
+  reserva_permite_cancelar: boolean;
+  meta_pixel_id: string | null;
+  google_tag_id: string | null;
   color_marca: string | null;
   horarios_atencion: Record<string, Franja[]> | null;
   redes: Record<string, string>;

@@ -33,6 +33,7 @@ import {
   ACENTO_DEFAULT,
 } from "./vidriera-ui";
 import { ReservaWizard } from "./reserva-wizard";
+import { ScriptsSeguimiento } from "@/components/scripts-seguimiento";
 
 function BannerPago({
   tipo,
@@ -135,6 +136,10 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
 
   return (
     <div className="min-h-screen bg-white antialiased" style={{ color: TINTA }}>
+      <ScriptsSeguimiento
+        metaPixelId={vidriera.meta_pixel_id}
+        googleTagId={vidriera.google_tag_id}
+      />
       {avisoPago && <BannerPago tipo={avisoPago} onCerrar={() => setAvisoPago(null)} />}
       <TopBar v={vidriera} acento={acento} onReservar={() => abrir()} />
       <Hero v={vidriera} acento={acento} onReservar={() => abrir()} />

@@ -143,3 +143,15 @@ export function moverTurno(
     ...(recursoId != null ? { recurso_id: recursoId } : {}),
   });
 }
+
+/**
+ * Manda al cliente el pedido de reseña en Google, ahora.
+ *
+ * Distinto de la campaña automática: esta se dispara a mano, para el cliente
+ * que el dueño eligió y mientras todavía está en el local. El backend valida
+ * antes de encolar (turno finalizado, cliente con email, link cargado, no
+ * repetido) y devuelve un mensaje claro si algo falta.
+ */
+export function pedirResena(turnoId: number): Promise<{ ok: boolean; email: string }> {
+  return api.post<{ ok: boolean; email: string }>(`/turnos/${turnoId}/pedir-resena`, {});
+}

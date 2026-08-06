@@ -77,6 +77,7 @@ const VACIO: LandingConfig = {
   telefono_publico: null,
   email_publico: null,
   logo_url: null,
+  portada_url: null,
   color_marca: null,
   horarios_atencion: null,
   redes: {},
@@ -516,6 +517,14 @@ function ContenidoMiPagina() {
       .finally(() => setCargando(false));
   }, []);
 
+  // Solo previsualizamos URLs http(s) completas: mientras el dueño está
+  // pegando el link, el valor intermedio no es una imagen y el recuadro
+  // quedaría roto.
+  const portadaPrevia =
+    form?.portada_url && /^https?:\/\/[^\s"'()<>]+$/i.test(form.portada_url.trim())
+      ? form.portada_url.trim()
+      : null;
+
   function set<K extends keyof LandingConfig>(clave: K, valor: LandingConfig[K]) {
     setForm((f) => (f ? { ...f, [clave]: valor } : f));
   }
@@ -525,6 +534,22 @@ function ContenidoMiPagina() {
 
   async function guardar() {
     if (!form) return;
+
+    // El backend ahora rechaza URLs de imagen que no sean http(s). Validamos
+    // acá primero para dar un mensaje entendible en vez del 422 de Pydantic.
+    const urlImagenOk = (u: string | null) => {
+      const t = (u ?? "").trim();
+      return t === "" || /^https?:\/\/[^\s"'()<>]+$/i.test(t);
+    };
+    if (!urlImagenOk(form.logo_url)) {
+      toast.error("El link del logo tiene que empezar con https://");
+      return;
+    }
+    if (!urlImagenOk(form.portada_url)) {
+      toast.error("El link de la portada tiene que empezar con https://");
+      return;
+    }
+
     setGuardando(true);
     const limpio = (s: string | null) => {
       const t = (s ?? "").trim();
@@ -564,6 +589,7 @@ function ContenidoMiPagina() {
       telefono_publico: limpio(form.telefono_publico),
       email_publico: limpio(form.email_publico),
       logo_url: limpio(form.logo_url),
+      portada_url: limpio(form.portada_url),
       color_marca: limpio(form.color_marca),
       horarios_atencion: tieneHorarios ? form.horarios_atencion : null,
       redes: redesLimpias,
@@ -688,6 +714,37 @@ function ContenidoMiPagina() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="portada">Foto de portada</Label>
+              <Input
+                id="portada"
+                placeholder="https://…/local.jpg"
+                value={form.portada_url ?? ""}
+                onChange={(e) => set("portada_url", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se muestra de fondo en la cabecera de tu página, con el nombre y
+                los botones encima. Va bien una foto del local en horizontal
+                (mínimo 1600&nbsp;px de ancho). Si la dejás vacía, la cabecera
+                queda blanca.
+              </p>
+              {portadaPrevia && (
+                <div
+                  className="mt-2 h-32 w-full overflow-hidden rounded-xl border bg-cover bg-center"
+                  style={{ backgroundImage: `url(${portadaPrevia})` }}
+                >
+                  <div className="flex h-full w-full items-end bg-gradient-to-b from-black/45 via-black/25 to-black/80 p-3">
+                    <span
+                      className="text-lg font-bold text-white"
+                      style={SYNE}
+                    >
+                      Así se va a ver
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Seccion>

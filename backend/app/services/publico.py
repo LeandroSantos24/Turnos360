@@ -83,6 +83,15 @@ def vidriera(db: Session, slug: str) -> dict:
         "telefono_publico": empresa.telefono_publico,
         "email_publico": empresa.email_publico,
         "logo_url": empresa.logo_url,
+        "portada_url": empresa.portada_url,
+        # Reglas que el wizard necesita para no ofrecer horarios que el
+        # backend va a rechazar (y para saber qué campos pedir).
+        "reserva_anticipacion_min": int(empresa.reserva_anticipacion_min or 0),
+        "reserva_pide_telefono": bool(empresa.reserva_pide_telefono),
+        "reserva_pide_nacimiento": bool(empresa.reserva_pide_nacimiento),
+        "reserva_permite_cancelar": bool(empresa.reserva_permite_cancelar),
+        "meta_pixel_id": empresa.meta_pixel_id,
+        "google_tag_id": empresa.google_tag_id,
         "color_marca": empresa.color_marca,
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
@@ -126,25 +135,61 @@ def _ahora_de_pared() -> dt.datetime:
     return local.replace(tzinfo=dt.timezone.utc)
 
 
-def _validar_ventana(inicio: dt.datetime) -> None:
-    """La reserva web tiene que caer en el futuro y dentro de un plazo razonable.
+def _texto_anticipacion(minutos: int) -> str:
+    """"90" -> "1 hora y 30 minutos". Para que el error se lea como lo diría
+    el dueño, no como lo guarda la base."""
+    if minutos < 60:
+        return f"{minutos} minutos"
+    horas, resto = divmod(minutos, 60)
+    if horas < 24:
+        txt = "1 hora" if horas == 1 else f"{horas} horas"
+        return txt if resto == 0 else f"{txt} y {resto} minutos"
+    dias, h = divmod(horas, 24)
+    txt = "1 día" if dias == 1 else f"{dias} días"
+    return txt if h == 0 else f"{txt} y {h} horas"
+
+
+def _validar_ventana(inicio: dt.datetime, empresa: Empresa) -> None:
+    """La reserva web tiene que caer dentro de la ventana QUE DEFINE EL NEGOCIO.
 
     El motor de disponibilidad solo mira horarios del recurso y solapamientos:
     nunca compara contra "ahora". Sin este control, la vidriera acepta un turno
     para hace 40 días (ensucia caja y estadísticas con turnos retroactivos) o
     para el año 2099 (basura en la agenda que nadie va a limpiar).
+
+    Los tres límites salen de la empresa (antes eran constantes iguales para
+    todos): anticipación mínima, días hacia adelante y fecha fija de cierre.
     """
     ahora = _ahora_de_pared()
+
+    # 1. Nunca en el pasado. El margen cubre relojes de celular desfasados.
     if inicio < ahora - dt.timedelta(minutes=MARGEN_MINUTOS_PASADO):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Ese horario ya pasó. Elegí uno disponible.",
         )
-    if inicio > ahora + dt.timedelta(days=DIAS_MAXIMOS_A_FUTURO):
+
+    # 2. Anticipación mínima: el negocio no quiere que le entren turnos para
+    #    dentro de diez minutos cuando ya está con alguien en la silla.
+    anticipacion = int(empresa.reserva_anticipacion_min or 0)
+    if anticipacion > 0 and inicio < ahora + dt.timedelta(minutes=anticipacion):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Solo se puede reservar con hasta {DIAS_MAXIMOS_A_FUTURO} días "
-            "de anticipación.",
+            f"Las reservas se toman con al menos {_texto_anticipacion(anticipacion)} "
+            "de anticipación. Elegí un horario más adelante.",
+        )
+
+    # 3. Hasta dónde se puede reservar. Manda la MÁS restrictiva entre los días
+    #    hacia adelante y la fecha fija de cierre, si el negocio cargó una.
+    dias_max = int(empresa.reserva_dias_max or DIAS_MAXIMOS_A_FUTURO)
+    tope = (ahora + dt.timedelta(days=dias_max)).date()
+    if empresa.reserva_fecha_limite and empresa.reserva_fecha_limite < tope:
+        tope = empresa.reserva_fecha_limite
+
+    if inicio.date() > tope:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"La agenda está abierta hasta el {tope.strftime('%d/%m/%Y')} inclusive.",
         )
 
 
@@ -204,7 +249,7 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     empresa = resolver_empresa(db, slug)
     servicio = _servicio_publico(db, empresa.id, servicio_id=datos.servicio_id)
 
-    _validar_ventana(datos.inicio)
+    _validar_ventana(datos.inicio, empresa)
 
     elegibles = _elegibles(servicio)
     if not elegibles:

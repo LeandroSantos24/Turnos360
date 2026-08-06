@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, Numeric
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text, Numeric
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -66,7 +66,36 @@ class Empresa(Base):
     telefono_publico: Mapped[str | None] = mapped_column(String(40))
     email_publico: Mapped[str | None] = mapped_column(String(120))
     logo_url: Mapped[str | None] = mapped_column(String(300))
+    # Foto de fondo del hero de la vidriera (el local, una toma del trabajo).
+    # Si está vacía, el hero queda blanco como hasta ahora.
+    portada_url: Mapped[str | None] = mapped_column(String(300))
     color_marca: Mapped[str | None] = mapped_column(String(7))  # acento, ej. #00d4aa
+
+    # --- Reglas de la reserva pública (configurables por el dueño) ---------
+    # Antes vivían hardcodeadas en services/publico.py e iguales para todos.
+    reserva_anticipacion_min: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    reserva_dias_max: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="180"
+    )
+    # Cierre fijo de agenda. Manda la MÁS restrictiva entre esta y dias_max.
+    reserva_fecha_limite: Mapped[dt.date | None] = mapped_column(Date)
+    reserva_permite_cancelar: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    reserva_pide_telefono: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    reserva_pide_nacimiento: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    # --- Seguimiento publicitario de la vidriera ---------------------------
+    # IDs públicos (viajan en el HTML de cualquier sitio que los use). El
+    # formato se valida en el schema ANTES de escribirlos en un <script>.
+    meta_pixel_id: Mapped[str | None] = mapped_column(String(40))
+    google_tag_id: Mapped[str | None] = mapped_column(String(40))
     horarios_atencion: Mapped[dict | None] = mapped_column(JSONB, default=None)
     redes: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     # Galería de la landing: lista de URLs de fotos del local/trabajos.
@@ -93,6 +122,11 @@ class Empresa(Base):
         String(20), default="gratuito", server_default="gratuito"
     )
     suscripcion_vence: Mapped[dt.date | None] = mapped_column(Date)
+    # Fin del período de prueba. NULL = cliente normal.
+    # Mientras hoy <= prueba_hasta el negocio NO es moroso ni cliente al día:
+    # es un estado propio, y mezclarlo con cualquiera de los dos ensucia el
+    # MRR y la deuda vencida del panel de cobranza.
+    prueba_hasta: Mapped[dt.date | None] = mapped_column(Date)
 
     # ── Datos comerciales (los ve solo el super-admin) ──────────────────
     # Ficha del cliente del SaaS: a quién le facturo y por cuánto. Nada de

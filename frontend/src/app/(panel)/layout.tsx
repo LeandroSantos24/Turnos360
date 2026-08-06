@@ -32,6 +32,9 @@ import {
   BarChart3,
   Sun,
   Globe,
+  CalendarClock,
+  LineChart,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 
@@ -69,7 +72,10 @@ const NAV: NavItem[] = [
   { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
   { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true },
   { href: "/cuenta", label: "Mi cuenta", icon: UserCircle, grupo: "config" },
+  { href: "/suscripcion", label: "Mi suscripción", icon: Receipt, grupo: "config", soloDueno: true },
   { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "negocio", soloDueno: true },
+  { href: "/reglas-reserva", label: "Reglas de reserva", icon: CalendarClock, grupo: "negocio", soloDueno: true },
+  { href: "/seguimiento", label: "Seguimiento", icon: LineChart, grupo: "negocio", soloDueno: true },
   { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
   { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas", ocultarProfesional: true },
   { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas", soloDueno: true },
@@ -86,6 +92,13 @@ const GRUPOS = [
 function profesionalPuedeVer(pathname: string): boolean {
   return pathname === "/mi-dia" || pathname.startsWith("/clientes");
 }
+
+const ROL_LABEL: Record<string, string> = {
+  dueno: "Dueño",
+  admin: "Administrador",
+  recepcion: "Recepción",
+  profesional: "Profesional",
+};
 
 export default function PanelLayout({
   children,
@@ -153,7 +166,7 @@ export default function PanelLayout({
 
   return (
     <ConfigRubroProvider value={config}>
-    <div className="flex min-h-screen">
+    <div className="flex h-screen h-[100dvh] overflow-hidden">
       {/* Sidebar navy */}
       <aside
         className="flex w-60 shrink-0 flex-col"
@@ -187,7 +200,7 @@ export default function PanelLayout({
                 className="mt-1 text-xs font-medium"
                 style={{ color: "hsl(168 100% 42%)" }}
               >
-                {usuario.rol}
+                {ROL_LABEL[usuario.rol as string] ?? usuario.rol}
               </div>
             </div>
           </Link>
@@ -275,7 +288,7 @@ export default function PanelLayout({
 
         {/* Usuario + acciones */}
         <div
-          className="px-3 pb-4"
+          className="shrink-0 px-3 pb-4"
           style={{
             borderTop: "1px solid rgba(255,255,255,0.06)",
             paddingTop: "12px",
@@ -293,7 +306,16 @@ export default function PanelLayout({
             >
               {usuario.nombre?.charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0 flex-1">
+            {/* El email NO se muestra.
+                Estaba a la vista permanentemente en el sidebar, así que salía
+                en toda captura de pantalla, en cada demo con un cliente y en
+                cualquier grabación del panel. Es un dato personal del dueño y
+                no aporta a la operación: para saber quién está adentro alcanza
+                con el nombre, y el rol ya se muestra arriba junto al nombre
+                del negocio.
+                Queda en el title, por si alguien con varias cuentas necesita
+                confirmar con cuál entró. */}
+            <div className="min-w-0 flex-1" title={usuario.email ?? undefined}>
               <p className="truncate text-sm font-medium text-white">
                 {usuario.nombre}
               </p>
@@ -301,7 +323,7 @@ export default function PanelLayout({
                 className="truncate text-xs"
                 style={{ color: "rgba(255,255,255,0.35)" }}
               >
-                {usuario.email}
+                {ROL_LABEL[usuario.rol as string] ?? usuario.rol}
               </p>
             </div>
           </div>
@@ -324,7 +346,7 @@ export default function PanelLayout({
       </aside>
 
       {/* Contenido */}
-      <main className="flex-1 overflow-auto bg-background">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-background">
         {bloquearContenido ? (
           <div className="p-8 text-sm text-muted-foreground">Redirigiendo…</div>
         ) : (
