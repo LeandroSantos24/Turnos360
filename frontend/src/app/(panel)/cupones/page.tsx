@@ -57,7 +57,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const NUM = { fontVariantNumeric: "tabular-nums" } as const;
+// lining-nums junto con tabular-nums: hoy no cambia nada porque esta pantalla
+// usa la tipografía del cuerpo, pero si algún día se le aplica Syne las cifras
+// saldrían con formas geométricas raras, como pasó en Estadísticas.
+const NUM = { fontVariantNumeric: "lining-nums tabular-nums" } as const;
 
 function pesos(n: number): string {
   return `$${n.toLocaleString("es-AR")}`;

@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { format } from "date-fns";
 import { Printer } from "lucide-react";
 
 import { listarTurnosDelDia, Turno } from "@/lib/turnos-api";
@@ -18,12 +19,15 @@ function pesos(n: number): string {
 }
 
 export default function ImprimirParteDia() {
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  // format() usa la hora LOCAL. toISOString() usaba UTC y, pasadas las 21:00
+  // en Argentina, el parte del día abría con la fecha de mañana.
+  const [fecha, setFecha] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
   const [porMetodo, setPorMetodo] = useState<MetodoTotal[]>([]);
 
   useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return; // fecha a medio tipear
     setCargando(true);
     Promise.all([
       listarTurnosDelDia(`${fecha}T00:00:00`, `${fecha}T23:59:59`),
@@ -48,12 +52,20 @@ export default function ImprimirParteDia() {
     0,
   );
   const cobrados = turnos.filter((t) => t.cobrado).length;
-  const fechaLarga = new Date(`${fecha}T12:00:00`).toLocaleDateString("es-AR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  // Mientras se tipea, el input emite valores incompletos: sin este guardia
+  // el encabezado mostraba "Invalid Date".
+  const fechaObj = /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+    ? new Date(`${fecha}T12:00:00`)
+    : null;
+  const fechaLarga =
+    fechaObj && !Number.isNaN(fechaObj.getTime())
+      ? fechaObj.toLocaleDateString("es-AR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : "Elegí una fecha";
 
   return (
     <div className="min-h-screen bg-white text-black">

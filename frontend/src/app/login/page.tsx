@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { CalendarCheck, MessageCircle, BarChart3 } from "lucide-react";
 
 import { login } from "@/lib/auth-api";
+import { INSTAGRAM, FACEBOOK, YOUTUBE } from "@/lib/contacto";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,13 +82,19 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* Redes (a futuro: poné acá tus links reales) */}
+        {/* Redes. Cada ícono aparece SOLO si hay URL cargada en lib/contacto:
+            antes los tres iban a href="#", que en producción es un link que
+            no lleva a ningún lado. Mejor ausente que roto. */}
         <div className="relative">
           <p className="mb-3 text-xs uppercase tracking-wide text-white/40">Seguinos</p>
           <div className="flex gap-3">
-            <RedSocial href="#" label="Instagram"><IconoInstagram /></RedSocial>
-            <RedSocial href="#" label="Facebook"><IconoFacebook /></RedSocial>
-            <RedSocial href="#" label="YouTube"><IconoYoutube /></RedSocial>
+            <RedSocial href={INSTAGRAM} label="Instagram"><IconoInstagram /></RedSocial>
+            {FACEBOOK && (
+              <RedSocial href={FACEBOOK} label="Facebook"><IconoFacebook /></RedSocial>
+            )}
+            {YOUTUBE && (
+              <RedSocial href={YOUTUBE} label="YouTube"><IconoYoutube /></RedSocial>
+            )}
           </div>
         </div>
       </div>

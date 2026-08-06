@@ -4,8 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const WA_NUMBER = "5492610000000"; // ← tu número real
-const WA_LINK = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent("Hola! Quiero una demo de Turnos360 para mi negocio.")}`;
+import { WA_LINK_DEMO as WA_LINK, INSTAGRAM, EMAIL_CONTACTO } from "@/lib/contacto";
 
 const font = { sora: "'Sora', sans-serif", dm: "'DM Sans', sans-serif" };
 
@@ -29,6 +28,7 @@ const shots = [
   { label: "Inicio", src: "/img/panel-inicio.png", caption: "Resumen del mes: turnos, ingresos previstos y tasa de ausencias de un vistazo." },
   { label: "Estadísticas", src: "/img/panel-estadisticas.png", caption: "Facturación real, comisiones y ticket promedio, filtrado por profesional." },
   { label: "Campañas", src: "/img/panel-campanas.png", caption: "Recordatorios y campañas automáticas: se prenden una vez y andan solas." },
+  { label: "Caja", src: "/img/panel-caja.png", caption: "Apertura, cobros por método con su comisión, gastos y cierre con arqueo." },
 ];
 
 const steps = [
@@ -37,13 +37,25 @@ const steps = [
   { num: "03", title: "Tus clientes reservan solos", body: "Compartís tu link, el sistema cobra la seña, manda recordatorios y vos ves los números cada noche." },
 ];
 
-const rubros = [
-  { emoji: "💈", label: "Barberías" },
-  { emoji: "✂️", label: "Peluquerías" },
-  { emoji: "💅", label: "Salones de uñas" },
-  { emoji: "✨", label: "Centros de estética" },
-  { emoji: "🧖", label: "Spa" },
-  { emoji: "🥗", label: "Consultorios de nutrición" },
+/**
+ * Rubros de la sección "Hecho para tu rubro".
+ *
+ * `img` es OPCIONAL a propósito: mientras no exista el archivo, la tarjeta
+ * cae al emoji sobre un fondo suave y la sección se ve completa igual. Así se
+ * pueden ir subiendo las fotos de a una sin que la landing quede rota en el
+ * medio.
+ *
+ * Formato de las fotos: 800 × 1000 px (4:5 vertical), JPG, bajo 150 KB.
+ * Van en /public/img/ con exactamente estos nombres.
+ */
+const rubros: { emoji: string; label: string; img?: string }[] = [
+  { emoji: "💈", label: "Barberías", img: "/img/rubro-barberia.jpg" },
+  { emoji: "✂️", label: "Peluquerías", img: "/img/rubro-peluqueria.jpg" },
+  { emoji: "💅", label: "Salones de uñas", img: "/img/rubro-unas.jpg" },
+  { emoji: "✨", label: "Centros de estética", img: "/img/rubro-estetica.jpg" },
+  { emoji: "🧖", label: "Spa", img: "/img/rubro-spa.jpg" },
+  { emoji: "🥗", label: "Nutrición", img: "/img/rubro-nutricion.jpg" },
+  { emoji: "🧑‍⚕️", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
 ];
 
 const planItems = [
@@ -70,12 +82,51 @@ const faqs = [
   { q: "¿Me cobran comisión por cada turno?", a: "Cero. Pagás la cuota mensual y nada más. Si cobrás la seña con Mercado Pago, la plata va directo a tu cuenta y la única comisión es la de Mercado Pago, que no tocamos." },
   { q: "¿Sirve si tengo varios barberos trabajando a la vez?", a: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada." },
   { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
-  { q: "¿Puedo probarlo antes de pagar?", a: "Sí. Te hacemos una demo con tu negocio cargado de verdad — tus servicios, tu equipo, tu página — para que veas cómo te quedaría. Sin compromiso." },
+  { q: "¿Puedo probarlo antes de pagar?", a: "Sí, 14 días gratis. Arrancamos por WhatsApp: te damos de alta el negocio con tus servicios, tu equipo y tu página, y lo usás con clientes reales. Recién al día 14 decidís si seguís. No pedimos tarjeta." },
 ];
 
+function FotoRubro({ src, emoji, label }: { src?: string; emoji: string; label: string }) {
+  const [falló, setFalló] = useState(false);
+  const mostrarFoto = Boolean(src) && !falló;
+  return (
+    <div style={{ position: "relative", aspectRatio: "4 / 5", background: "#f3f5f8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {mostrarFoto ? (
+        <img
+          src={src}
+          alt={label}
+          loading="lazy"
+          onError={() => setFalló(true)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        <span style={{ fontSize: 44 }}>{emoji}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Avatar del negocio de ejemplo en los mockups.
+ *
+ * Antes eran las letras "EF" sobre un círculo. Con el logo real de la barbería
+ * el mockup deja de parecer un placeholder: el que lo mira ve un negocio, no
+ * una maqueta. `invert` ahora solo cambia el aro, no el contenido.
+ */
 function Monogram({ size = 30, invert = false }: { size?: number; invert?: boolean }) {
   return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: invert ? "#f5e9c9" : "#1c222c", color: invert ? "#1c222c" : "#f5e9c9", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: font.sora, fontWeight: 700, fontSize: size * 0.37, flexShrink: 0 }}>EF</div>
+    <img
+      src="/img/elfaro-logo.jpg"
+      alt="Barbería El Faro"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        objectFit: "cover",
+        flexShrink: 0,
+        background: "#fff",
+        border: `1.5px solid ${invert ? "rgba(28,34,44,0.15)" : "rgba(255,255,255,0.5)"}`,
+      }}
+    />
   );
 }
 
@@ -84,6 +135,93 @@ export default function Page() {
   const [faq, setFaq] = useState(-1);
 
   return (
+    <>
+      {/* Todo el movimiento de la landing en un solo lugar.
+
+          Las rotaciones se repiten dentro de cada keyframe porque `transform`
+          es una sola propiedad: si la animación solo declarara translateY,
+          pisaría el rotate del estilo inline y las tarjetas se enderezarían al
+          empezar a moverse.
+
+          prefers-reduced-motion apaga todo. No es un detalle de accesibilidad
+          de manual: hay gente a la que el movimiento continuo le da mareo, y
+          esta es una página de venta que se abre desde el celular. */}
+      <style>{`
+        @keyframes correr-cinta {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        .cinta-rubros { animation: correr-cinta 45s linear infinite; }
+        .cinta-rubros:hover { animation-play-state: paused; }
+
+        .flota { will-change: transform; }
+        @keyframes flota-a {
+          0%,100% { transform: rotate(3deg)  translateY(0); }
+          50%     { transform: rotate(3deg)  translateY(-10px); }
+        }
+        @keyframes flota-b {
+          0%,100% { transform: rotate(-2deg) translateY(0); }
+          50%     { transform: rotate(-2deg) translateY(-13px); }
+        }
+        @keyframes flota-c {
+          0%,100% { transform: rotate(2deg)  translateY(0); }
+          50%     { transform: rotate(2deg)  translateY(-9px); }
+        }
+        @keyframes flota-d {
+          0%,100% { transform: rotate(-3deg) translateY(0); }
+          50%     { transform: rotate(-3deg) translateY(-14px); }
+        }
+        .flota-1 { animation: flota-a 5.5s ease-in-out infinite; }
+        .flota-2 { animation: flota-b 6.4s ease-in-out infinite 0.4s; }
+        .flota-3 { animation: flota-c 5.9s ease-in-out infinite 0.9s; }
+        .flota-4 { animation: flota-d 6.8s ease-in-out infinite 0.2s; }
+
+        /* Visor de capturas del panel */
+        .visor-panel { transition: transform .35s ease, box-shadow .35s ease; }
+        .visor-panel:hover {
+          transform: scale(1.02);
+          box-shadow: 0 32px 72px rgba(28,34,44,0.16);
+        }
+        /* .45s es el punto en que el cruce se percibe como intencional sin
+           hacer esperar: por debajo de .3s parece un parpadeo, por encima de
+           .6s el que va clickeando pestañas siente que el sitio va lento. */
+        .visor-img { transition: opacity .45s ease; }
+
+        /* Mitad izquierda / derecha clickeable. Sin fondo ni borde: lo único
+           visible es la flecha, y recién al pasar el mouse. */
+        .visor-lado {
+          position: absolute; top: 0; bottom: 0; width: 26%;
+          border: none; background: transparent; cursor: pointer;
+          display: flex; align-items: center; padding: 0 14px;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .visor-lado-izq { left: 0; justify-content: flex-start; }
+        .visor-lado-der { right: 0; justify-content: flex-end; }
+        .visor-flecha {
+          display: flex; align-items: center; justify-content: center;
+          width: 38px; height: 38px; border-radius: 999px;
+          background: rgba(255,255,255,0.92);
+          box-shadow: 0 4px 16px rgba(28,34,44,0.18);
+          color: #1c222c; font-size: 24px; line-height: 1; font-weight: 700;
+          opacity: 0; transform: translateY(-1px);
+          transition: opacity .25s ease;
+        }
+        .visor-panel:hover .visor-flecha { opacity: 1; }
+        /* En pantallas táctiles no hay hover: si dependieran de él, en el
+           celular no habría forma de saber que los costados se pueden tocar. */
+        @media (hover: none) {
+          .visor-flecha { opacity: .85; }
+        }
+        .visor-lado:focus-visible .visor-flecha { opacity: 1; outline: 2px solid #12b886; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .cinta-rubros, .flota { animation: none !important; }
+          .visor-panel, .visor-img { transition: none !important; }
+          .visor-flecha { transition: none !important; }
+          .visor-panel:hover { transform: none !important; }
+        }
+      `}</style>
+
     <div style={{ fontFamily: font.dm, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
       {/* NAV */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
@@ -98,7 +236,18 @@ export default function Page() {
           <a href="#precios" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Precios</a>
           <a href="#faq" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Preguntas</a>
         </div>
-        <a href={WA_LINK} target="_blank" style={{ background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 15, padding: "10px 20px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none" }}>Pedí una demo</a>
+        {/* Arriba a la derecha va el acceso al panel, no el CTA de venta.
+            Es donde lo busca cualquiera que YA es cliente —la convención de
+            todo SaaS— y hasta ahora había que escribir /login a mano.
+            El CTA comercial no se pierde: sigue en el hero, en la sección de
+            precios y en el bloque de la página de reservas. */}
+        <Link
+          href="/login"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1.5px solid #d7dce4", color: "#1c222c", fontWeight: 700, fontSize: 15, padding: "9px 20px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none", background: "#fff" }}
+        >
+          Ingresar
+          <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>→</span>
+        </Link>
       </nav>
 
       {/* HERO */}
@@ -220,8 +369,65 @@ export default function Page() {
               <button key={s.label} onClick={() => setTab(i)} style={{ border: "none", cursor: "pointer", fontFamily: font.dm, fontSize: 14.5, fontWeight: 700, padding: "9px 22px", borderRadius: 999, background: i === tab ? "#12b886" : "transparent", color: i === tab ? "#fff" : "#5d6578" }}>{s.label}</button>
             ))}
           </div>
-          <div style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 20, padding: "clamp(8px,1.5vw,16px)", boxShadow: "0 24px 60px rgba(28,34,44,0.10)", overflow: "hidden" }}>
-            <img src={shots[tab].src} alt="Panel de Turnos360" style={{ width: "100%", display: "block", borderRadius: 12 }} />
+          <div
+            style={{ position: "relative", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 20, padding: "clamp(8px,1.5vw,16px)", boxShadow: "0 24px 60px rgba(28,34,44,0.10)", overflow: "hidden", maxWidth: 940, margin: "0 auto" }}
+            className="visor-panel"
+          >
+            {/* Las cuatro capturas van APILADAS y se cruzan por opacidad, en
+                vez de cambiar el src de una sola.
+
+                Cambiando el src, el navegador descarta la imagen vieja antes
+                de tener la nueva: la primera vez que se toca cada pestaña
+                aparece un parpadeo blanco, justo lo contrario de lo que busca
+                una transición. Apiladas, las cuatro ya están decodificadas y
+                el cruce es instantáneo.
+
+                La primera va en flujo normal y define el alto del contenedor;
+                las otras tres, absolutas encima. Solo la primera carga con
+                prioridad: las demás quedan en lazy y el navegador las trae
+                mientras el visitante lee lo de arriba. */}
+            <div style={{ position: "relative" }}>
+              {shots.map((s, i) => (
+                <img
+                  key={s.label}
+                  src={s.src}
+                  alt={`Turnos360 · ${s.label}`}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  aria-hidden={i !== tab}
+                  className="visor-img"
+                  style={{
+                    width: "100%",
+                    display: "block",
+                    borderRadius: 12,
+                    opacity: i === tab ? 1 : 0,
+                    ...(i === 0
+                      ? { position: "relative" }
+                      : { position: "absolute", inset: 0, height: "100%" }),
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Mitades invisibles a los costados: click a la izquierda vuelve,
+                a la derecha avanza. Se ven solo al pasar el mouse por encima
+                (ver .visor-flecha en el bloque de estilos), así no ensucian la
+                captura cuando alguien solo la está mirando. */}
+            <button
+              type="button"
+              aria-label="Pantalla anterior"
+              onClick={() => setTab((t) => (t - 1 + shots.length) % shots.length)}
+              className="visor-lado visor-lado-izq"
+            >
+              <span className="visor-flecha" aria-hidden>‹</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Pantalla siguiente"
+              onClick={() => setTab((t) => (t + 1) % shots.length)}
+              className="visor-lado visor-lado-der"
+            >
+              <span className="visor-flecha" aria-hidden>›</span>
+            </button>
           </div>
           <p style={{ color: "#8b93a7", fontSize: 14, margin: "20px 0 0" }}>{shots[tab].caption}</p>
         </div>
@@ -239,7 +445,7 @@ export default function Page() {
             <div style={{ position: "relative", width: "100%", maxWidth: 480, aspectRatio: "1.02" }}>
               <div style={{ position: "absolute", inset: "4% 0 4% 6%", background: "radial-gradient(ellipse at center, #e3f6ee 0%, #eef9f4 70%)", borderRadius: "50%" }} />
               {/* WhatsApp */}
-              <div style={{ position: "absolute", top: "8%", right: "6%", width: "52%", background: "#25d366", borderRadius: 20, padding: 16, transform: "rotate(3deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.16)" }}>
+              <div style={{ position: "absolute", top: "8%", right: "6%", width: "52%", background: "#25d366", borderRadius: 20, padding: 16, transform: "rotate(3deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.16)" }} className="flota flota-1">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>WhatsApp</span></div>
                   <img src="/img/whatsapp-icon.png" alt="WhatsApp" style={{ width: 28, height: 28, objectFit: "contain" }} />
@@ -248,7 +454,7 @@ export default function Page() {
                 <div style={{ height: 8, background: "rgba(255,255,255,0.45)", borderRadius: 99, width: "58%" }} />
               </div>
               {/* QR */}
-              <div style={{ position: "absolute", top: "22%", right: "16%", width: "52%", background: "#5d6578", borderRadius: 20, padding: 16, transform: "rotate(-2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.18)" }}>
+              <div style={{ position: "absolute", top: "22%", right: "16%", width: "52%", background: "#5d6578", borderRadius: 20, padding: 16, transform: "rotate(-2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.18)" }} className="flota flota-2">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>QR del local</span></div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 5px)", gridTemplateRows: "repeat(4, 5px)", gap: 2 }}>
@@ -259,7 +465,7 @@ export default function Page() {
                 <div style={{ height: 8, background: "rgba(255,255,255,0.4)", borderRadius: 99, width: "52%" }} />
               </div>
               {/* TikTok */}
-              <div style={{ position: "absolute", top: "37%", right: "24%", width: "52%", background: "#16181f", borderRadius: 20, padding: 16, transform: "rotate(2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.22)" }}>
+              <div style={{ position: "absolute", top: "37%", right: "24%", width: "52%", background: "#16181f", borderRadius: 20, padding: 16, transform: "rotate(2deg)", boxShadow: "0 16px 40px rgba(28,34,44,0.22)" }} className="flota flota-3">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Monogram invert /><span style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>TikTok</span></div>
                   <img src="/img/tiktok-icon.png" alt="TikTok" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
@@ -268,7 +474,7 @@ export default function Page() {
                 <div style={{ height: 8, background: "rgba(255,255,255,0.3)", borderRadius: 99, width: "55%" }} />
               </div>
               {/* Instagram */}
-              <div style={{ position: "absolute", top: "52%", right: "32%", width: "54%", background: "linear-gradient(135deg, #6228d7 0%, #ee2a7b 55%, #f9ce34 120%)", borderRadius: 20, padding: 18, transform: "rotate(-3deg)", boxShadow: "0 24px 56px rgba(238,42,123,0.35)" }}>
+              <div style={{ position: "absolute", top: "52%", right: "32%", width: "54%", background: "linear-gradient(135deg, #6228d7 0%, #ee2a7b 55%, #f9ce34 120%)", borderRadius: 20, padding: 18, transform: "rotate(-3deg)", boxShadow: "0 24px 56px rgba(238,42,123,0.35)" }} className="flota flota-4">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}><Monogram size={34} /><span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Instagram</span></div>
                   <img src="/img/instagram-icon.png" alt="Instagram" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain" }} />
@@ -307,12 +513,35 @@ export default function Page() {
       <section id="rubros" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
         <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Hecho para tu rubro</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 36px", maxWidth: 520 }}>Servicios con duración, profesional y precio. Si trabajás con turnos, Turnos360 es para vos.</p>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12, maxWidth: 760, margin: "0 auto" }}>
-          {rubros.map((r) => (
-            <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid #e9ecf1", borderRadius: 999, padding: "12px 24px", fontWeight: 700, fontSize: 15.5, background: "#fff" }}>
-              <span style={{ fontSize: 22 }}>{r.emoji}</span>{r.label}
-            </div>
-          ))}
+        {/* Cinta continua en vez de grilla.
+
+            Con grilla, seis o siete rubros siempre dejan una fila incompleta y
+            hay que elegir el número de tarjetas para que cierre. Acá corren en
+            una sola línea, así que sumar un rubro no rompe nada.
+
+            La lista va DUPLICADA y la animación desplaza exactamente el 50%:
+            cuando termina, el primer clon está en la posición del original y
+            el salto es invisible. Es la única forma de que el loop no dé un
+            tirón al reiniciar. */}
+        <div
+          style={{
+            overflow: "hidden",
+            WebkitMaskImage: "linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%)",
+            maskImage: "linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%)",
+          }}
+        >
+          <div className="cinta-rubros" style={{ display: "flex", gap: 16, width: "max-content" }}>
+            {[...rubros, ...rubros].map((r, i) => (
+              <div
+                key={`${r.label}-${i}`}
+                aria-hidden={i >= rubros.length}
+                style={{ width: 190, flexShrink: 0, border: "1px solid #e9ecf1", borderRadius: 18, overflow: "hidden", background: "#fff", textAlign: "left" }}
+              >
+                <FotoRubro src={r.img} emoji={r.emoji} label={r.label} />
+                <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15.5 }}>{r.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -322,7 +551,7 @@ export default function Page() {
           <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 40px", maxWidth: 520 }}>Sin niveles, sin funciones bloqueadas, sin sorpresas. Todo lo que viste en esta página está adentro.</p>
           <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "2px solid #12b886", borderRadius: 24, padding: "clamp(28px,4vw,40px)", boxShadow: "0 24px 60px rgba(18,184,134,0.14)", textAlign: "left" }}>
-            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>7 días de prueba gratis</div>
+            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>14 días de prueba gratis</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
               <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>$16.990</span>
               <span style={{ color: "#5d6578", fontSize: 17, fontWeight: 500 }}>/ mes</span>
@@ -335,7 +564,7 @@ export default function Page() {
                 </div>
               ))}
             </div>
-            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis 7 días</a>
+            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis 14 días</a>
             <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0" }}>Arrancamos por WhatsApp: te lo dejamos configurado y andando.</p>
           </div>
         </div>
@@ -382,15 +611,25 @@ export default function Page() {
             <Link href="/privacidad" style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}>
               Política de privacidad
             </Link>
+            <span style={{ color: "#cfd5de", fontSize: 13.5 }}>·</span>
+            <a
+              href={INSTAGRAM}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}
+            >
+              Instagram
+            </a>
           </div>
           <span style={{ color: "#8b93a7", fontSize: 13.5, textAlign: "right" }}>
             © {new Date().getFullYear()} Turnos360 · Hecho en Mendoza, Argentina ·{" "}
-            <a href="mailto:turnos360.contacto@gmail.com" style={{ color: "#5d6578" }}>
-              turnos360.contacto@gmail.com
+            <a href={`mailto:${EMAIL_CONTACTO}`} style={{ color: "#5d6578" }}>
+              {EMAIL_CONTACTO}
             </a>
           </span>
         </div>
       </footer>
     </div>
+    </>
   );
 }

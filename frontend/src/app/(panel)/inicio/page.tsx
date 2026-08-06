@@ -11,16 +11,7 @@
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import {
-  startOfDay,
-  endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  format,
-  parseISO,
-} from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Calendar,
@@ -46,7 +37,12 @@ import { colorEstadoHex, labelEstado, horaDe } from "@/lib/turno-visual";
 import { Torta } from "@/components/graficos/torta";
 import { Barras } from "@/components/graficos/barras";
 import { ApiError } from "@/lib/api";
-import { Input } from "@/components/ui/input";
+import {
+  SelectorPeriodo,
+  rangoDe,
+  textoPeriodo,
+  type Periodo,
+} from "@/components/selector-periodo";
 import {
   Select,
   SelectContent,
@@ -54,14 +50,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-type Periodo = "hoy" | "semana" | "mes" | "personalizado";
-
-const PERIODO_LABEL: Record<Exclude<Periodo, "personalizado">, string> = {
-  hoy: "hoy",
-  semana: "esta semana",
-  mes: "este mes",
-};
 
 /** Orden fijo de estados para la torta (los vacíos se filtran después). */
 const ESTADOS_ORDEN = [
@@ -83,31 +71,6 @@ const CANAL_INFO: Record<string, { label: string; color: string }> = {
   paso_por_la_puerta: { label: "Paso por la puerta", color: "#f59e0b" },
   otro: { label: "Otro", color: "#94a3b8" },
 };
-
-/** Rango [desde, hasta] según el período elegido. */
-function rangoDe(
-  periodo: Periodo,
-  desdeCustom: string,
-  hastaCustom: string,
-): { desde: Date; hasta: Date } {
-  const hoy = new Date();
-  if (periodo === "semana") {
-    return {
-      desde: startOfWeek(hoy, { weekStartsOn: 1 }),
-      hasta: endOfWeek(hoy, { weekStartsOn: 1 }),
-    };
-  }
-  if (periodo === "mes") {
-    return { desde: startOfMonth(hoy), hasta: endOfMonth(hoy) };
-  }
-  if (periodo === "personalizado") {
-    return {
-      desde: startOfDay(parseISO(desdeCustom)),
-      hasta: endOfDay(parseISO(hastaCustom)),
-    };
-  }
-  return { desde: startOfDay(hoy), hasta: endOfDay(hoy) };
-}
 
 export default function InicioPage() {
   const hoyStr = format(new Date(), "yyyy-MM-dd");
@@ -151,11 +114,17 @@ export default function InicioPage() {
 
   // Turnos del período elegido (todos los recursos; filtramos por barbero abajo)
   const cargar = useCallback(async () => {
-    if (periodo === "personalizado" && (!desdeCustom || !hastaCustom)) return;
+    const rango = rangoDe(periodo, desdeCustom, hastaCustom);
+    // Rango a medio escribir: dejamos los datos anteriores en pantalla y
+    // esperamos. Nada de pedir ni de romper.
+    if (!rango) {
+      setCargando(false);
+      return;
+    }
+    const { desde, hasta } = rango;
     setCargando(true);
     setError(null);
     try {
-      const { desde, hasta } = rangoDe(periodo, desdeCustom, hastaCustom);
       const data = await listarTurnosDelDia(
         desde.toISOString(),
         hasta.toISOString(),
@@ -230,7 +199,15 @@ export default function InicioPage() {
   // Canal de adquisición (histórico: todos los clientes del negocio)
   const conteoCanal: Record<string, number> = {};
   for (const c of clientes) {
-    const key = c.canal_adquisicion ?? "sin";
+    // Todo lo que no esté en el catálogo cae en "sin".
+    //
+    // Antes solo se agrupaba null: un string vacío quedaba como clave propia y
+    // armaba una SEGUNDA entrada con la misma etiqueta "Sin especificar" en la
+    // torta. Pasa siempre, porque el formulario de cliente arranca el campo en
+    // "" y la reserva pública lo deja en null. Un canal viejo o cargado por
+    // API abría una tercera.
+    const bruto = (c.canal_adquisicion ?? "").trim();
+    const key = bruto && CANAL_INFO[bruto] ? bruto : "sin";
     conteoCanal[key] = (conteoCanal[key] ?? 0) + 1;
   }
   const segmentosCanal = Object.entries(conteoCanal)
@@ -294,11 +271,9 @@ export default function InicioPage() {
       valor: p.abonados_activos,
     })) ?? [];
 
-  // Subtítulo según el período
-  const subtitulo =
-    periodo === "personalizado"
-      ? `Resumen del ${format(parseISO(desdeCustom), "d MMM", { locale: es })} al ${format(parseISO(hastaCustom), "d MMM", { locale: es })}`
-      : `Resumen de ${PERIODO_LABEL[periodo]}`;
+  // Subtítulo según el período. En personalizado NUNCA formateamos sin validar:
+  // ese format() sobre una fecha a medio tipear era el que rompía la página.
+  const subtitulo = `Resumen de ${textoPeriodo(periodo, desdeCustom, hastaCustom)}`;
 
   return (
     <div className="p-8">
@@ -313,40 +288,14 @@ export default function InicioPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={periodo}
-            onValueChange={(v) => setPeriodo(v as Periodo)}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="hoy">Hoy</SelectItem>
-              <SelectItem value="semana">Esta semana</SelectItem>
-              <SelectItem value="mes">Este mes</SelectItem>
-              <SelectItem value="personalizado">Personalizado</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {periodo === "personalizado" && (
-            <>
-              <Input
-                type="date"
-                value={desdeCustom}
-                max={hastaCustom}
-                onChange={(e) => setDesdeCustom(e.target.value)}
-                className="w-40 tabular-nums"
-              />
-              <span className="text-muted-foreground">a</span>
-              <Input
-                type="date"
-                value={hastaCustom}
-                min={desdeCustom}
-                onChange={(e) => setHastaCustom(e.target.value)}
-                className="w-40 tabular-nums"
-              />
-            </>
-          )}
+          <SelectorPeriodo
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            desde={desdeCustom}
+            hasta={hastaCustom}
+            onDesde={setDesdeCustom}
+            onHasta={setHastaCustom}
+          />
 
           <Select
             value={barberoId === null ? "todos" : String(barberoId)}

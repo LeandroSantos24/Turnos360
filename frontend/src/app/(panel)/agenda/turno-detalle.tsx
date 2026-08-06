@@ -10,10 +10,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Plus, X } from "lucide-react";
+import { ArrowRight, Check, Plus, Star, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { Turno, EstadoTurno, cambiarEstadoTurno, aplicarDescuento } from "@/lib/turnos-api";
+import { Turno, EstadoTurno, cambiarEstadoTurno, aplicarDescuento, pedirResena } from "@/lib/turnos-api";
 import { TRANSICIONES, labelAccion, esReapertura } from "@/lib/turno-estados";
 import { colorEstadoHex, labelEstado, horaDe, inicialDe } from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
@@ -79,6 +79,8 @@ export function TurnoDetalle({
   const [nuevoRecurso, setNuevoRecurso] = useState<string>("");
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [moviendo, setMoviendo] = useState(false);
+  const [pidiendoResena, setPidiendoResena] = useState(false);
+  const [resenaEnviada, setResenaEnviada] = useState(false);
 
   function abrirReprogramar() {
     if (!turno?.fecha_inicio) return;
@@ -618,6 +620,42 @@ export function TurnoDetalle({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Pedir reseña: solo con el turno finalizado, que es cuando el
+                cliente todavía está en el local y contento. Pedirla antes es
+                pedirle opinión de algo que no terminó. */}
+            {turno.estado === "finalizado" && (
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                disabled={pidiendoResena || resenaEnviada}
+                onClick={async () => {
+                  setPidiendoResena(true);
+                  try {
+                    const r = await pedirResena(turno.id);
+                    setResenaEnviada(true);
+                    toast.success(`Pedido de reseña enviado a ${r.email}`);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError
+                        ? err.message
+                        : "No se pudo enviar el pedido",
+                    );
+                  } finally {
+                    setPidiendoResena(false);
+                  }
+                }}
+              >
+                <span>
+                  {resenaEnviada
+                    ? "Reseña pedida"
+                    : pidiendoResena
+                      ? "Enviando…"
+                      : "Pedirle una reseña"}
+                </span>
+                <Star className="h-4 w-4" />
+              </Button>
             )}
 
             {/* Acceso a la ficha del cliente */}

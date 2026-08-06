@@ -25,27 +25,29 @@ import {
   EstadisticasFacturacion,
 } from "@/lib/estadisticas-api";
 import { ApiError } from "@/lib/api";
+import {
+  SelectorPeriodo,
+  rangoDe,
+  rangoInicial,
+  type Periodo,
+} from "@/components/selector-periodo";
 import { listarRecursos } from "@/lib/recursos-api";
 import { RequiereDueno } from "@/components/requiere-rol";
 
-type Periodo = "hoy" | "semana" | "mes";
 
-const NUM = { fontVariantNumeric: "tabular-nums" } as const;
+// lining-nums es lo que faltaba.
+//
+// Syne trae por defecto cifras de estilo geométrico: el 2 y el 4 salen con
+// formas raras y de alturas distintas, que es lo que se veía en las tarjetas
+// de Estadísticas. Inicio usa la MISMA fuente y se ve normal porque pide
+// lining-nums, que fuerza las cifras alineadas de altura uniforme.
+// tabular-nums, aparte, les da a todas el mismo ancho para que las columnas
+// de plata queden alineadas.
+const NUM = { fontVariantNumeric: "lining-nums tabular-nums" } as const;
 const SYNE = { fontFamily: "Syne, sans-serif" } as const;
 
 function pesos(n: number): string {
   return `$${Math.round(n).toLocaleString("es-AR")}`;
-}
-
-function rango(p: Periodo): { desde: Date; hasta: Date } {
-  const hoy = new Date();
-  if (p === "hoy") return { desde: startOfDay(hoy), hasta: endOfDay(hoy) };
-  if (p === "semana")
-    return {
-      desde: startOfWeek(hoy, { weekStartsOn: 1 }),
-      hasta: endOfWeek(hoy, { weekStartsOn: 1 }),
-    };
-  return { desde: startOfMonth(hoy), hasta: endOfMonth(hoy) };
 }
 
 function KPI({
@@ -94,6 +96,9 @@ function Card({
 
 function ContenidoEstadisticas() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const inicial = rangoInicial();
+  const [desdeCustom, setDesdeCustom] = useState(inicial.desde);
+  const [hastaCustom, setHastaCustom] = useState(inicial.hasta);
   const [recursoId, setRecursoId] = useState<number | null>(null);
   const [recursos, setRecursos] = useState<{ id: number; nombre: string }[]>([]);
   const [datos, setDatos] = useState<EstadisticasFacturacion | null>(null);
@@ -115,7 +120,13 @@ function ContenidoEstadisticas() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const { desde, hasta } = rango(periodo);
+      const r = rangoDe(periodo, desdeCustom, hastaCustom);
+      // Rango a medio escribir: dejamos los datos anteriores y esperamos.
+      if (!r) {
+        setCargando(false);
+        return;
+      }
+      const { desde, hasta } = r;
       const d = await obtenerFacturacion(
         desde.toISOString(),
         hasta.toISOString(),
@@ -127,7 +138,7 @@ function ContenidoEstadisticas() {
     } finally {
       setCargando(false);
     }
-  }, [periodo, recursoId]);
+  }, [periodo, recursoId, desdeCustom, hastaCustom]);
 
   useEffect(() => {
     cargar();
@@ -155,23 +166,19 @@ function ContenidoEstadisticas() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-lg border p-0.5">
-            {(["hoy", "semana", "mes"] as Periodo[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriodo(p)}
-                className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                  periodo === p
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p === "hoy" ? "Hoy" : p === "semana" ? "Semana" : "Mes"}
-              </button>
-            ))}
-          </div>
+          <SelectorPeriodo
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            desde={desdeCustom}
+            hasta={hastaCustom}
+            onDesde={setDesdeCustom}
+            onHasta={setHastaCustom}
+          />
           <a
             href={`/imprimir/estadisticas?periodo=${periodo}`
+              + (periodo === "personalizado"
+                  ? `&desde=${desdeCustom}&hasta=${hastaCustom}`
+                  : "")
               + (recursoId != null ? `&recurso_id=${recursoId}` : "")}
             target="_blank"
             rel="noopener noreferrer"
@@ -583,7 +590,7 @@ function GraficoLineal({
 function EstadoBox({ label, valor, color }: { label: string; valor: number; color: string }) {
   return (
     <div className="rounded-xl border p-3">
-      <p className="text-2xl font-bold tabular-nums" style={{ fontVariantNumeric: "tabular-nums", color }}>
+      <p className="text-2xl font-bold tabular-nums" style={{ fontVariantNumeric: "lining-nums tabular-nums", color }}>
         {valor}
       </p>
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -600,12 +607,18 @@ function HorariosBar({ horas }: { horas: { hora: number; cantidad: number }[] })
   for (let h = desde; h <= hasta; h++) rango.push(h);
   const max = Math.max(1, ...horas.map((h) => h.cantidad));
   return (
-    <div className="flex h-40 items-end gap-1">
+    /* items-stretch (no items-end) es lo que hace que esto funcione.
+       Con items-end, cada columna toma su ALTURA NATURAL —o sea, la del
+       "9h" de abajo— en vez de estirarse a los 160 px del contenedor. El
+       hueco de la barra quedaba en 0 px de alto y su height en % daba 0:
+       se veían las etiquetas y ninguna barra.
+       min-h-0 va para que el flex-1 pueda ceder alto en vez de desbordar. */
+    <div className="flex h-40 items-stretch gap-1">
       {rango.map((h) => {
         const c = mapa.get(h) ?? 0;
         return (
-          <div key={h} className="flex flex-1 flex-col items-center gap-1" title={`${c} turnos`}>
-            <div className="flex w-full flex-1 items-end">
+          <div key={h} className="flex h-full flex-1 flex-col items-center gap-1" title={`${c} turnos`}>
+            <div className="flex min-h-0 w-full flex-1 items-end">
               <div
                 className="w-full rounded-t bg-primary/80"
                 style={{ height: `${Math.max((c / max) * 100, c > 0 ? 4 : 0)}%` }}

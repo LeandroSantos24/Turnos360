@@ -65,6 +65,21 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
       SUPERADMIN_PASS: ${SUPERADMIN_PASS:-}
+      # El motor de agenda guarda "hora de pared" y necesita saber qué hora es
+      # ACÁ para decidir si un turno ya pasó. El servidor corre en UTC: sin
+      # esto el sistema se cree 3 horas en el futuro. El default del código ya
+      # es Buenos Aires, pero explícito es mejor que implícito en producción.
+      ZONA_HORARIA: ${ZONA_HORARIA:-America/Argentina/Buenos_Aires}
+      # Datos de cobro de Turnos360 (los TUYOS). Los lee "Mi suscripción" y el
+      # email de aviso de vencimiento. Sin pasarlos, la pantalla que le decís
+      # al dueño "acá está mi CBU" sale vacía.
+      COBRO_CBU: ${COBRO_CBU:-}
+      COBRO_ALIAS: ${COBRO_ALIAS:-}
+      COBRO_TITULAR: ${COBRO_TITULAR:-}
+      COBRO_CUIT: ${COBRO_CUIT:-}
+      COBRO_BANCO: ${COBRO_BANCO:-}
+      COBRO_MP_LINK: ${COBRO_MP_LINK:-}
+      COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
     # --proxy-headers + --forwarded-allow-ips: uvicorn confía en el
     # X-Forwarded-For que manda Nginx, así slowapi limita por IP REAL.
     # Sin esto, todos los visitantes comparten la IP de Nginx y el límite
@@ -127,6 +142,11 @@ services:
         # (docker compose ... up -d --build frontend). Cambiarla y solo
         # reiniciar NO tiene efecto.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        # Idem build time. Es la base de las URLs absolutas del Open Graph
+        # (metadataBase en layout.tsx) y del sitemap. Sin esto, la vista
+        # previa al compartir el link por WhatsApp apunta a localhost:3000
+        # y no carga la imagen — justo el canal principal de difusión.
+        NEXT_PUBLIC_SITE_URL: ${PUBLIC_BASE_URL}
     restart: unless-stopped
     environment:
       # Esta sí es de runtime: la usa el sitemap, que corre server-side
