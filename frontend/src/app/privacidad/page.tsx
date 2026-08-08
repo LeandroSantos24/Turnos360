@@ -174,19 +174,49 @@ export default function PrivacidadPage() {
           tratamiento y la Agencia de Acceso a la Información Pública.
         </P>
 
-        <H2 id="conservacion">6. Conservación</H2>
+        <H2 id="cookies">6. Cookies y almacenamiento</H2>
+        <P>
+          <b>Lo que Turnos360 guarda por su cuenta.</b> El sistema no usa
+          cookies propias. Cuando alguien entra al panel de administración,
+          se guarda el token de su sesión en el almacenamiento local del
+          navegador: es lo que permite seguir conectado y se borra al cerrar
+          sesión. Un visitante que solo mira la página de un negocio y reserva
+          un turno no recibe nada.
+        </P>
+        <P>
+          <b>Cookies de terceros.</b> Cada negocio puede conectar su propio
+          Meta Pixel o Google Tag para medir las visitas de su página en sus
+          campañas de publicidad. Cuando lo hace, esos servicios <b>sí</b>{" "}
+          guardan cookies en el navegador de quien visita esa página.
+        </P>
+        <P>
+          En esos casos aparece un aviso antes de cargar nada: los scripts de
+          Meta y de Google <b>no se ejecutan hasta que el visitante acepta</b>.
+          Si rechaza, no se guarda ninguna cookie de esos servicios y puede
+          reservar su turno con normalidad. En las páginas de negocios que no
+          conectaron ninguna herramienta de medición, el aviso no aparece
+          porque no hay nada que consentir.
+        </P>
+        <P>
+          Los datos que recogen esas herramientas van directamente a la cuenta
+          de Meta o de Google del negocio; Turnos360 no los almacena ni accede
+          a ellos. El uso que cada negocio les dé se rige por sus propias
+          políticas y por las de esos proveedores.
+        </P>
+
+        <H2 id="conservacion">7. Conservación</H2>
         <P>
           Conservamos tus datos mientras tu cuenta esté activa. Si dejás de usar
           el servicio, podés solicitar su eliminación definitiva.
         </P>
 
-        <H2 id="cambios">7. Cambios</H2>
+        <H2 id="cambios">8. Cambios</H2>
         <P>
           Podemos actualizar esta política; los cambios importantes se comunican
           y la versión vigente está siempre en esta página.
         </P>
 
-        <H2 id="contacto">8. Contacto</H2>
+        <H2 id="contacto">9. Contacto</H2>
         <P>
           Por cualquier consulta sobre privacidad, escribinos por WhatsApp desde{" "}
           <Link href="/" className="font-medium underline" style={{ color: TEAL }}>

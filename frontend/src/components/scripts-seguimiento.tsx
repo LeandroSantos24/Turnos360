@@ -23,10 +23,19 @@ const GOOGLE_OK = /^(G|AW|GT|UA)-[A-Z0-9-]{4,30}$/i;
 export function ScriptsSeguimiento({
   metaPixelId,
   googleTagId,
+  habilitado = true,
 }: {
   metaPixelId?: string | null;
   googleTagId?: string | null;
+  /**
+   * Solo se inyectan los scripts con esto en true. Lo controla el banner de
+   * cookies: si cargaran antes de la respuesta del visitante, las cookies de
+   * Meta y Google ya estarían puestas para cuando el cartel aparece y el
+   * consentimiento sería decorativo.
+   */
+  habilitado?: boolean;
 }) {
+  if (!habilitado) return null;
   const meta = (metaPixelId ?? "").trim();
   const google = (googleTagId ?? "").trim();
   const metaValido = META_OK.test(meta) ? meta : null;

@@ -34,6 +34,7 @@ import {
 } from "./vidriera-ui";
 import { ReservaWizard } from "./reserva-wizard";
 import { ScriptsSeguimiento } from "@/components/scripts-seguimiento";
+import { BannerCookies, useConsentimiento } from "@/components/banner-cookies";
 
 function BannerPago({
   tipo,
@@ -72,6 +73,9 @@ function BannerPago({
 }
 
 export default function VidrieraPage({ params }: { params: { slug: string } }) {
+  const { valor: consentimiento, decidir: decidirCookies } = useConsentimiento(
+    params.slug,
+  );
   const [vidriera, setVidriera] = useState<Vidriera | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<"no-existe" | "error" | null>(null);
@@ -130,6 +134,9 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   }
 
   const acento = acentoDe(vidriera);
+  const haySeguimiento = Boolean(
+    (vidriera.meta_pixel_id ?? "").trim() || (vidriera.google_tag_id ?? "").trim(),
+  );
   const abrir = (servicioId?: number) =>
     setWizard({ abierto: true, servicio: servicioId ?? null });
   const cerrar = () => setWizard({ abierto: false, servicio: null });
@@ -139,6 +146,15 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
       <ScriptsSeguimiento
         metaPixelId={vidriera.meta_pixel_id}
         googleTagId={vidriera.google_tag_id}
+        habilitado={consentimiento === "aceptado"}
+      />
+      <BannerCookies
+        // Sin pixel no hay cookies de terceros que consentir: el cartel sería
+        // un obstáculo entre el cliente y la reserva, sin nada que decidir.
+        visible={haySeguimiento && consentimiento === null}
+        acento={acento}
+        onAceptar={() => decidirCookies("aceptado")}
+        onRechazar={() => decidirCookies("rechazado")}
       />
       {avisoPago && <BannerPago tipo={avisoPago} onCerrar={() => setAvisoPago(null)} />}
       <TopBar v={vidriera} acento={acento} onReservar={() => abrir()} />
