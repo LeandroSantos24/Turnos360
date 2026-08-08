@@ -76,6 +76,7 @@ export default function InicioPage() {
   const hoyStr = format(new Date(), "yyyy-MM-dd");
 
   const [recursos, setRecursos] = useState<Recurso[]>([]);
+  const [turnosFuturos, setTurnosFuturos] = useState<Turno[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [estadisticas, setEstadisticas] =
     useState<EstadisticasMembresias | null>(null);
@@ -103,6 +104,25 @@ export default function InicioPage() {
     listarClientes(undefined, 0, 200)
       .then((data) => setClientes(data.items))
       .catch(() => setClientes([]));
+  }, []);
+
+  // Próximos turnos: consulta PROPIA, de ahora hacia adelante.
+  //
+  // Antes salían de la misma lista que el resto del dashboard, o sea del
+  // período elegido arriba. Eso los hacía desaparecer casi siempre: con "Hoy"
+  // por la tarde ya no queda nada por delante, y con "Mes pasado" el futuro
+  // directamente no existe. La sección quedaba vacía justo cuando el negocio
+  // más la necesita.
+  //
+  // "Lo que viene" no depende del período que estés mirando: es información
+  // operativa del futuro inmediato. Sí respeta el filtro por barbero, que ahí
+  // sí tiene sentido.
+  useEffect(() => {
+    const ahora = new Date();
+    const hasta = new Date(ahora.getTime() + 14 * 24 * 60 * 60 * 1000);
+    listarTurnosDelDia(ahora.toISOString(), hasta.toISOString())
+      .then((data) => setTurnosFuturos(data.items))
+      .catch(() => setTurnosFuturos([]));
   }, []);
 
   // Estadísticas de abonos (resumen del negocio)
@@ -247,12 +267,16 @@ export default function InicioPage() {
   // --- Datos de la capa 3 ---
   // Próximos turnos (de ahora en adelante, dentro del período/barbero)
   const ahora = new Date();
-  const proximos = visibles
+  const proximos = turnosFuturos
     .filter(
       (t) =>
         t.fecha_inicio &&
         new Date(t.fecha_inicio) >= ahora &&
-        t.estado !== "cancelado",
+        // Confirmados y pendientes: los dos son turnos que van a pasar. Un
+        // pendiente sin seña sigue siendo gente que espera ser atendida.
+        t.estado !== "cancelado" &&
+        t.estado !== "ausente" &&
+        (barberoId === null || t.recurso_id === barberoId),
     )
     .sort(
       (a, b) =>
