@@ -33,8 +33,13 @@ def listar(empresa_id: EmpresaActual, db: DB) -> list[GiftCardOut]:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(gate_gestion)],
 )
-def crear(datos: GiftCardCrear, empresa_id: EmpresaActual, db: DB) -> GiftCardOut:
-    return svc.crear(db, empresa_id, datos)
+def crear(
+    datos: GiftCardCrear,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> GiftCardOut:
+    return svc.crear(db, empresa_id, datos, usuario.id)
 
 
 @router.post(

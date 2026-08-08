@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class GiftCardCrear(BaseModel):
+    # Con qué método la pagó el cliente. None = regalo del negocio, no entra
+    # a la caja.
+    metodo_pago_id: int | None = None
+
     """Alta de una gift card. El código lo genera el backend."""
 
     monto: float = Field(gt=0)

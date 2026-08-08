@@ -18,6 +18,8 @@ export interface GiftCard {
 
 export interface GiftCardCrear {
   monto: number;
+  /** Con qué la pagó el cliente. null = regalo del negocio, no entra a caja. */
+  metodo_pago_id?: number | null;
   beneficiario?: string | null;
   de_parte_de?: string | null;
   mensaje?: string | null;

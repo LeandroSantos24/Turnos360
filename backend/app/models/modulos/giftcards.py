@@ -13,6 +13,7 @@ import datetime as dt
 from datetime import datetime
 
 from sqlalchemy import (
+    ForeignKey,
     Date,
     DateTime,
     Index,
@@ -59,6 +60,15 @@ class GiftCard(TenantMixin, Base):
     )
 
     vence: Mapped[dt.date | None] = mapped_column(Date)  # None = sin vencimiento
+
+    # --- Cobro de la venta -------------------------------------------------
+    # Con qué se pagó y el movimiento de caja que generó. Nullable porque una
+    # gift card puede ser un regalo del negocio (sorteo, compensación), y ahí
+    # no hay plata que registrar.
+    metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodo_pago.id"))
+    movimiento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("movimiento_financiero.id")
+    )
 
     # Trazabilidad del canje.
     canjeada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

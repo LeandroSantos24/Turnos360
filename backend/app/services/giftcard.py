@@ -12,8 +12,11 @@ import secrets
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException, status
+
 from app.models import GiftCard
-from app.models.enums import EstadoGiftCard
+from app.models.enums import EstadoGiftCard, TipoMovimiento
+from app.models.finanzas import MetodoPago, MovimientoFinanciero
 from app.schemas.giftcard import GiftCardCrear
 
 
@@ -42,7 +45,34 @@ def _codigo_unico(db: Session, empresa_id: int) -> str:
     raise RuntimeError("No se pudo generar un código único de gift card")
 
 
-def crear(db: Session, empresa_id: int, datos: GiftCardCrear) -> GiftCard:
+def crear(
+    db: Session,
+    empresa_id: int,
+    datos: GiftCardCrear,
+    usuario_id: int | None = None,
+) -> GiftCard:
+    """Crea la gift card y, si se indicó método de pago, cobra la venta.
+
+    Vender una gift card es una venta como cualquier otra: entra plata al
+    negocio hoy. Antes solo se guardaba la tarjeta, así que esa plata no
+    generaba movimiento: el arqueo del día cerraba con una diferencia sin
+    explicación y, como al canjearla el turno queda cubierto, la venta no
+    aparecía nunca en la facturación.
+
+    `metodo_pago_id` es opcional a propósito: una gift card también puede ser
+    un regalo del negocio (sorteo, compensación por un problema), y ahí no hay
+    nada que cobrar.
+    """
+    from app.services.finanzas import caja_abierta
+
+    metodo = None
+    if datos.metodo_pago_id is not None:
+        metodo = db.get(MetodoPago, datos.metodo_pago_id)
+        if metodo is None or metodo.empresa_id != empresa_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Método de pago inválido"
+            )
+
     gc = GiftCard(
         empresa_id=empresa_id,
         codigo=_codigo_unico(db, empresa_id),
@@ -53,8 +83,28 @@ def crear(db: Session, empresa_id: int, datos: GiftCardCrear) -> GiftCard:
         concepto=datos.concepto,
         vence=datos.vence,
         estado=EstadoGiftCard.ACTIVA,
+        metodo_pago_id=datos.metodo_pago_id,
     )
     db.add(gc)
+    db.flush()  # necesitamos gc.codigo/id para el concepto del movimiento
+
+    if metodo is not None:
+        # Mismo criterio que el cobro de un turno: si hay caja abierta se
+        # asocia, y si no, el movimiento igual queda registrado.
+        caja = caja_abierta(db, empresa_id)
+        mov = MovimientoFinanciero(
+            empresa_id=empresa_id,
+            caja_id=caja.id if caja else None,
+            tipo=TipoMovimiento.INGRESO,
+            concepto=f"Venta gift card {gc.codigo}",
+            monto=datos.monto,
+            metodo_pago_id=datos.metodo_pago_id,
+            usuario_id=usuario_id,
+        )
+        db.add(mov)
+        db.flush()
+        gc.movimiento_id = mov.id
+
     db.commit()
     db.refresh(gc)
     return gc
