@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { duracionLegible } from "@/lib/duracion";
 
 interface NuevoTurnoDialogProps {
   abierto: boolean;
@@ -198,7 +199,7 @@ export function NuevoTurnoDialog({
               <SelectContent>
                 {servicios.filter((s) => s.agendable).map((s) => (
                   <SelectItem key={s.id} value={String(s.id)}>
-                    {s.nombre} · {s.duracion_min} min
+                    {s.nombre} · {duracionLegible(s.duracion_min)}
                     {s.precio != null &&
                       ` · $${Number(s.precio).toLocaleString("es-AR")}`}
                   </SelectItem>

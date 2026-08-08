@@ -36,11 +36,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GastoDialog } from "./gasto-dialog";
-
-const NUM: React.CSSProperties = {
-  fontFamily: "Syne, sans-serif",
-  fontVariantNumeric: "lining-nums tabular-nums",
-};
+import { NUM } from "@/lib/numeros";
 
 function pesos(n: number): string {
   return `$${Number(n).toLocaleString("es-AR")}`;
@@ -463,11 +459,11 @@ export default function CajaPage() {
               return (
                 <div key={c.id} className="flex items-center gap-4 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium tabular-nums">
+                    <p className="text-sm font-medium tabular-nums" style={NUM}>
                       {fechaHora(c.fecha_apertura)}
                       {abierta ? " · en curso" : ` → ${fechaHora(c.fecha_cierre)}`}
                     </p>
-                    <p className="text-xs text-muted-foreground tabular-nums">
+                    <p className="text-xs text-muted-foreground tabular-nums" style={NUM}>
                       Inicial {pesos(c.saldo_inicial)}
                       {c.saldo_final != null && ` · Cierre ${pesos(c.saldo_final)}`}
                     </p>
@@ -605,7 +601,7 @@ export default function CajaPage() {
                 <p className="font-medium">
                   {aAnular.concepto ?? (aAnular.tipo === "ingreso" ? "Ingreso" : "Gasto")}
                 </p>
-                <p className="mt-0.5 tabular-nums text-muted-foreground">
+                <p className="mt-0.5 tabular-nums text-muted-foreground" style={NUM}>
                   {aAnular.tipo === "ingreso" ? "+" : "−"}
                   {pesos(aAnular.monto)}
                   {aAnular.metodo_pago && ` · ${aAnular.metodo_pago}`}

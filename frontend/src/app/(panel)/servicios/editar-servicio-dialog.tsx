@@ -162,7 +162,7 @@ export function EditarServicioDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="e-paso">Turno cada (min)</Label>
+                <Label htmlFor="e-paso">Ofrecer turno cada (min)</Label>
                 <Input
                   id="e-paso"
                   type="number"

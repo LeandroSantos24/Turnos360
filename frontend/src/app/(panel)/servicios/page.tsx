@@ -43,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { duracionLegible } from "@/lib/duracion";
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
@@ -165,10 +166,10 @@ export default function ServiciosPage() {
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.nombre}</TableCell>
                   <TableCell className="tabular-nums">
-                    {s.duracion_min} min
+                    {duracionLegible(s.duracion_min)}
                   </TableCell>
                   <TableCell className="tabular-nums">
-                    {s.paso_turno_min} min
+                    {duracionLegible(s.paso_turno_min)}
                   </TableCell>
                   <TableCell>
                     {s.grupo_agenda?.startsWith("solo-") ? (

@@ -18,6 +18,7 @@ import { Printer, X } from "lucide-react";
 import { GiftCard } from "@/lib/giftcards-api";
 import { CodigoQR } from "@/components/codigo-qr";
 import { Button } from "@/components/ui/button";
+import { NUM } from "@/lib/numeros";
 
 interface Tema {
   id: string;
@@ -248,8 +249,8 @@ export function TarjetaGift({
             Gift Card
           </p>
           <p
-            className={`mt-3 ${tamMonto} whitespace-nowrap font-extrabold tabular-nums`}
-            style={{ color: tema.acento, fontFamily: "Syne, sans-serif" }}
+            className={`mt-3 ${tamMonto} whitespace-nowrap font-extrabold`}
+            style={{ ...NUM, color: tema.acento }}
           >
             {monto}
           </p>

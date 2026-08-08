@@ -42,6 +42,8 @@ import {
 } from "@/components/ui/dialog";
 import { TarjetaGift } from "./tarjeta-gift";
 import { ValidadorGift } from "./validador-gift";
+import { listarMetodos, type MetodoPago } from "@/lib/finanzas-api";
+import { NUM } from "@/lib/numeros";
 
 function montoFmt(n: number): string {
   return `$${Number(n).toLocaleString("es-AR")}`;
@@ -63,6 +65,8 @@ export default function GiftCardsPage() {
 
   // Form de alta
   const [monto, setMonto] = useState("");
+  const [metodoId, setMetodoId] = useState<string>("");
+  const [metodos, setMetodos] = useState<MetodoPago[]>([]);
   const [concepto, setConcepto] = useState("");
   const [beneficiario, setBeneficiario] = useState("");
   const [deParte, setDeParte] = useState("");
@@ -82,6 +86,12 @@ export default function GiftCardsPage() {
   }, []);
 
   useEffect(() => {
+    listarMetodos()
+      .then((d) => setMetodos(d.filter((m) => m.activo)))
+      .catch(() => setMetodos([]));
+  }, []);
+
+  useEffect(() => {
     cargar();
     obtenerConfigEmpresa()
       .then((c) => setNombreNegocio(c.nombre))
@@ -98,6 +108,7 @@ export default function GiftCardsPage() {
     try {
       const gc = await crearGiftCard({
         monto: m,
+        metodo_pago_id: metodoId ? Number(metodoId) : null,
         concepto: concepto.trim() || null,
         beneficiario: beneficiario.trim() || null,
         de_parte_de: deParte.trim() || null,
@@ -105,7 +116,7 @@ export default function GiftCardsPage() {
         vence: vence || null,
       });
       toast.success("Gift card generada");
-      setMonto(""); setConcepto(""); setBeneficiario(""); setDeParte(""); setMensaje(""); setVence("");
+      setMonto(""); setMetodoId(""); setConcepto(""); setBeneficiario(""); setDeParte(""); setMensaje(""); setVence("");
       setCreando(false);
       setCards((prev) => [gc, ...prev]);
       setVer(gc); // abre la tarjeta lista para imprimir
@@ -151,6 +162,24 @@ export default function GiftCardsPage() {
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Monto (ARS) *</Label>
               <Input type="number" inputMode="numeric" min={0} placeholder="10000" value={monto} onChange={(e) => setMonto(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Cómo la pagó</Label>
+              <select
+                className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+                value={metodoId}
+                onChange={(e) => setMetodoId(e.target.value)}
+              >
+                <option value="">Sin cobrar (regalo del negocio)</option>
+                {metodos.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nombre}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {metodoId
+                  ? "Se registra el ingreso en la caja del día."
+                  : "No se registra ningún ingreso. Elegí un método si el cliente la pagó."}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Concepto (opcional)</Label>
@@ -215,7 +244,7 @@ export default function GiftCardsPage() {
                   return (
                     <tr key={c.id} className="border-b last:border-0">
                       <td className="px-4 py-2.5 font-mono font-medium tracking-wider">{c.codigo}</td>
-                      <td className="px-4 py-2.5 font-semibold tabular-nums">{montoFmt(c.monto)}</td>
+                      <td className="px-4 py-2.5 font-semibold tabular-nums" style={NUM}>{montoFmt(c.monto)}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{c.beneficiario ?? "—"}</td>
                       <td className="px-4 py-2.5">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${chip.cls}`}>

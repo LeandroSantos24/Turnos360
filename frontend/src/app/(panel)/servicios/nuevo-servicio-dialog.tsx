@@ -155,7 +155,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="paso">Turno cada (min)</Label>
+                <Label htmlFor="paso">Ofrecer turno cada (min)</Label>
                 <Input
                   id="paso"
                   type="number"

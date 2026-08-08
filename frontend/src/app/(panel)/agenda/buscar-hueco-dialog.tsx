@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { duracionLegible } from "@/lib/duracion";
  
 interface BuscarHuecoDialogProps {
   abierto: boolean;
@@ -122,7 +123,7 @@ export function BuscarHuecoDialog({
               <SelectContent>
                 {servicios.filter((s) => s.agendable).map((s) => (
                   <SelectItem key={s.id} value={String(s.id)}>
-                    {s.nombre} ({s.duracion_min} min)
+                    {s.nombre} ({duracionLegible(s.duracion_min)})
                   </SelectItem>
                 ))}
               </SelectContent>
