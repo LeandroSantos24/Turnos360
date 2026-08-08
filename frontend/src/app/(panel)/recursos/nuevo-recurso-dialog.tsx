@@ -108,6 +108,14 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
             </Select>
           </div>
 
+          {tipo !== "persona" && (
+            <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+              Los recursos de tipo Box y Equipo todavía no se agendan: no
+              aparecen en la agenda ni en tu página de reservas, y no se les
+              puede asignar un turno. Por ahora sirven solo como inventario.
+              Si lo que querés es que se pueda reservar, cargalo como Persona.
+            </p>
+          )}
           {tipo === "persona" && (
             <SelectorUsuarioVinculado value={usuarioId} onChange={setUsuarioId} />
           )}

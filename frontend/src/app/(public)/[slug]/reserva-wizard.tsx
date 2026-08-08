@@ -11,7 +11,7 @@
  * string ISO elegido se manda tal cual, sin re-parsear.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -50,6 +50,7 @@ import {
 } from "./vidriera-ui";
 import { IconoWhatsApp } from "@/components/iconos-redes";
 import { registrarReservaConfirmada } from "@/components/scripts-seguimiento";
+import { duracionLegible } from "@/lib/duracion";
 
 type Paso = 1 | 2 | 3 | 4 | 5;
 
@@ -137,6 +138,28 @@ export function ReservaWizard({
   const [huecos, setHuecos] = useState<HuecosDia[] | null>(null);
   const [cargandoHuecos, setCargandoHuecos] = useState(false);
   const [diaSel, setDiaSel] = useState<string | null>(null);
+  // Carrusel de días: hay scroll horizontal, pero con la barra oculta nadie
+  // se entera de que se puede correr. Estas flechas lo hacen visible.
+  const stripDias = useRef<HTMLDivElement | null>(null);
+  const [puedeIzq, setPuedeIzq] = useState(false);
+  const [puedeDer, setPuedeDer] = useState(false);
+
+  const revisarStrip = useCallback(() => {
+    const el = stripDias.current;
+    if (!el) return;
+    // El -2 absorbe los redondeos de píxel del navegador: sin eso, al llegar
+    // al final la flecha derecha queda encendida para siempre.
+    setPuedeIzq(el.scrollLeft > 2);
+    setPuedeDer(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  const correrStrip = (dir: -1 | 1) => {
+    const el = stripDias.current;
+    if (!el) return;
+    // ~3 tarjetas por clic: mover una sola se siente lento y mover todo el
+    // ancho hace perder la referencia de dónde estabas.
+    el.scrollBy({ left: dir * 240, behavior: "smooth" });
+  };
   const [horaSel, setHoraSel] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -279,6 +302,11 @@ export function ReservaWizard({
   useEffect(() => {
     if (dias.length > 0 && diaSel === null) setDiaSel(dias[0].fecha);
   }, [dias, diaSel]);
+
+  // Al llegar días nuevos hay que recalcular: el ancho del contenido cambió.
+  useEffect(() => {
+    revisarStrip();
+  }, [dias, revisarStrip]);
 
   const horasDelDia = useMemo(
     () => dias.find((d) => d.fecha === diaSel)?.horas ?? [],
@@ -453,7 +481,7 @@ export function ReservaWizard({
                         </p>
                         <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: TINTA_SUAVE }}>
                           <Clock className="h-3 w-3" />
-                          {s.duracion_min} min
+                          {duracionLegible(s.duracion_min)}
                         </p>
                       </div>
                       {s.precio != null && (
@@ -565,8 +593,35 @@ export function ReservaWizard({
 
                   {!cargandoHuecos && dias.length > 0 && (
                     <>
-                      {/* Strip de días */}
-                      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {/* Strip de días, con flechas a los costados */}
+                      <div className="relative -mx-5">
+                        {puedeIzq && (
+                          <button
+                            type="button"
+                            aria-label="Ver días anteriores"
+                            onClick={() => correrStrip(-1)}
+                            className="absolute left-1 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border bg-white text-lg font-bold shadow-md"
+                            style={{ borderColor: BORDE, color: TINTA }}
+                          >
+                            ‹
+                          </button>
+                        )}
+                        {puedeDer && (
+                          <button
+                            type="button"
+                            aria-label="Ver más días"
+                            onClick={() => correrStrip(1)}
+                            className="absolute right-1 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border bg-white text-lg font-bold shadow-md"
+                            style={{ borderColor: BORDE, color: TINTA }}
+                          >
+                            ›
+                          </button>
+                        )}
+                      <div
+                        ref={stripDias}
+                        onScroll={revisarStrip}
+                        className="flex gap-2 overflow-x-auto px-5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      >
                         {dias.map((d) => {
                           const et = etiquetaDia(d.fecha);
                           const activa = d.fecha === diaSel;
@@ -599,6 +654,7 @@ export function ReservaWizard({
                             </button>
                           );
                         })}
+                      </div>
                       </div>
 
                       {/* Grid de horas */}

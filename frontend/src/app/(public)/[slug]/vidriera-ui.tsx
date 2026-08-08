@@ -21,7 +21,7 @@ import {
   CalendarCheck2,
   Sparkles,
   ShieldCheck,
-  Star,
+
   BellRing,
 } from "lucide-react";
 
@@ -34,6 +34,7 @@ import {
   IconoWhatsApp,
   type IconoRed,
 } from "@/components/iconos-redes";
+import { duracionLegible } from "@/lib/duracion";
 
 /* ------------------------------------------------------------------ */
 /* Tokens y helpers                                                    */
@@ -546,7 +547,7 @@ export function Servicios({
                 </p>
                 <p className="mt-1 flex items-center gap-1.5 text-sm" style={{ color: TINTA_SUAVE }}>
                   <Clock className="h-3.5 w-3.5" />
-                  {s.duracion_min} min
+                  {duracionLegible(s.duracion_min)}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-3">
@@ -916,10 +917,8 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
   return (
     <section className="mx-auto max-w-5xl px-5 py-14 md:py-20">
       <Reveal>
-        <div className="text-center">
-          <Eyebrow acento={acento}>Reservá con tranquilidad</Eyebrow>
-          <TituloSeccion>Todo lo que necesitás, en un solo lugar</TituloSeccion>
-        </div>
+        <Eyebrow acento={acento}>Reservá con tranquilidad</Eyebrow>
+        <TituloSeccion>Todo lo que necesitás, en un solo lugar</TituloSeccion>
       </Reveal>
 
       {/* Garantías */}
@@ -959,45 +958,65 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
           >
             Conectado con las apps que ya usás
           </p>
+          {/* Franja de marcas.
+              Las alturas NO son iguales a propósito. Igualar la altura es lo
+              que produce el desbalance: un logo de dos líneas y uno de una
+              línea larga, a la misma altura, pesan distinto. Lo que se iguala
+              acá es el ÁREA DE TINTA de cada marca, medida sobre el archivo
+              (proporción x densidad de píxel pintado). De ahí salen estos
+              números: Google Reseñas es de dos líneas y necesita 28 px para
+              pesar lo mismo que Google Maps, que es una línea larga, con 22. */}
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-12 gap-y-7">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* eslint-disable @next/next/no-img-element */}
             <img
               src="/marca/integraciones/mercado-pago.png"
               alt="Mercado Pago"
-              className="max-h-7 w-auto max-w-[130px] object-contain"
+              loading="lazy"
+              className="w-auto object-contain"
+              style={{ height: 21 }}
             />
             <img
               src="/marca/integraciones/google-calendar.png"
               alt="Google Calendar"
-              className="max-h-6 w-auto max-w-[130px] object-contain"
+              loading="lazy"
+              className="w-auto object-contain"
+              style={{ height: 24 }}
             />
             {tieneMapa && (
               <img
                 src="/marca/integraciones/google-maps.png"
                 alt="Google Maps"
-                className="max-h-5 w-auto max-w-[130px] object-contain"
+                loading="lazy"
+                className="w-auto object-contain"
+                style={{ height: 22 }}
               />
             )}
             {tieneWhatsApp && (
               <img
                 src="/marca/integraciones/whatsapp.png"
                 alt="WhatsApp"
-                className="max-h-6 w-auto max-w-[130px] object-contain"
+                loading="lazy"
+                className="w-auto object-contain"
+                style={{ height: 23 }}
               />
             )}
-            <div className="flex items-center gap-1.5">
-              <Star className="h-5 w-5" style={{ color: "#f59e0b", fill: "#f59e0b" }} />
-              <span className="text-sm font-medium" style={{ color: TINTA }}>
-                Google Reseñas
-              </span>
-            </div>
+            {/* Antes esto era una estrella + "Google Reseñas" escrito con la
+                tipografía del sitio: al lado de cuatro marcas con su propia
+                tipografía, cantaba. Ahora es el logo oficial. */}
+            <img
+              src="/marca/integraciones/google-resenas.png"
+              alt="Google Reseñas"
+              loading="lazy"
+              className="w-auto object-contain"
+              style={{ height: 28 }}
+            />
+            {/* eslint-enable @next/next/no-img-element */}
           </div>
         </div>
       </Reveal>
     </section>
   );
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Contacto                                                            */
