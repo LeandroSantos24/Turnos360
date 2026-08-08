@@ -220,9 +220,28 @@ def huecos(
             )
 
     dias = max(1, min(dias, 31))
+
+    # La ventana que definió el negocio manda también acá.
+    #
+    # Antes este listado ignoraba las reglas de reserva y _validar_ventana las
+    # aplicaba recién al confirmar: la vidriera ofrecía días que el backend
+    # después rechazaba. El cliente elegía un horario visible, completaba todos
+    # sus datos y ahí comía el error. Es la misma fricción que ya se había
+    # sacado con la anticipación mínima, pero del otro extremo de la ventana.
+    tope = (_ahora_de_pared() + dt.timedelta(days=int(empresa.reserva_dias_max or 180))).date()
+    if empresa.reserva_fecha_limite and empresa.reserva_fecha_limite < tope:
+        tope = empresa.reserva_fecha_limite
+
+    # Anticipación mínima: no ofrecer horarios que caen antes del corte.
+    corte = _ahora_de_pared() + dt.timedelta(
+        minutes=int(empresa.reserva_anticipacion_min or 0)
+    )
+
     resultado: list[dict] = []
     for i in range(dias):
         fecha = desde + dt.timedelta(days=i)
+        if fecha > tope:
+            break
         horas: set[dt.datetime] = set()
         for r in elegibles:
             horas.update(
@@ -237,8 +256,13 @@ def huecos(
                     grupo_agenda=servicio.grupo_agenda,
                 )
             )
-        if horas:
-            resultado.append({"fecha": fecha, "horas": sorted(horas)})
+        # Se descartan los horarios anteriores al corte de anticipación. El
+        # frontend ya filtra por su cuenta, pero el motor es la fuente de
+        # verdad: un cliente con el reloj del celular atrasado veía huecos que
+        # el servidor iba a rechazar.
+        libres = sorted(h for h in horas if h >= corte)
+        if libres:
+            resultado.append({"fecha": fecha, "horas": libres})
     return resultado
 
 
