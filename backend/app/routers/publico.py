@@ -22,6 +22,7 @@ from app.schemas.publico import (
 )
 from app.models import Turno
 from app.models.enums import EstadoTurno
+from app.services import finanzas as svc_fin
 from app.services import mercadopago as mp
 from app.services import publico as svc
 
@@ -96,6 +97,21 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     if turno.estado == EstadoTurno.PENDIENTE:
         # Pagó la seña => el turno se confirma solo (transición válida).
         turno.estado = EstadoTurno.CONFIRMADO
+
+    # La seña ENTRA a la caja y a las estadísticas. Antes solo se marcaba el
+    # turno como señado: la plata estaba de verdad en la cuenta de Mercado
+    # Pago del negocio, pero para el sistema no existía. El arqueo del día
+    # daba diferencia y nada explicaba por qué.
+    #
+    # Se usa el monto que MP confirmó como aprobado, no el que la empresa
+    # tenía configurado: si alguien cambió el monto de la seña entre la
+    # reserva y el pago, lo que vale es lo que entró.
+    monto_pagado = float(
+        pago.get("transaction_amount") or turno.sena_monto or 0
+    )
+    svc_fin.registrar_sena_cobrada(
+        db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))
+    )
     db.commit()
     return {"ok": True}
 

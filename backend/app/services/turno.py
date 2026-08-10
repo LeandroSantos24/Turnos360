@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Cliente, Empresa, Recurso, Servicio, Turno
 from app.models.items import ItemTurno
+from app.models.finanzas import Pago
 from app.models.enums import EstadoTurno
 from app.schemas.turno import TurnoCambiarEstado, TurnoCrear, TurnoMover
 from app.services import disponibilidad as disp
@@ -46,21 +47,56 @@ def _entidad_de_empresa(db, modelo, entidad_id: int, empresa_id: int):
     )
 
 
-def _resolver_nombres(db: Session, turno: Turno) -> Turno:
-    """Adjunta cliente_nombre, recurso_nombre y servicio_nombre al objeto turno.
+def _nombre_cliente(cliente: Cliente | None) -> str | None:
+    if cliente is None:
+        return None
+    return f"{cliente.nombre} {cliente.apellido or ''}".strip()
+
+
+def _resolver_nombres_lote(db: Session, turnos: list[Turno]) -> None:
+    """Adjunta cliente_nombre, recurso_nombre y servicio_nombre a CADA turno.
 
     No son columnas: los seteamos como atributos para que el schema TurnoOut
     los incluya en la respuesta (útil para pintar la agenda sin más consultas).
+
+    Por qué en lote y no de a uno: antes esta función recibía UN turno y hacía
+    tres db.get(). En la vista de día con 40 turnos eso son hasta 120 consultas
+    donde alcanzan 3, y en la vista de mes se multiplica por treinta. Era, por
+    lejos, lo que más frenaba la agenda.
+
+    Ahora son 3 consultas fijas sin importar cuántos turnos vengan: una por
+    tipo de entidad, con un IN de los ids que aparecen. Los objetos que ya
+    estén en la sesión igual salen del identity map de SQLAlchemy.
     """
-    cliente = db.get(Cliente, turno.cliente_id)
-    recurso = db.get(Recurso, turno.recurso_id)
-    servicio = db.get(Servicio, turno.servicio_id) if turno.servicio_id else None
-    turno.cliente_nombre = (
-        f"{cliente.nombre} {cliente.apellido or ''}".strip() if cliente else None
-    )
-    turno.recurso_nombre = recurso.nombre if recurso else None
-    turno.servicio_nombre = servicio.nombre if servicio else None
-    turno.servicio_grupo = servicio.grupo_agenda if servicio else None
+    if not turnos:
+        return
+
+    def _traer(modelo, ids: set[int]) -> dict[int, object]:
+        if not ids:
+            return {}
+        return {
+            obj.id: obj
+            for obj in db.scalars(select(modelo).where(modelo.id.in_(ids)))
+        }
+
+    clientes = _traer(Cliente, {t.cliente_id for t in turnos if t.cliente_id})
+    recursos = _traer(Recurso, {t.recurso_id for t in turnos if t.recurso_id})
+    servicios = _traer(Servicio, {t.servicio_id for t in turnos if t.servicio_id})
+
+    for t in turnos:
+        servicio = servicios.get(t.servicio_id) if t.servicio_id else None
+        recurso = recursos.get(t.recurso_id) if t.recurso_id else None
+        t.cliente_nombre = _nombre_cliente(
+            clientes.get(t.cliente_id) if t.cliente_id else None
+        )
+        t.recurso_nombre = recurso.nombre if recurso else None
+        t.servicio_nombre = servicio.nombre if servicio else None
+        t.servicio_grupo = servicio.grupo_agenda if servicio else None
+
+
+def _resolver_nombres(db: Session, turno: Turno) -> Turno:
+    """Versión de un solo turno (crear / mover / cambiar estado / cobrar)."""
+    _resolver_nombres_lote(db, [turno])
     return turno
 
 
@@ -72,7 +108,12 @@ def _total_con_items(turno: Turno, items_sum: float) -> float:
 
 
 def _setear_totales(db: Session, turnos: list[Turno]) -> None:
-    """Suma los adicionales de cada turno en UNA query y setea turno.total."""
+    """Suma adicionales y señas de cada turno en 2 queries y setea los totales.
+
+    `saldo` es el número que importa al cobrar: total menos lo ya pagado por
+    adelantado. Sin él, el diálogo de cobro mostraba el total completo de un
+    turno señado y la recepción le cobraba al cliente la seña dos veces.
+    """
     if not turnos:
         return
     ids = [t.id for t in turnos]
@@ -82,8 +123,19 @@ def _setear_totales(db: Session, turnos: list[Turno]) -> None:
         .group_by(ItemTurno.turno_id)
     ).all()
     sumas = {tid: float(s) for tid, s in filas}
+
+    # Señas acreditadas, en lote (una query para todos los turnos de la vista).
+    filas_s = db.execute(
+        select(Pago.turno_id, func.coalesce(func.sum(Pago.monto), 0))
+        .where(Pago.turno_id.in_(ids), Pago.origen == "sena")
+        .group_by(Pago.turno_id)
+    ).all()
+    senas = {tid: float(s) for tid, s in filas_s}
+
     for t in turnos:
         t.total = _total_con_items(t, sumas.get(t.id, 0.0))
+        t.senado = senas.get(t.id, 0.0)
+        t.saldo = round(max((t.total or 0.0) - t.senado, 0.0), 2)
 
 
 def listar(
@@ -112,16 +164,19 @@ def listar(
     if estado is not None:
         condiciones.append(Turno.estado == estado)
 
-    total = db.scalar(select(func.count()).select_from(Turno).where(*condiciones))
     turnos = list(
         db.scalars(
             select(Turno).where(*condiciones).order_by(Turno.fecha_inicio)
         )
     )
-    for t in turnos:
-        _resolver_nombres(db, t)
+    # El count se calcula sobre la lista en vez de con una segunda consulta:
+    # esta función no pagina (trae todo el rango pedido), así que len() da el
+    # mismo número que COUNT(*) y ahorra un viaje entero a la base en cada
+    # carga de la agenda. Si algún día se pagina, vuelve el COUNT.
+    total = len(turnos)
+    _resolver_nombres_lote(db, turnos)
     _setear_totales(db, turnos)
-    return total or 0, turnos
+    return total, turnos
 
 
 def obtener(db: Session, empresa_id: int, turno_id: int) -> Turno | None:

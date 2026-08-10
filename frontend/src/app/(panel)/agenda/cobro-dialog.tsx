@@ -40,6 +40,12 @@ import {
 interface CobroDialogProps {
   turnoId: number | null;
   total: number;
+  /**
+   * Lo que el cliente ya pagó por adelantado (seña acreditada).
+   * Sin esto, el diálogo proponía cobrar el total completo de un turno
+   * señado y la recepción le cobraba la seña dos veces.
+   */
+  senado?: number;
   abierto: boolean;
   onCerrar: () => void;
   onCobrado: () => void;
@@ -53,10 +59,14 @@ interface LineaForm {
 export function CobroDialog({
   turnoId,
   total,
+  senado = 0,
   abierto,
   onCerrar,
   onCobrado,
 }: CobroDialogProps) {
+  // Lo que falta cobrar de verdad. Es el número que manda en todo el
+  // diálogo: la línea inicial, el "falta asignar" y el aviso de exceso.
+  const aCobrar = Math.round(Math.max(total - senado, 0) * 100) / 100;
   const [metodos, setMetodos] = useState<MetodoPago[]>([]);
   const [lineas, setLineas] = useState<LineaForm[]>([]);
   const [registrando, setRegistrando] = useState(false);
@@ -71,15 +81,15 @@ export function CobroDialog({
         setLineas([
           {
             metodo_pago_id: activos[0] ? String(activos[0].id) : "",
-            monto: total > 0 ? String(total) : "",
+            monto: aCobrar > 0 ? String(aCobrar) : "",
           },
         ]);
       })
       .catch(() => setMetodos([]));
-  }, [abierto, total]);
+  }, [abierto, aCobrar]);
 
   const sumaLineas = lineas.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
-  const restante = Math.round((total - sumaLineas) * 100) / 100;
+  const restante = Math.round((aCobrar - sumaLineas) * 100) / 100;
 
   function agregarLinea() {
     setLineas((prev) => [
@@ -140,15 +150,44 @@ export function CobroDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          {/* Total a cobrar */}
-          <div className="flex items-center justify-between rounded-2xl bg-muted/40 px-4 py-3">
-            <span className="text-sm text-muted-foreground">Total del turno</span>
-            <span
-              className="text-xl font-bold tabular-nums"
-              style={{ fontFamily: "Syne, sans-serif" }}
-            >
-              ${total.toLocaleString("es-AR")}
-            </span>
+          {/* Total a cobrar. Con seña pagada se muestra el desglose completo:
+              el número correcto sin que se vea de dónde sale es la mitad del
+              arreglo — la recepción tiene que poder explicárselo al cliente. */}
+          <div className="space-y-1.5 rounded-2xl bg-muted/40 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Total del turno</span>
+              <span
+                className={
+                  senado > 0
+                    ? "text-sm tabular-nums text-muted-foreground"
+                    : "text-xl font-bold tabular-nums"
+                }
+                style={senado > 0 ? undefined : { fontFamily: "Syne, sans-serif" }}
+              >
+                ${total.toLocaleString("es-AR")}
+              </span>
+            </div>
+            {senado > 0 && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-emerald-700">
+                    Seña ya cobrada
+                  </span>
+                  <span className="text-sm tabular-nums text-emerald-700">
+                    −${senado.toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t pt-1.5">
+                  <span className="text-sm font-medium">A cobrar ahora</span>
+                  <span
+                    className="text-xl font-bold tabular-nums"
+                    style={{ fontFamily: "Syne, sans-serif" }}
+                  >
+                    ${aCobrar.toLocaleString("es-AR")}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Líneas de pago */}

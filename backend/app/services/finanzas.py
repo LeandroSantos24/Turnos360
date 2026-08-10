@@ -316,19 +316,30 @@ def registrar_cobro(
     caja = caja_abierta(db, empresa_id)
     caja_id = caja.id if caja else None
 
+    # Los métodos de pago se traen de una sola vez, no uno por línea. En un
+    # pago dividido (mitad efectivo, mitad transferencia) eran dos consultas;
+    # ahora es una, y sirve igual para cualquier cantidad de líneas.
+    ids_metodos = {
+        linea.metodo_pago_id for linea in datos.pagos if linea.metodo_pago_id is not None
+    }
+    metodos: dict[int, MetodoPago] = {}
+    if ids_metodos:
+        metodos = {
+            m.id: m
+            for m in db.scalars(
+                select(MetodoPago).where(
+                    MetodoPago.id.in_(ids_metodos),
+                    MetodoPago.empresa_id == empresa_id,
+                )
+            )
+        }
+
     pagos_creados: list[Pago] = []
     total_cobrado = 0.0
     total_comision = 0.0
 
     for linea in datos.pagos:
-        metodo = None
-        if linea.metodo_pago_id is not None:
-            metodo = db.scalar(
-                select(MetodoPago).where(
-                    MetodoPago.id == linea.metodo_pago_id,
-                    MetodoPago.empresa_id == empresa_id,
-                )
-            )
+        metodo = metodos.get(linea.metodo_pago_id) if linea.metodo_pago_id else None
         comision = 0.0
         if metodo and metodo.comision_pct:
             comision = round(linea.monto * float(metodo.comision_pct) / 100, 2)
@@ -353,6 +364,7 @@ def registrar_cobro(
             monto=linea.monto,
             comision_aplicada=comision,
             movimiento_id=mov.id,
+            origen="turno",
         )
         db.add(pago)
         pagos_creados.append(pago)
@@ -572,3 +584,117 @@ def detalle_caja(db: Session, empresa_id: int, caja_id: int) -> dict | None:
     )
     _resolver_metodos(db, movimientos)
     return {"resumen": resumen_caja(db, empresa_id, caja), "movimientos": movimientos}
+
+# ============================================================
+# Señas de reserva (Mercado Pago)
+# ============================================================
+
+METODO_MP = "Mercado Pago"
+
+
+def _metodo_mercado_pago(db: Session, empresa_id: int) -> MetodoPago:
+    """Devuelve (o crea) el método de pago con el que se acreditan las señas.
+
+    La seña entra SIEMPRE por Mercado Pago: es la única pasarela integrada.
+    Se busca por nombre y, si el negocio todavía no lo tiene cargado, se crea
+    solo. Sin esto, el primer negocio que active señas sin haber pasado por
+    Finanzas → Métodos vería el cobro rebotar, y perder el registro de una
+    seña ya cobrada es peor que crear un método de más.
+
+    La comisión arranca en 0: la que MP retiene depende del plazo de
+    acreditación que eligió cada negocio, y adivinarla daría un neto falso.
+    El dueño la ajusta en Finanzas → Métodos y desde ahí se aplica sola.
+    """
+    metodo = db.scalar(
+        select(MetodoPago).where(
+            MetodoPago.empresa_id == empresa_id,
+            func.lower(MetodoPago.nombre) == METODO_MP.lower(),
+        )
+    )
+    if metodo is None:
+        metodo = MetodoPago(empresa_id=empresa_id, nombre=METODO_MP, comision_pct=0)
+        db.add(metodo)
+        db.flush()
+    return metodo
+
+
+def registrar_sena_cobrada(
+    db: Session, turno: Turno, monto: float, mp_payment_id: str | None = None
+) -> Pago | None:
+    """Mete en caja y en estadísticas una seña que el cliente ya pagó.
+
+    Antes el webhook de Mercado Pago solo marcaba `sena_estado = "pagada"` y
+    confirmaba el turno. La plata estaba de verdad en la cuenta de MP del
+    negocio, pero para el sistema no existía: no entraba a la caja, no salía
+    en el arqueo ni en la facturación.
+
+    Se registra el día en que MP acreditó el pago, NO el día del turno. El
+    cliente reserva el martes y se atiende el sábado: la plata entró el
+    martes, y la caja tiene que decir lo que pasó cuando pasó. Si algún día
+    se prefiere lo contrario (que impacte el día de la atención, para que el
+    arqueo diario sea más fácil de leer), el cambio es la fecha del
+    movimiento — nada más.
+
+    Devuelve None si la seña ya estaba registrada: MP reintenta la misma
+    notificación varias veces y no puede sumar plata dos veces.
+    """
+    if monto <= 0:
+        return None
+
+    # Idempotencia real: aunque el webhook ya corta por mp_payment_id, esta
+    # función se protege sola. Un reintento que llegue por otro camino no
+    # puede duplicar el ingreso.
+    ya = db.scalar(
+        select(Pago).where(
+            Pago.turno_id == turno.id,
+            Pago.origen == "sena",
+        )
+    )
+    if ya is not None:
+        return None
+
+    metodo = _metodo_mercado_pago(db, turno.empresa_id)
+    caja = caja_abierta(db, turno.empresa_id)
+    comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
+
+    mov = MovimientoFinanciero(
+        empresa_id=turno.empresa_id,
+        caja_id=caja.id if caja else None,
+        tipo=TipoMovimiento.INGRESO,
+        concepto="Seña de reserva",
+        descripcion=(
+            f"Turno #{turno.id}"
+            + (f" · pago MP {mp_payment_id}" if mp_payment_id else "")
+        ),
+        monto=monto,
+        metodo_pago_id=metodo.id,
+        usuario_id=None,  # lo cobró el cliente solo, no un usuario del panel
+    )
+    db.add(mov)
+    db.flush()
+
+    pago = Pago(
+        empresa_id=turno.empresa_id,
+        turno_id=turno.id,
+        cliente_id=turno.cliente_id,
+        metodo_pago_id=metodo.id,
+        monto=monto,
+        comision_aplicada=comision,
+        movimiento_id=mov.id,
+        origen="sena",
+    )
+    db.add(pago)
+    db.flush()
+    return pago
+
+
+def senado_de(db: Session, turno_id: int) -> float:
+    """Cuánto se cobró ya por adelantado de este turno."""
+    return float(
+        db.scalar(
+            select(func.coalesce(func.sum(Pago.monto), 0)).where(
+                Pago.turno_id == turno_id, Pago.origen == "sena"
+            )
+        )
+        or 0
+    )

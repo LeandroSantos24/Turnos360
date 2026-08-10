@@ -65,7 +65,9 @@ class CobroCrear(BaseModel):
 class PagoOut(BaseModel):
     id: int
     turno_id: int | None
-    cliente_id: int
+    # None en la venta de una gift card: el beneficiario es un texto, no una
+    # ficha de cliente. Si esto quedara en int, serializar ese pago reventaría.
+    cliente_id: int | None
     metodo_pago_id: int | None
     metodo_pago_nombre: str | None = None
     monto: float

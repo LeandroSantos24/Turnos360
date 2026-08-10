@@ -27,6 +27,10 @@ export interface Turno {
   cubierto_por_abono: boolean;
   sena_estado: string | null; // null · "pendiente" · "pagada"
   sena_monto: number | null;
+  /** Lo ya cobrado por adelantado (señas acreditadas). */
+  senado: number;
+  /** total − senado: lo que falta cobrar al finalizar. */
+  saldo: number | null;
   descuento_pct: number;
   cobrado: boolean;
   total: number;

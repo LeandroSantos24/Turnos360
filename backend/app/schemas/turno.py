@@ -64,6 +64,13 @@ class TurnoOut(BaseModel):
     # Seña online (Mercado Pago): null = sin seña · pendiente · pagada
     sena_estado: str | None = None
     sena_monto: float | None = None
+    # Lo que YA se cobró por adelantado de este turno (señas acreditadas).
+    # Se calcula sobre los pagos reales, no sobre sena_monto: si la seña se
+    # pagó con un monto distinto al configurado, vale lo que entró.
+    senado: float = 0.0
+    # Total − señado. Es lo que hay que cobrar al finalizar; si el diálogo de
+    # cobro mostrara el total, la recepción le cobraría de más al cliente.
+    saldo: float | None = None
     model_config = {"from_attributes": True}
 class TurnosPagina(BaseModel):
     total: int

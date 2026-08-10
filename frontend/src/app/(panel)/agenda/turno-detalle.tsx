@@ -714,6 +714,7 @@ export function TurnoDetalle({
       <CobroDialog
         turnoId={turno.id}
         total={totalTurno}
+        senado={turno.senado ?? 0}
         abierto={cobrando}
         onCerrar={() => setCobrando(false)}
         onCobrado={() => {
