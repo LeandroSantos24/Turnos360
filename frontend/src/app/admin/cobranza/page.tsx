@@ -30,6 +30,7 @@ import {
   registrarPago,
   resumenCobranza,
 } from "@/lib/admin-api";
+import { PRECIO_MENSUAL } from "@/lib/precios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -352,7 +353,11 @@ function DialogCobro({
   onCerrar: () => void;
   onListo: () => void;
 }) {
-  const [monto, setMonto] = useState(String(empresa.precio_mensual ?? ""));
+  // Si la empresa todavía no tiene cuota pactada, se sugiere el precio de
+  // lista en vez de dejar el campo vacío: es el caso normal y evita tipear.
+  const [monto, setMonto] = useState(
+    String(empresa.precio_mensual ?? PRECIO_MENSUAL),
+  );
   const [metodo, setMetodo] = useState("transferencia");
   const [notas, setNotas] = useState("");
   const [renovar, setRenovar] = useState(true);
@@ -496,7 +501,10 @@ function DialogFicha({
     contacto_nombre: empresa.contacto_nombre ?? "",
     contacto_email: empresa.contacto_email ?? "",
     contacto_telefono: empresa.contacto_telefono ?? "",
-    precio_mensual: empresa.precio_mensual != null ? String(empresa.precio_mensual) : "",
+    precio_mensual:
+      empresa.precio_mensual != null
+        ? String(empresa.precio_mensual)
+        : String(PRECIO_MENSUAL),
     limite_recursos: empresa.limite_recursos != null ? String(empresa.limite_recursos) : "",
     notas_admin: empresa.notas_admin ?? "",
   });
@@ -555,7 +563,7 @@ function DialogFicha({
             {campo("contacto_nombre", "Contacto", "Lucas Estrella")}
             {campo("contacto_telefono", "Teléfono", "2615550001")}
             {campo("contacto_email", "Email", "lucas@negocio.com", "email")}
-            {campo("precio_mensual", "Cuota mensual", "20000", "number")}
+            {campo("precio_mensual", "Cuota mensual", String(PRECIO_MENSUAL), "number")}
             {campo("limite_recursos", "Tope de profesionales", "vacío = sin límite", "number")}
           </div>
           <label className="space-y-1.5 text-sm">

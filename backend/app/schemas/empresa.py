@@ -186,6 +186,8 @@ class MiSuscripcionOut(SuscripcionOut):
     # Último monto pagado: sirve de referencia cuando todavía no se cargó la
     # cuota pactada, para no mostrarle un guion a alguien que ya pagó.
     ultimo_monto: float | None = None
+    # Precio de lista vigente (config del servidor), para el aviso de la prueba.
+    precio_lista: float | None = None
     pagos: list[PagoSuscripcionOut] = []
     cobro: DatosCobro = DatosCobro()
 

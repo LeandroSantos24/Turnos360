@@ -44,6 +44,13 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL:-14990}
+      PROMO_ACTIVA: ${PROMO_ACTIVA:-false}
+      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL:-11990}
+      PROMO_ETIQUETA: ${PROMO_ETIQUETA:-Precio de lanzamiento}
+      ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
+      ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
+      ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
     ports:
       - "8000:8000"
     volumes:
@@ -68,6 +75,13 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL:-14990}
+      PROMO_ACTIVA: ${PROMO_ACTIVA:-false}
+      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL:-11990}
+      PROMO_ETIQUETA: ${PROMO_ETIQUETA:-Precio de lanzamiento}
+      ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
+      ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
+      ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app worker --loglevel=info
@@ -90,6 +104,13 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL:-14990}
+      PROMO_ACTIVA: ${PROMO_ACTIVA:-false}
+      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL:-11990}
+      PROMO_ETIQUETA: ${PROMO_ETIQUETA:-Precio de lanzamiento}
+      ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
+      ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
+      ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app beat --loglevel=info
@@ -114,18 +135,14 @@ services:
     volumes:
       - ../frontend:/app
       - /app/node_modules
+      # .next vive en un volumen de Docker, NO en la carpeta del host.
+      # Sin esto, el contenedor (usuario node) y los builds a mano (usuario
+      # de Linux) escriben en el MISMO .next y se pisan: el que escribió
+      # primero deja archivos que el otro no puede borrar, y Next muere al
+      # arrancar con EACCES sobre .next/server/app-paths-manifest.json.
+      - /app/.next
     depends_on:
       - backend
-
-  # Celery worker + beat: se activan en E6 (mensajería) y E8 (automatizaciones).
-  # worker:
-  #   build: ../backend
-  #   command: celery -A app.worker worker --loglevel=info
-  #   depends_on: [redis, db]
-  # beat:
-  #   build: ../backend
-  #   command: celery -A app.worker beat --loglevel=info
-  #   depends_on: [redis]
 
 volumes:
   pgdata:

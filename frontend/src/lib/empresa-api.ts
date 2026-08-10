@@ -130,6 +130,8 @@ export interface MiSuscripcion {
   precio_mensual: number | null;
   dias_prorroga: number;
   ultimo_monto: number | null;
+  /** Precio de lista vigente (config del servidor). Solo para el aviso de la prueba. */
+  precio_lista: number | null;
   pagos: PagoSuscripcion[];
   cobro: DatosCobro;
 }

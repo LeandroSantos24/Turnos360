@@ -80,6 +80,16 @@ services:
       COBRO_BANCO: ${COBRO_BANCO:-}
       COBRO_MP_LINK: ${COBRO_MP_LINK:-}
       COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
+      # Precio de lista: con el que nace toda empresa nueva desde el panel.
+      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL:-14990}
+      PROMO_ACTIVA: ${PROMO_ACTIVA:-false}
+      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL:-11990}
+      PROMO_ETIQUETA: ${PROMO_ETIQUETA:-Precio de lanzamiento}
+      # Aviso por mail de cada acceso al panel de super-admin. Lo manda el
+      # worker de Celery, no el backend: si Gmail tarda, el login no se cuelga.
+      ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
+      ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
+      ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
     # --proxy-headers + --forwarded-allow-ips: uvicorn confía en el
     # X-Forwarded-For que manda Nginx, así slowapi limita por IP REAL.
     # Sin esto, todos los visitantes comparten la IP de Nginx y el límite

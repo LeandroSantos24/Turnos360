@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.crypto import hash_clave, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
@@ -101,12 +102,18 @@ def crear_empresa(db: Session, datos) -> Empresa:
     dias = int(getattr(datos, "dias_prueba", 0) or 0)
     prueba_hasta = dt.date.today() + dt.timedelta(days=dias) if dias > 0 else None
 
+    # La cuota arranca en el precio de lista. Antes nacía en NULL y había que
+    # acordarse de cargarla a mano: mientras estuviera vacía, el MRR y la deuda
+    # del panel de cobranza contaban esa empresa como cero. Si el precio es
+    # otro (piloto bonificado, descuento por referido), se edita en la ficha
+    # comercial, que es donde corresponde decidirlo.
     empresa = Empresa(
         rubro_id=datos.rubro_id,
         nombre=datos.nombre,
         slug=datos.slug,
         config_pack={},
         prueba_hasta=prueba_hasta,
+        precio_mensual=settings.precio_vigente,
     )
     db.add(empresa)
     db.flush()

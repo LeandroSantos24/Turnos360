@@ -163,8 +163,13 @@ export default function SuscripcionPage() {
           <p className="mt-4 text-sm">
             Estás usando Turnos360 gratis, con todas las funciones. Cuando
             termine la prueba, escribinos para seguir
-            {datos.precio_mensual ? ` por ${pesos(datos.precio_mensual)} por mes` : ""}.
-            No te cobramos nada automáticamente ni te pedimos tarjeta.
+            {/* Cuota pactada si ya la hay; si no, el precio de lista. Antes,
+                sin cuota cargada la frase terminaba en "para seguir." y el
+                que estaba probando no sabía cuánto le iba a salir. */}
+            {datos.precio_mensual || datos.precio_lista
+              ? ` por ${pesos(datos.precio_mensual ?? datos.precio_lista)} por mes`
+              : ""}
+            . No te cobramos nada automáticamente ni te pedimos tarjeta.
           </p>
         )}
 

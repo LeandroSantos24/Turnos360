@@ -132,8 +132,14 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
             float(empresa.precio_mensual) if empresa.precio_mensual is not None else None
         ),
         # Si todavía no se cargó la cuota pactada, el último pago sirve de
-        # referencia: mostrarle un guion a alguien que ya pagó $16.990 es raro.
+        # referencia: mostrarle un guion a alguien que ya pagó la cuota es raro.
         "ultimo_monto": float(pagos[0].monto) if pagos else None,
+        # Precio de lista vigente. Se usa SOLO en el mensaje de la prueba
+        # ("cuando termine seguís por $X"): a un negocio en prueba todavía no
+        # se le pactó nada, y el número es justo lo que necesita para decidir.
+        # NO reemplaza a precio_mensual en la tarjeta de la cuota: a un piloto
+        # bonificado mostrarle el precio de lista como "su" cuota sería mentira.
+        "precio_lista": float(settings.precio_vigente),
         "dias_prorroga": DIAS_PRORROGA,
         "pagos": [
             {

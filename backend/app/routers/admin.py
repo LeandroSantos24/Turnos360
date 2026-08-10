@@ -1,5 +1,7 @@
 """Endpoints del panel de super-administración (alta de empresas y usuarios)."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.api.deps import DB, SuperAdminActual
@@ -30,6 +32,52 @@ from app.services import cobranza
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def _ip_real(request: Request) -> str:
+    """IP del cliente, mirando primero el header del proxy.
+
+    Detrás de Nginx, request.client.host es SIEMPRE la IP del proxy (172.x
+    dentro de Docker). El primer valor de X-Forwarded-For es el visitante
+    real; los siguientes son los proxies intermedios.
+    """
+    reenviada = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if reenviada:
+        return reenviada
+    return request.client.host if request.client else "desconocida"
+
+
+def _avisar_acceso(request: Request, *, email: str, exito: bool, nombre: str | None) -> None:
+    """Encola el aviso de acceso al panel. Nunca rompe el login.
+
+    Todo lo de acá adentro es best-effort: si Redis está caído, el operador
+    tiene que poder entrar igual a su panel. Por eso el except amplio.
+    """
+    from app.core.config import settings
+
+    if not settings.avisar_acceso_admin:
+        return
+    if not exito and not settings.admin_alerta_fallidos:
+        return
+    try:
+        import datetime as _dt
+        from zoneinfo import ZoneInfo
+
+        from app.tasks.emails import avisar_acceso_admin
+
+        ahora = _dt.datetime.now(ZoneInfo(settings.zona_horaria))
+        avisar_acceso_admin.delay(
+            email_intentado=email,
+            exito=exito,
+            ip=_ip_real(request),
+            agente=(request.headers.get("user-agent") or "desconocido")[:200],
+            cuando=ahora.strftime("%d/%m/%Y a las %H:%M") + " (hora de Argentina)",
+            nombre=nombre,
+        )
+    except Exception:  # pragma: no cover - el login no depende de esto
+        logging.getLogger(__name__).exception(
+            "No se pudo encolar el aviso de acceso al panel de admin"
+        )
+
+
 @router.post("/login", response_model=AdminToken)
 @limiter.limit("5/minute")
 def login(request: Request, datos: AdminLogin, db: DB) -> AdminToken:
@@ -39,9 +87,11 @@ def login(request: Request, datos: AdminLogin, db: DB) -> AdminToken:
     # clientes caen en el mismo bucket.
     sa = svc.autenticar_admin(db, datos.email, datos.clave)
     if sa is None:
+        _avisar_acceso(request, email=datos.email, exito=False, nombre=None)
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Email o contraseña incorrectos"
         )
+    _avisar_acceso(request, email=sa.email, exito=True, nombre=sa.nombre)
     return AdminToken(access_token=crear_token_superadmin(sa.id), nombre=sa.nombre)
 
 

@@ -16,6 +16,7 @@ explota y ninguna operación del negocio depende del email.
 """
 
 import datetime as dt
+import logging
 import urllib.parse
 
 from sqlalchemy import extract, func, or_ as sa_or, select
@@ -26,6 +27,8 @@ from app.db.session import SessionLocal
 from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno
 from app.models.enums import CanalMensaje, EstadoMensaje, EstadoTurno
 from app.services.empresa import automs_de
+
+log = logging.getLogger(__name__)
 
 TEAL = "#17a08a"
 TINTA = "#0c1015"
@@ -852,3 +855,88 @@ def avisar_vencimientos() -> None:
                 marca="Turnos360",
             )
             _mandar(db, empresa, destino, asunto, html, log)
+
+
+# ============================================================
+# Seguridad: acceso al panel de super-admin
+# ============================================================
+
+@celery_app.task(name="app.tasks.emails.avisar_acceso_admin")
+def avisar_acceso_admin(
+    email_intentado: str,
+    exito: bool,
+    ip: str,
+    agente: str,
+    cuando: str,
+    nombre: str | None = None,
+) -> None:
+    """Avisa por mail cada entrada (o intento) al panel de super-admin.
+
+    Por qué existe: ese usuario controla TODOS los negocios del sistema. No hay
+    un segundo factor ni un equipo que revise logs, así que el aviso es la
+    única forma de enterarte en el momento de que alguien entró y no fuiste vos.
+
+    Va por Celery, nunca inline: si el SMTP tarda 20 segundos o Gmail está
+    caído, el login del panel no se puede colgar ni fallar por eso.
+
+    No se registra en la tabla Mensaje: esa tabla es por empresa (empresa_id no
+    admite nulo) y esto es un evento de la plataforma, no de ningún negocio.
+    """
+    from app.core.config import settings
+
+    destino = settings.admin_alerta_email.strip()
+    if not destino:
+        return
+
+    if exito:
+        asunto = "Entraron al panel de administración de Turnos360"
+        titulo = "Acceso al panel de administración"
+        apertura = (
+            f"Alguien acaba de entrar al panel de super-admin como "
+            f"<b>{nombre or email_intentado}</b>."
+        )
+    else:
+        asunto = "Intento fallido de acceso al panel de Turnos360"
+        titulo = "Intento de acceso fallido"
+        apertura = (
+            f"Alguien intentó entrar al panel de super-admin con el email "
+            f"<b>{email_intentado}</b> y la contraseña no coincidió."
+        )
+
+    lineas = [
+        apertura,
+        f"<b>Cuándo:</b> {cuando}",
+        f"<b>Desde la IP:</b> {ip}",
+        f"<b>Navegador:</b> {agente}",
+    ]
+    if exito:
+        lineas.append(
+            "Si fuiste vos, ignorá este mail. Si no, cambiá la contraseña del "
+            "super-admin ahora mismo: quien entró puede ver y modificar todos "
+            "los negocios del sistema."
+        )
+    else:
+        lineas.append(
+            "Un intento suelto suele ser un dedo equivocado. Varios seguidos "
+            "desde una IP que no reconocés significan que alguien está "
+            "probando contraseñas: conviene cambiar la tuya por una larga."
+        )
+
+    html = _plantilla(
+        titulo=titulo,
+        lineas=lineas,
+        pie=(
+            "Aviso automático de seguridad de Turnos360. Se envía en cada "
+            "acceso al panel de administración y no se puede desactivar desde "
+            "el panel (solo por configuración del servidor)."
+        ),
+        marca="Turnos360 · Seguridad",
+    )
+
+    # Sin _mandar(): ese helper escribe en Mensaje, que es por empresa.
+    # Acá el envío no puede romper nada, así que se traga la excepción y
+    # queda en los logs del worker.
+    try:
+        mailer.enviar(destino, asunto, html)
+    except Exception:
+        log.exception("No se pudo enviar el aviso de acceso al panel de admin")

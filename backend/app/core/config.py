@@ -64,6 +64,37 @@ class Settings(BaseSettings):
     # Formato wa.me: 5492613456599
     cobro_whatsapp: str = ""
 
+    # --- Precio de lista del SaaS -------------------------------------------
+    # Cuota mensual con la que nace toda empresa nueva y que muestra la landing.
+    # Vive acá y no repartido por el código: cambiar el precio tiene que ser
+    # tocar UN número, no salir a buscarlo por cinco archivos.
+    # Si cambia, actualizar también frontend/src/lib/precios.ts (el número de
+    # la landing se compila en el bundle y no puede leer esta variable).
+    precio_lista_mensual: float = 14990
+
+    # --- Precio promocional (opcional) --------------------------------------
+    # Estrategia de lanzamiento: si PROMO_ACTIVA=true, la landing muestra el
+    # precio normal tachado y el promocional al lado, y las empresas nuevas
+    # nacen con el promocional cargado. Si está en false, no existe: se ve
+    # solo el precio normal y no hay rastro de promoción en ningún lado.
+    # Se prende y se apaga sin tocar código.
+    promo_activa: bool = False
+    precio_promo_mensual: float = 11990
+    promo_etiqueta: str = "Precio de lanzamiento"
+
+    # --- Alerta de acceso al panel de super-admin ---------------------------
+    # A dónde avisar cuando alguien entra (o intenta entrar) a /admin/login.
+    # Ese usuario controla TODOS los negocios del sistema: si alguien entra
+    # y no fuiste vos, querés enterarte en el momento, no en la auditoría.
+    # Vacío = no se manda nada (útil en desarrollo, para no llenarte la casilla).
+    admin_alerta_email: str = "turnos360.oficial@gmail.com"
+    # Avisar también los intentos FALLIDOS. Es el dato que de verdad sirve:
+    # un login exitoso tuyo es rutina; tres fallidos seguidos a las 4 AM no.
+    admin_alerta_fallidos: bool = True
+    # En desarrollo el aviso molesta más de lo que ayuda (entrás veinte veces
+    # por día). Poné ADMIN_ALERTA_EN_DEV=true si querés probarlo localmente.
+    admin_alerta_en_dev: bool = False
+
     # --- JWT (E2) ---
     jwt_algoritmo: str = "HS256"
     access_token_minutos: int = 30      # token corto: viaja en cada request
@@ -72,6 +103,20 @@ class Settings(BaseSettings):
     @property
     def es_produccion(self) -> bool:
         return self.env.lower() in {"prod", "produccion", "production"}
+
+    @property
+    def precio_vigente(self) -> float:
+        """El precio que se cobra hoy: el promocional si la promo está activa."""
+        if self.promo_activa and self.precio_promo_mensual > 0:
+            return self.precio_promo_mensual
+        return self.precio_lista_mensual
+
+    @property
+    def avisar_acceso_admin(self) -> bool:
+        """¿Corresponde mandar el aviso de acceso al panel de super-admin?"""
+        if not self.admin_alerta_email.strip():
+            return False
+        return self.es_produccion or self.admin_alerta_en_dev
 
     @property
     def cors_origins_lista(self) -> list[str]:
