@@ -42,6 +42,8 @@ export interface Membresia {
   plan_precio: number | null;
   plan_ilimitado: boolean | null;
   vigente: boolean;
+  metodo_pago_id: number | null;
+  monto_cobrado: number | null;
 }
 
 export interface MembresiaCrear {
@@ -49,6 +51,10 @@ export interface MembresiaCrear {
   plan_id: number;
   fecha_desde: string; // yyyy-MM-dd
   fecha_hasta: string;
+  /** Con qué se cobró el abono. null = cortesía (no entra plata). */
+  metodo_pago_id?: number | null;
+  /** Cuánto se cobró. null = el precio del plan. */
+  monto_cobrado?: number | null;
 }
 
 // ===== PLANES =====

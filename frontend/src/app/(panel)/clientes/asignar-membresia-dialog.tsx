@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { listarPlanes, crearMembresia, PlanAbono } from "@/lib/membresias-api";
 import { ApiError } from "@/lib/api";
+import { CobroAbono, type DatosCobroAbono } from "@/components/cobro-abono";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -51,6 +52,12 @@ export function AsignarMembresiaDialog({
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [guardando, setGuardando] = useState(false);
+  // El cobro arranca en cortesía a propósito: cobrar es una decisión
+  // explícita, no un default que se dispara sin que nadie lo mire.
+  const [cobro, setCobro] = useState<DatosCobroAbono>({
+    metodo_pago_id: null,
+    monto_cobrado: null,
+  });
 
   // Cargar planes y precargar fechas (hoy → un mes) al abrir
   useEffect(() => {
@@ -60,6 +67,7 @@ export function AsignarMembresiaDialog({
     setDesde(format(hoy, "yyyy-MM-dd"));
     setHasta(format(addMonths(hoy, 1), "yyyy-MM-dd"));
     setPlanId("");
+    setCobro({ metodo_pago_id: null, monto_cobrado: null });
   }, [abierto]);
 
   async function asignar() {
@@ -73,6 +81,8 @@ export function AsignarMembresiaDialog({
         plan_id: Number(planId),
         fecha_desde: desde,
         fecha_hasta: hasta,
+        metodo_pago_id: cobro.metodo_pago_id,
+        monto_cobrado: cobro.monto_cobrado,
       });
       toast.success("Membresía asignada");
       onAsignada();
@@ -146,6 +156,15 @@ export function AsignarMembresiaDialog({
               />
             </div>
           </div>
+
+          {/* Cobro del abono: vender un abono ES una venta, tiene que
+              entrar a la caja igual que un corte. */}
+          <CobroAbono
+            activo={abierto}
+            precioPlan={planElegido ? planElegido.precio : null}
+            valor={cobro}
+            onChange={setCobro}
+          />
 
           {/* Resumen del plan elegido */}
           {planElegido && (

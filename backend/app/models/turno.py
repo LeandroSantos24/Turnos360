@@ -17,6 +17,7 @@ class Turno(TenantMixin, Base):
         Index("ix_turno_empresa_recurso_inicio", "empresa_id", "recurso_id", "fecha_inicio"),
         Index("ix_turno_empresa_cliente", "empresa_id", "cliente_id"),
         Index("ix_turno_empresa_estado_inicio", "empresa_id", "estado", "fecha_inicio"),
+        Index("ix_turno_empresa_cupon", "empresa_id", "cupon_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -48,6 +49,11 @@ class Turno(TenantMixin, Base):
     cubierto_por_abono: Mapped[bool] = mapped_column(Boolean, default=False)
     # Descuento aplicado al turno (%). Total = (servicio + adicionales) − este %.
     descuento_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    # Qué cupón produjo ese descuento, si vino de uno. Antes solo se guardaba
+    # el porcentaje y un contador global de usos: con eso era imposible saber
+    # cuánta gente usó un código y cuánto facturó, que es exactamente lo que
+    # decide si la promoción sirvió o fue regalar plata.
+    cupon_id: Mapped[int | None] = mapped_column(ForeignKey("cupon_descuento.id"))
     # ¿Ya se cobró este turno? Lo marca el registro de cobro (N-52).
     cobrado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 

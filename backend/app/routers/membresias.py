@@ -16,7 +16,7 @@ Roles:
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import DB, EmpresaActual, gate_dueno, gate_gestion
+from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno, gate_gestion
 from app.schemas.membresia import (
     PlanAbonoCrear,
     PlanAbonoEditar,
@@ -82,8 +82,12 @@ def estadisticas(empresa_id: EmpresaActual, db: DB) -> dict:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(gate_gestion)],
 )
-def crear_membresia(datos: MembresiaCrear, empresa_id: EmpresaActual, db: DB) -> MembresiaOut:
-    membresia = svc.crear_membresia(db, empresa_id, datos)
+def crear_membresia(
+    datos: MembresiaCrear, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
+) -> MembresiaOut:
+    # El usuario va al movimiento de caja: en el arqueo hay que poder decir
+    # quién cargó cada ingreso.
+    membresia = svc.crear_membresia(db, empresa_id, datos, usuario_id=usuario.id)
     return svc.resolver_salida(membresia)
 
 

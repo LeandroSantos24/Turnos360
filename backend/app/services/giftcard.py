@@ -16,7 +16,7 @@ from fastapi import HTTPException, status
 
 from app.models import GiftCard
 from app.models.enums import EstadoGiftCard, TipoMovimiento
-from app.models.finanzas import MetodoPago, MovimientoFinanciero
+from app.models.finanzas import MetodoPago, MovimientoFinanciero, Pago
 from app.schemas.giftcard import GiftCardCrear
 
 
@@ -104,6 +104,29 @@ def crear(
         db.add(mov)
         db.flush()
         gc.movimiento_id = mov.id
+
+        # El movimiento hace que la venta entre a la CAJA. El Pago hace que
+        # entre a ESTADÍSTICAS, que lee de la tabla pago y no de los
+        # movimientos. Sin esto, el mismo día cerraba con dos números
+        # distintos —la caja con la gift card, la facturación sin ella— y no
+        # había nada a la vista que explicara la diferencia.
+        # cliente_id va en None: el beneficiario de una gift card es un texto,
+        # no una ficha de cliente.
+        comision = round(
+            float(datos.monto) * float(metodo.comision_pct or 0) / 100, 2
+        )
+        db.add(
+            Pago(
+                empresa_id=empresa_id,
+                turno_id=None,
+                cliente_id=None,
+                metodo_pago_id=datos.metodo_pago_id,
+                monto=datos.monto,
+                comision_aplicada=comision,
+                movimiento_id=mov.id,
+                origen="giftcard",
+            )
+        )
 
     db.commit()
     db.refresh(gc)

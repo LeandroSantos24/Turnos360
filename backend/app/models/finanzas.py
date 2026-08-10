@@ -88,12 +88,22 @@ class MovimientoFinanciero(TenantMixin, Base):
 
 class Pago(TenantMixin, Base):
     __tablename__ = "pago"
+    __table_args__ = (Index("ix_pago_empresa_origen", "empresa_id", "origen"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     turno_id: Mapped[int | None] = mapped_column(ForeignKey("turno.id"))
     orden_trabajo_id: Mapped[int | None] = mapped_column(Integer)  # FK real en E14
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("cliente.id"))
+    # Opcional: la venta de una gift card al mostrador no tiene ficha de
+    # cliente (el beneficiario es un texto). Cuando era obligatorio, esas
+    # ventas no podían registrarse como pago y por eso entraban a la caja
+    # pero NO a Estadísticas: los dos números del mismo día no coincidían.
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("cliente.id"))
     metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodo_pago.id"))
+    # De dónde salió la plata: "turno" | "abono" | "giftcard".
+    # Permite separar en Estadísticas la facturación de la atención (turnos)
+    # de la venta de abonos y tarjetas, que no tienen profesional ni servicio
+    # y distorsionarían el ticket promedio si se mezclaran.
+    origen: Mapped[str | None] = mapped_column(String(20), default="turno")
     monto: Mapped[float] = mapped_column(Numeric(12, 2))
     comision_aplicada: Mapped[float | None] = mapped_column(Numeric(12, 2))
     movimiento_id: Mapped[int | None] = mapped_column(ForeignKey("movimiento_financiero.id"))

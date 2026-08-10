@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Cliente } from "@/lib/clientes-api";
 import { listarPlanes, crearMembresia, PlanAbono } from "@/lib/membresias-api";
 import { ApiError } from "@/lib/api";
+import { CobroAbono, type DatosCobroAbono } from "@/components/cobro-abono";
 import { SelectorCliente } from "../agenda/selector-cliente";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,12 @@ export function AsignarAClienteDialog({
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [guardando, setGuardando] = useState(false);
+  // El cobro arranca en cortesía a propósito: cobrar es una decisión
+  // explícita, no un default que se dispara sin que nadie lo mire.
+  const [cobro, setCobro] = useState<DatosCobroAbono>({
+    metodo_pago_id: null,
+    monto_cobrado: null,
+  });
 
   // Cargar planes y precargar fechas al abrir
   useEffect(() => {
@@ -62,6 +69,7 @@ export function AsignarAClienteDialog({
     setHasta(format(addMonths(hoy, 1), "yyyy-MM-dd"));
     setCliente(null);
     setPlanId("");
+    setCobro({ metodo_pago_id: null, monto_cobrado: null });
   }, [abierto]);
 
   async function asignar() {
@@ -76,6 +84,8 @@ export function AsignarAClienteDialog({
         plan_id: Number(planId),
         fecha_desde: desde,
         fecha_hasta: hasta,
+        metodo_pago_id: cobro.metodo_pago_id,
+        monto_cobrado: cobro.monto_cobrado,
       });
       toast.success(`Membresía asignada a ${cliente.nombre}`);
       onAsignada();
@@ -154,6 +164,15 @@ export function AsignarAClienteDialog({
               />
             </div>
           </div>
+
+          {/* Cobro del abono: vender un abono ES una venta, tiene que
+              entrar a la caja igual que un corte. */}
+          <CobroAbono
+            activo={abierto}
+            precioPlan={planElegido ? planElegido.precio : null}
+            valor={cobro}
+            onChange={setCobro}
+          />
 
           {/* Resumen del plan elegido */}
           {planElegido && (

@@ -33,13 +33,6 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const SYNE = { fontFamily: "Syne, sans-serif" } as const;
 
@@ -68,6 +61,7 @@ function slugify(s: string, final = false): string {
 export default function AdminEmpresasPage() {
   const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
   const [rubros, setRubros] = useState<RubroAdmin[]>([]);
+  const [errorRubros, setErrorRubros] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
   const [copiadoId, setCopiadoId] = useState<number | null>(null);
@@ -84,14 +78,24 @@ export default function AdminEmpresasPage() {
   // 14 días es lo que ofrece la landing. 0 = el negocio ya arranca pagando.
   const [diasPrueba, setDiasPrueba] = useState(14);
 
+  // Las dos cargas van por separado A PROPÓSITO. Con Promise.all, si UNA
+  // fallaba se rechazaba todo y los rubros quedaban en [] — y un Select sin
+  // items abre un panel vacío, que desde afuera se ve exactamente igual que
+  // "el desplegable no anda". El síntoma no decía nada de la causa.
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [e, r] = await Promise.all([listarEmpresas(), listarRubros()]);
-      setEmpresas(e);
-      setRubros(r);
+      setEmpresas(await listarEmpresas());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al cargar");
+      toast.error(err instanceof ApiError ? err.message : "Error al cargar empresas");
+    }
+    try {
+      setRubros(await listarRubros());
+      setErrorRubros(null);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Error al cargar los rubros";
+      setErrorRubros(msg);
+      toast.error(msg);
     } finally {
       setCargando(false);
     }
@@ -236,24 +240,42 @@ export default function AdminEmpresasPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium">Rubro</label>
-                <Select value={rubroId} onValueChange={setRubroId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Elegí un rubro">
-                      {(v) =>
-                        rubros.find((r) => String(r.id) === String(v))?.nombre ??
-                        "Elegí un rubro"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rubros.map((r) => (
-                      <SelectItem key={r.id} value={String(r.id)}>
-                        {r.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="mb-1 block text-sm font-medium" htmlFor="rubro">
+                  Rubro
+                </label>
+                {/* <select> nativo en vez del Select de la librería: este
+                    campo vive adentro de un diálogo y el panel de la librería
+                    se dibuja en un portal, que según el navegador puede quedar
+                    detrás del overlay del modal. El nativo lo pinta el sistema
+                    operativo y no puede taparlo nada. Es el único campo del
+                    panel que bloquea por completo dar de alta un negocio, así
+                    que acá conviene lo que no falla nunca. */}
+                <select
+                  id="rubro"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm disabled:opacity-60"
+                  value={rubroId}
+                  disabled={rubros.length === 0}
+                  onChange={(e) => setRubroId(e.target.value)}
+                >
+                  <option value="">
+                    {rubros.length === 0 ? "Sin rubros disponibles" : "Elegí un rubro"}
+                  </option>
+                  {rubros.map((r) => (
+                    <option key={r.id} value={String(r.id)}>
+                      {r.nombre}
+                    </option>
+                  ))}
+                </select>
+                {/* Un desplegable vacío no explica nada. Estos dos mensajes
+                    dicen qué pasó y qué hacer, en vez de dejar al operador
+                    probando clics. */}
+                {rubros.length === 0 && !cargando && (
+                  <p className="mt-1.5 text-xs text-amber-600">
+                    {errorRubros
+                      ? `No se pudieron traer los rubros: ${errorRubros}`
+                      : "No hay rubros cargados en la base. Corré el seed del catálogo: docker compose exec backend python -m app.seeds_minimo"}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border bg-muted/30 p-4">

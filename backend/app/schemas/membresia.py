@@ -45,6 +45,12 @@ class MembresiaCrear(BaseModel):
     plan_id: int
     fecha_desde: dt.date
     fecha_hasta: dt.date
+    # Con qué se pagó el abono. None = membresía de cortesía (canje,
+    # compensación): no se cobra nada y no entra a la caja.
+    metodo_pago_id: int | None = None
+    # Cuánto se cobró de verdad. None = el precio del plan. Sirve para
+    # descuentos de lanzamiento o un mes empezado a mitad de período.
+    monto_cobrado: float | None = Field(default=None, ge=0)
 
 
 class MembresiaOut(BaseModel):
@@ -64,5 +70,9 @@ class MembresiaOut(BaseModel):
 
     # calculado: ¿está vigente hoy?
     vigente: bool = False
+
+    # Cobro del abono (None = fue de cortesía).
+    metodo_pago_id: int | None = None
+    monto_cobrado: float | None = None
 
     model_config = {"from_attributes": True}

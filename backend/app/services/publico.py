@@ -393,6 +393,12 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     if cupon is not None:
         precio_serv = float(servicio.precio or 0)
         turno.descuento_pct = svc_cupones.pct_equivalente(descuento_pesos, precio_serv)
+        # Se guarda QUÉ cupón fue, no solo el porcentaje. Con el contador de
+        # usos solo se sabía "este código se usó 12 veces"; con esto se puede
+        # responder cuánta gente distinta lo usó, cuánto facturaron esos
+        # turnos y cuánto se regaló en descuento — que es lo que decide si la
+        # promoción funcionó o fue plata tirada.
+        turno.cupon_id = cupon.id
         cupon.usos = (cupon.usos or 0) + 1
         db.commit()
 

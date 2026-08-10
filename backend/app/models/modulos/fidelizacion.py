@@ -83,6 +83,23 @@ class Membresia(TenantMixin, Base):
     # Cuántos cupos usó (para los abonos por cantidad). En ilimitados se ignora.
     cupos_usados: Mapped[int] = mapped_column(Integer, default=0)
 
+    # --- Cobro del abono ---------------------------------------------------
+    # Vender un abono es una venta como cualquier otra: entra plata HOY. Antes
+    # solo se guardaba la membresía, así que esa plata no generaba movimiento:
+    # no entraba a la caja ni a las estadísticas. Y como después los cortes de
+    # ese cliente salen en $0, el abono quedaba como costo visible e ingreso
+    # invisible — la rentabilidad del plan daba negativa contra la realidad.
+    #
+    # metodo_pago_id es opcional a propósito: una membresía también puede ser
+    # de cortesía (canje, compensación), y ahí no hay nada que cobrar.
+    metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodo_pago.id"))
+    movimiento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("movimiento_financiero.id")
+    )
+    # Lo que se cobró de verdad. Puede diferir del precio del plan: descuento
+    # de lanzamiento, ajuste por un mes empezado, precio pactado a mano.
+    monto_cobrado: Mapped[float | None] = mapped_column(Numeric(12, 2))
+
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -77,6 +77,17 @@ function KPI({
   );
 }
 
+function MiniDato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <div className="rounded-xl border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="mt-0.5 text-lg font-bold tabular-nums" style={SYNE}>
+        {valor}
+      </p>
+    </div>
+  );
+}
+
 function Card({
   titulo,
   children,
@@ -394,6 +405,129 @@ function ContenidoEstadisticas() {
               )}
             </Card>
           </div>
+
+          {/* De dónde salió la plata: la facturación ya no es solo la
+              atención. Vender un abono o una gift card también entra, y
+              mezclarlo todo en un número hacía que el ticket promedio
+              mintiera. */}
+          {datos.por_origen.length > 1 && (
+            <div className="mt-4">
+              <Card titulo="De dónde salió la facturación">
+                <div className="space-y-2.5">
+                  {datos.por_origen.map((o) => (
+                    <div key={o.origen} className="flex items-center justify-between gap-3">
+                      <span className="text-sm">{o.etiqueta}</span>
+                      <span className="text-right text-sm">
+                        <span className="font-semibold tabular-nums">{pesos(o.total)}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {o.cantidad} {o.cantidad === 1 ? "operación" : "operaciones"}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+                  El ticket promedio se calcula solo sobre la atención
+                  ({pesos(datos.facturado_turnos)}): una venta de abono no es
+                  una visita y desvirtuaría el número.
+                </p>
+              </Card>
+            </div>
+          )}
+
+          {/* Rendimiento de los cupones: la pregunta que decide si una promo
+              sirvió o fue regalar plata. */}
+          {datos.por_cupon.length > 0 && (
+            <div className="mt-4">
+              <Card titulo="Cupones de descuento">
+                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <MiniDato etiqueta="Usos" valor={String(datos.cupones_resumen.usos)} />
+                  <MiniDato
+                    etiqueta="Personas distintas"
+                    valor={String(datos.cupones_resumen.personas)}
+                  />
+                  <MiniDato
+                    etiqueta="Facturado"
+                    valor={pesos(datos.cupones_resumen.facturado)}
+                  />
+                  <MiniDato
+                    etiqueta="Descuento otorgado"
+                    valor={pesos(datos.cupones_resumen.descuento_otorgado)}
+                  />
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="pb-2 pr-3 font-medium">Código</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Usos</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Personas</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Facturó</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Descuento</th>
+                        <th className="pb-2 text-right font-medium">Se concretó</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datos.por_cupon.map((c) => (
+                        <tr key={c.codigo} className="border-b last:border-0">
+                          <td className="py-2.5 pr-3">
+                            <span className="font-medium">{c.codigo}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {c.tipo === "porcentaje" ? `${c.valor}%` : pesos(c.valor)}
+                            </span>
+                            {!c.activo && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                · inactivo
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {c.usos}
+                            {c.max_usos != null && (
+                              <span className="text-xs text-muted-foreground">
+                                /{c.max_usos}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {c.personas}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {pesos(c.facturado)}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums text-muted-foreground">
+                            −{pesos(c.descuento_otorgado)}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <span
+                              className={
+                                c.tasa_concrecion >= 70
+                                  ? "font-medium text-emerald-600"
+                                  : c.tasa_concrecion >= 40
+                                    ? "font-medium text-amber-600"
+                                    : "font-medium text-red-600"
+                              }
+                            >
+                              {c.tasa_concrecion}%
+                            </span>
+                            <span className="ml-1.5 text-xs text-muted-foreground">
+                              {c.finalizados}/{c.usos}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  &quot;Se concretó&quot; es cuántos de los turnos que usaron el
+                  código terminaron atendidos. Un código con muchos usos y poca
+                  concreción está atrayendo gente que después no viene.
+                </p>
+              </Card>
+            </div>
+          )}
 
           {/* Horarios más demandados */}
           {datos.por_hora.length > 0 && (

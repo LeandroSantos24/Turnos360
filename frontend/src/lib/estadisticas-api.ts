@@ -30,6 +30,38 @@ export interface HoraTotal {
   hora: number;
   cantidad: number;
 }
+export interface OrigenTotal {
+  /** turno | abono | giftcard */
+  origen: string;
+  etiqueta: string;
+  total: number;
+  cantidad: number;
+}
+export interface CuponRendimiento {
+  codigo: string;
+  tipo: string;
+  valor: number;
+  activo: boolean;
+  vence_el: string | null;
+  max_usos: number | null;
+  /** Turnos que usaron el código. */
+  usos: number;
+  /** Clientes DISTINTOS que lo usaron (no es lo mismo que usos). */
+  personas: number;
+  facturado: number;
+  descuento_otorgado: number;
+  finalizados: number;
+  cancelados: number;
+  ausentes: number;
+  /** Finalizados ÷ usos, en %. */
+  tasa_concrecion: number;
+}
+export interface CuponesResumen {
+  usos: number;
+  personas: number;
+  facturado: number;
+  descuento_otorgado: number;
+}
 export interface EstadisticasFacturacion {
   facturado_real: number;
   facturado_anterior: number;
@@ -44,6 +76,11 @@ export interface EstadisticasFacturacion {
   estados: EstadosResumen;
   por_servicio: ServicioTotal[];
   por_hora: HoraTotal[];
+  por_origen: OrigenTotal[];
+  /** Solo la atención. Es la base del ticket promedio. */
+  facturado_turnos: number;
+  por_cupon: CuponRendimiento[];
+  cupones_resumen: CuponesResumen;
 }
 
 export function obtenerFacturacion(
