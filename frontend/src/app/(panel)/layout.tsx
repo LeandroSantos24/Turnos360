@@ -184,7 +184,7 @@ export default function PanelLayout({
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1 transition-transform group-hover:scale-105">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/marca/logo-turnos360.png"
+                src="/marca/logo-turnos360.webp"
                 alt="Turnos360"
                 className="h-full w-full object-contain"
               />

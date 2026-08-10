@@ -969,7 +969,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
           <div className="mt-7 flex flex-wrap items-center justify-center gap-x-12 gap-y-7">
             {/* eslint-disable @next/next/no-img-element */}
             <img
-              src="/marca/integraciones/mercado-pago.png"
+              src="/marca/integraciones/mercado-pago.webp"
               alt="Mercado Pago"
               loading="lazy"
               className="w-auto object-contain"
@@ -993,7 +993,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
             )}
             {tieneWhatsApp && (
               <img
-                src="/marca/integraciones/whatsapp.png"
+                src="/marca/integraciones/whatsapp.webp"
                 alt="WhatsApp"
                 loading="lazy"
                 className="w-auto object-contain"
@@ -1004,7 +1004,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
                 tipografía del sitio: al lado de cuatro marcas con su propia
                 tipografía, cantaba. Ahora es el logo oficial. */}
             <img
-              src="/marca/integraciones/google-resenas.png"
+              src="/marca/integraciones/google-resenas.webp"
               alt="Google Reseñas"
               loading="lazy"
               className="w-auto object-contain"

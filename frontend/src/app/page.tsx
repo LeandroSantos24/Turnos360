@@ -5,6 +5,13 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { WA_LINK_DEMO as WA_LINK, INSTAGRAM, EMAIL_CONTACTO } from "@/lib/contacto";
+import {
+  PRECIO_MENSUAL_TEXTO,
+  PRECIO_NORMAL_TEXTO,
+  PROMO_ACTIVA,
+  PROMO_ETIQUETA,
+  DIAS_PRUEBA,
+} from "@/lib/precios";
 
 const font = { sora: "'Sora', sans-serif", dm: "'DM Sans', sans-serif" };
 
@@ -25,10 +32,10 @@ const features = [
 ];
 
 const shots = [
-  { label: "Inicio", src: "/img/panel-inicio.png", caption: "Resumen del mes: turnos, ingresos previstos y tasa de ausencias de un vistazo." },
-  { label: "Estadísticas", src: "/img/panel-estadisticas.png", caption: "Facturación real, comisiones y ticket promedio, filtrado por profesional." },
-  { label: "Campañas", src: "/img/panel-campanas.png", caption: "Recordatorios y campañas automáticas: se prenden una vez y andan solas." },
-  { label: "Caja", src: "/img/panel-caja.png", caption: "Apertura, cobros por método con su comisión, gastos y cierre con arqueo." },
+  { label: "Inicio", src: "/img/panel-inicio.webp", caption: "Resumen del mes: turnos, ingresos previstos y tasa de ausencias de un vistazo." },
+  { label: "Estadísticas", src: "/img/panel-estadisticas.webp", caption: "Facturación real, comisiones y ticket promedio, filtrado por profesional." },
+  { label: "Campañas", src: "/img/panel-campanas.webp", caption: "Recordatorios y campañas automáticas: se prenden una vez y andan solas." },
+  { label: "Caja", src: "/img/panel-caja.webp", caption: "Apertura, cobros por método con su comisión, gastos y cierre con arqueo." },
 ];
 
 const steps = [
@@ -82,7 +89,7 @@ const faqs = [
   { q: "¿Me cobran comisión por cada turno?", a: "Cero. Pagás la cuota mensual y nada más. Si cobrás la seña con Mercado Pago, la plata va directo a tu cuenta y la única comisión es la de Mercado Pago, que no tocamos." },
   { q: "¿Sirve si tengo varios barberos trabajando a la vez?", a: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada." },
   { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
-  { q: "¿Puedo probarlo antes de pagar?", a: "Sí, 14 días gratis. Arrancamos por WhatsApp: te damos de alta el negocio con tus servicios, tu equipo y tu página, y lo usás con clientes reales. Recién al día 14 decidís si seguís. No pedimos tarjeta." },
+  { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis. Arrancamos por WhatsApp: te damos de alta el negocio con tus servicios, tu equipo y tu página, y lo usás con clientes reales. Recién al día ${DIAS_PRUEBA} decidís si seguís. No pedimos tarjeta.` },
 ];
 
 function FotoRubro({ src, emoji, label }: { src?: string; emoji: string; label: string }) {
@@ -551,11 +558,21 @@ export default function Page() {
           <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 40px", maxWidth: 520 }}>Sin niveles, sin funciones bloqueadas, sin sorpresas. Todo lo que viste en esta página está adentro.</p>
           <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "2px solid #12b886", borderRadius: 24, padding: "clamp(28px,4vw,40px)", boxShadow: "0 24px 60px rgba(18,184,134,0.14)", textAlign: "left" }}>
-            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>14 días de prueba gratis</div>
+            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>{DIAS_PRUEBA} días de prueba gratis</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>$16.990</span>
+              {PROMO_ACTIVA && (
+                <span style={{ color: "#9aa3b2", fontSize: 22, fontWeight: 600, textDecoration: "line-through" }}>
+                  {PRECIO_NORMAL_TEXTO}
+                </span>
+              )}
+              <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>{PRECIO_MENSUAL_TEXTO}</span>
               <span style={{ color: "#5d6578", fontSize: 17, fontWeight: 500 }}>/ mes</span>
             </div>
+            {PROMO_ACTIVA && (
+              <div style={{ display: "inline-flex", background: "#fff4e0", color: "#9a6212", fontWeight: 700, fontSize: 12.5, padding: "5px 12px", borderRadius: 999, marginBottom: 10 }}>
+                {PROMO_ETIQUETA}
+              </div>
+            )}
             <div style={{ color: "#8b93a7", fontSize: 14, marginBottom: 24 }}>Precio en pesos argentinos. Cancelás cuando quieras.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 11, marginBottom: 28 }}>
               {planItems.map((it) => (
@@ -564,7 +581,7 @@ export default function Page() {
                 </div>
               ))}
             </div>
-            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis 14 días</a>
+            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis {DIAS_PRUEBA} días</a>
             <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0" }}>Arrancamos por WhatsApp: te lo dejamos configurado y andando.</p>
           </div>
         </div>
