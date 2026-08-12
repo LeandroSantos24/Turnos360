@@ -51,6 +51,7 @@ services:
       ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
+      ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -82,6 +83,7 @@ services:
       ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
+      ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app worker --loglevel=info
@@ -111,6 +113,7 @@ services:
       ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
+      ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app beat --loglevel=info
@@ -135,14 +138,18 @@ services:
     volumes:
       - ../frontend:/app
       - /app/node_modules
-      # .next vive en un volumen de Docker, NO en la carpeta del host.
-      # Sin esto, el contenedor (usuario node) y los builds a mano (usuario
-      # de Linux) escriben en el MISMO .next y se pisan: el que escribió
-      # primero deja archivos que el otro no puede borrar, y Next muere al
-      # arrancar con EACCES sobre .next/server/app-paths-manifest.json.
-      - /app/.next
     depends_on:
       - backend
+
+  # Celery worker + beat: se activan en E6 (mensajería) y E8 (automatizaciones).
+  # worker:
+  #   build: ../backend
+  #   command: celery -A app.worker worker --loglevel=info
+  #   depends_on: [redis, db]
+  # beat:
+  #   build: ../backend
+  #   command: celery -A app.worker beat --loglevel=info
+  #   depends_on: [redis]
 
 volumes:
   pgdata:

@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     # En desarrollo el aviso molesta más de lo que ayuda (entrás veinte veces
     # por día). Poné ADMIN_ALERTA_EN_DEV=true si querés probarlo localmente.
     admin_alerta_en_dev: bool = False
+    # Averiguar de dónde salió la conexión (ciudad, país, proveedor) para
+    # incluirlo en el aviso. Es el dato que más rápido te dice si fuiste vos:
+    # "Mendoza, Argentina" es tu casa, "Frankfurt" no.
+    # Consulta un servicio gratuito mandándole SOLO la IP. Si no responde, el
+    # mail sale igual sin ese dato. Nada de esto se guarda en la base.
+    # Poné false si preferís no consultar servicios externos.
+    admin_alerta_geolocalizar: bool = True
 
     # --- JWT (E2) ---
     jwt_algoritmo: str = "HS256"

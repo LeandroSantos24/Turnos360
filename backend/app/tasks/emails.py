@@ -861,26 +861,116 @@ def avisar_vencimientos() -> None:
 # Seguridad: acceso al panel de super-admin
 # ============================================================
 
+def _leer_agente(ua: str) -> str:
+    """Convierte el user-agent crudo en algo que se entienda de un vistazo.
+
+    El UA crudo también va en el mail, pero abajo y en chico: cuando llega el
+    aviso a las 4 AM lo que hace falta es leer "Chrome en Windows" al toque,
+    no descifrar 200 caracteres de paréntesis.
+    """
+    if not ua or ua == "desconocido":
+        return "Desconocido"
+
+    navegador = "Navegador desconocido"
+    for marca, nombre in (
+        ("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"),
+        ("Chrome/", "Chrome"), ("Safari/", "Safari"),
+    ):
+        if marca in ua:
+            navegador = nombre
+            resto = ua.split(marca, 1)[1]
+            version = resto.split(".", 1)[0].split(" ", 1)[0]
+            if version.isdigit():
+                navegador = f"{nombre} {version}"
+            break
+
+    sistema = "sistema desconocido"
+    for clave, nombre in (
+        ("Windows NT 10", "Windows 10/11"), ("Windows", "Windows"),
+        ("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"),
+        ("Mac OS X", "Mac"), ("Linux", "Linux"), ("CrOS", "ChromeOS"),
+    ):
+        if clave in ua:
+            sistema = nombre
+            break
+
+    # Clientes que no son navegadores: si aparece esto en un intento de
+    # acceso, no es una persona tipeando — es un script.
+    for señal in ("curl", "python-requests", "wget", "Go-http", "okhttp", "PostmanRuntime"):
+        if señal.lower() in ua.lower():
+            return f"⚠ {señal} (no es un navegador: parece un script)"
+
+    return f"{navegador} en {sistema}"
+
+
+def _ubicar_ip(ip: str) -> str:
+    """De dónde salió la conexión, si se puede averiguar.
+
+    Es el dato que más rápido te dice si fuiste vos: "Mendoza, Argentina" es
+    tu casa; "Frankfurt, Alemania" no. Se consulta a un servicio gratuito y
+    sin credenciales, mandando SOLO la IP.
+
+    Best-effort con timeout corto: si el servicio no responde, el mail sale
+    igual sin este dato. Nunca se guarda nada.
+    """
+    from app.core.config import settings
+
+    if not settings.admin_alerta_geolocalizar:
+        return ""
+    # Las IP privadas no tienen ubicación pública (caso típico: desarrollo,
+    # o el sistema corriendo detrás de una VPN como ZeroTier).
+    if ip.startswith(("10.", "192.168.", "172.", "127.")) or ip == "desconocida":
+        return "red privada (sin ubicación pública)"
+    try:
+        import httpx
+
+        r = httpx.get(
+            f"http://ip-api.com/json/{ip}",
+            params={"fields": "status,country,regionName,city,isp,mobile,proxy,hosting"},
+            timeout=4.0,
+        )
+        d = r.json()
+        if d.get("status") != "success":
+            return ""
+        partes = [x for x in (d.get("city"), d.get("regionName"), d.get("country")) if x]
+        texto = ", ".join(partes)
+        if d.get("isp"):
+            texto += f" · {d['isp']}"
+        avisos = []
+        if d.get("proxy"):
+            avisos.append("VPN o proxy")
+        if d.get("hosting"):
+            avisos.append("datacenter, no una conexión hogareña")
+        if d.get("mobile"):
+            avisos.append("red móvil")
+        if avisos:
+            texto += f" ⚠ ({'; '.join(avisos)})"
+        return texto
+    except Exception:
+        log.warning("No se pudo geolocalizar la IP del acceso", exc_info=True)
+        return ""
+
+
 @celery_app.task(name="app.tasks.emails.avisar_acceso_admin")
 def avisar_acceso_admin(
     email_intentado: str,
     exito: bool,
-    ip: str,
-    agente: str,
     cuando: str,
     nombre: str | None = None,
+    datos: dict | None = None,
 ) -> None:
     """Avisa por mail cada entrada (o intento) al panel de super-admin.
 
-    Por qué existe: ese usuario controla TODOS los negocios del sistema. No hay
-    un segundo factor ni un equipo que revise logs, así que el aviso es la
-    única forma de enterarte en el momento de que alguien entró y no fuiste vos.
+    Ese usuario controla TODOS los negocios del sistema. No hay segundo factor
+    ni un equipo que revise logs, así que este mail es la única forma de
+    enterarte en el momento de que alguien entró y no fuiste vos.
 
-    Va por Celery, nunca inline: si el SMTP tarda 20 segundos o Gmail está
-    caído, el login del panel no se puede colgar ni fallar por eso.
+    NO SE GUARDA NADA. No hay tabla de accesos ni registro en la base: los
+    datos se arman en el momento, viajan en el correo y se descartan. El mail
+    en tu casilla ES el registro.
 
-    No se registra en la tabla Mensaje: esa tabla es por empresa (empresa_id no
-    admite nulo) y esto es un evento de la plataforma, no de ningún negocio.
+    Va por Celery, nunca inline: si el SMTP tarda o Gmail está caído, el login
+    del panel no se puede colgar ni fallar por eso.
     """
     from app.core.config import settings
 
@@ -888,32 +978,54 @@ def avisar_acceso_admin(
     if not destino:
         return
 
+    d = datos or {}
+    ip = d.get("ip", "desconocida")
+    ubicacion = _ubicar_ip(ip)
+
     if exito:
-        asunto = "Entraron al panel de administración de Turnos360"
+        asunto = f"Entraron al panel de Turnos360 · {ip}"
         titulo = "Acceso al panel de administración"
         apertura = (
             f"Alguien acaba de entrar al panel de super-admin como "
             f"<b>{nombre or email_intentado}</b>."
         )
     else:
-        asunto = "Intento fallido de acceso al panel de Turnos360"
+        asunto = f"Intento fallido en el panel de Turnos360 · {ip}"
         titulo = "Intento de acceso fallido"
         apertura = (
             f"Alguien intentó entrar al panel de super-admin con el email "
             f"<b>{email_intentado}</b> y la contraseña no coincidió."
         )
 
-    lineas = [
-        apertura,
-        f"<b>Cuándo:</b> {cuando}",
-        f"<b>Desde la IP:</b> {ip}",
-        f"<b>Navegador:</b> {agente}",
-    ]
+    lineas = [apertura, f"<b>Cuándo:</b> {cuando}"]
+
+    lineas.append(f"<b>Desde la IP:</b> {ip}")
+    if ubicacion:
+        lineas.append(f"<b>Ubicación aproximada:</b> {ubicacion}")
+    if d.get("cadena_proxy"):
+        lineas.append(f"<b>Cadena de proxies:</b> {d['cadena_proxy']}")
+
+    lineas.append(f"<b>Dispositivo:</b> {_leer_agente(d.get('agente', ''))}")
+    if d.get("plataforma"):
+        movil = " (celular o tablet)" if d.get("movil") else ""
+        lineas.append(f"<b>Sistema declarado:</b> {d['plataforma']}{movil}")
+    if d.get("idioma"):
+        lineas.append(f"<b>Idioma del navegador:</b> {d['idioma']}")
+    if d.get("host"):
+        lineas.append(f"<b>Entró por:</b> {d['host']}")
+    if d.get("vino_de"):
+        lineas.append(f"<b>Página anterior:</b> {d['vino_de']}")
+    if d.get("agente"):
+        lineas.append(
+            f"<span style='font-size:12px;color:#8a94a6'>"
+            f"Identificación completa del navegador: {d['agente']}</span>"
+        )
+
     if exito:
         lineas.append(
-            "Si fuiste vos, ignorá este mail. Si no, cambiá la contraseña del "
-            "super-admin ahora mismo: quien entró puede ver y modificar todos "
-            "los negocios del sistema."
+            "Si fuiste vos, ignorá este mail. Si no reconocés la ubicación o "
+            "el dispositivo, cambiá la contraseña del super-admin ahora mismo: "
+            "quien entró puede ver y modificar todos los negocios del sistema."
         )
     else:
         lineas.append(
@@ -927,15 +1039,15 @@ def avisar_acceso_admin(
         lineas=lineas,
         pie=(
             "Aviso automático de seguridad de Turnos360. Se envía en cada "
-            "acceso al panel de administración y no se puede desactivar desde "
-            "el panel (solo por configuración del servidor)."
+            "acceso al panel de administración. Estos datos no se guardan en "
+            "ningún lado: este correo es el único registro."
         ),
         marca="Turnos360 · Seguridad",
     )
 
-    # Sin _mandar(): ese helper escribe en Mensaje, que es por empresa.
-    # Acá el envío no puede romper nada, así que se traga la excepción y
-    # queda en los logs del worker.
+    # Sin _mandar(): ese helper escribe en la tabla Mensaje, que es por
+    # empresa, y esto es un evento de la plataforma. Además, guardar es
+    # justamente lo que NO se quiere acá.
     try:
         mailer.enviar(destino, asunto, html)
     except Exception:

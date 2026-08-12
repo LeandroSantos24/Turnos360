@@ -124,18 +124,38 @@ def _setear_totales(db: Session, turnos: list[Turno]) -> None:
     ).all()
     sumas = {tid: float(s) for tid, s in filas}
 
-    # Señas acreditadas, en lote (una query para todos los turnos de la vista).
+    # Pagos del turno, en lote (una query para toda la vista). Se traen
+    # separados por origen para distinguir la seña del cobro del mostrador.
     filas_s = db.execute(
-        select(Pago.turno_id, func.coalesce(func.sum(Pago.monto), 0))
-        .where(Pago.turno_id.in_(ids), Pago.origen == "sena")
-        .group_by(Pago.turno_id)
+        select(
+            Pago.turno_id,
+            Pago.origen,
+            func.coalesce(func.sum(Pago.monto), 0),
+        )
+        .where(Pago.turno_id.in_(ids))
+        .group_by(Pago.turno_id, Pago.origen)
     ).all()
-    senas = {tid: float(s) for tid, s in filas_s}
+    senas: dict[int, float] = {}
+    cobros: dict[int, float] = {}
+    for tid, origen, monto in filas_s:
+        if origen == "sena":
+            senas[tid] = senas.get(tid, 0.0) + float(monto)
+        cobros[tid] = cobros.get(tid, 0.0) + float(monto)
 
     for t in turnos:
         t.total = _total_con_items(t, sumas.get(t.id, 0.0))
         t.senado = senas.get(t.id, 0.0)
         t.saldo = round(max((t.total or 0.0) - t.senado, 0.0), 2)
+        # TODA la plata registrada de este turno (seña + cobro del mostrador).
+        # Sirve para avisar cuando se reabre un turno que ya tenía cobros:
+        # el pago no se anula solo, y si nadie lo mira el arqueo del día
+        # cierra con una diferencia que después nadie sabe explicar.
+        #
+        # OJO con el nombre: `cobrado` YA EXISTE como columna booleana del
+        # modelo. Asignarle un float acá lo marcaría como sucio y SQLAlchemy
+        # podría escribir ese número en una columna boolean en el próximo
+        # commit. Por eso este atributo se llama distinto.
+        t.pagado_total = round(cobros.get(t.id, 0.0), 2)
 
 
 def listar(

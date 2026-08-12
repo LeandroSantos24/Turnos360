@@ -68,6 +68,10 @@ class TurnoOut(BaseModel):
     # Se calcula sobre los pagos reales, no sobre sena_monto: si la seña se
     # pagó con un monto distinto al configurado, vale lo que entró.
     senado: float = 0.0
+    # Toda la plata ya registrada de este turno (seña + cobro). Si el turno
+    # se reabre o se cancela, esta plata NO se va sola de la caja.
+    # No se llama `cobrado` porque ese nombre ya lo usa el booleano de arriba.
+    pagado_total: float = 0.0
     # Total − señado. Es lo que hay que cobrar al finalizar; si el diálogo de
     # cobro mostrara el total, la recepción le cobraría de más al cliente.
     saldo: float | None = None

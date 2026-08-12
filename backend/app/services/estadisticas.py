@@ -190,28 +190,43 @@ def facturacion(
     # card también entra. Mezclarlo todo en un número haría que el ticket
     # promedio mintiera (una venta de abono de $50.000 no es un "ticket").
     # Acá se separa para poder leer las dos cosas.
+    # Se agrupa por la columna CRUDA, no por coalesce(origen, "turno").
+    # PostgreSQL exige que la expresión del GROUP BY sea idéntica a la del
+    # SELECT, y SQLAlchemy le asigna un parámetro distinto a cada una
+    # (coalesce_2 en el SELECT, coalesce_5 en el GROUP BY): PG las considera
+    # expresiones diferentes y rechaza la consulta entera. SQLite lo acepta,
+    # así que este bug solo aparece contra la base real.
+    # El nulo (pagos anteriores a la migración) se resuelve abajo, en Python.
     filas_o = db.execute(
         select(
-            func.coalesce(Pago.origen, "turno"),
+            Pago.origen,
             func.coalesce(func.sum(Pago.monto), 0),
             func.count(Pago.id),
         )
         .where(*cond)
-        .group_by(func.coalesce(Pago.origen, "turno"))
+        .group_by(Pago.origen)
     ).all()
     ETIQUETA_ORIGEN = {
         "turno": "Atención (turnos)",
         "abono": "Venta de abonos",
         "giftcard": "Venta de gift cards",
     }
+    # Agrupado en Python para unificar NULL con "turno": los pagos anteriores
+    # a la migración no tienen origen y son, todos, cobros de turnos.
+    acum: dict[str, dict] = {}
+    for o, tot, c in filas_o:
+        clave = o or "turno"
+        fila = acum.setdefault(clave, {"total": 0.0, "cantidad": 0})
+        fila["total"] += float(tot)
+        fila["cantidad"] += int(c)
     por_origen = [
         {
-            "origen": o,
-            "etiqueta": ETIQUETA_ORIGEN.get(o, o),
-            "total": float(tot),
-            "cantidad": int(c),
+            "origen": k,
+            "etiqueta": ETIQUETA_ORIGEN.get(k, k),
+            "total": round(v["total"], 2),
+            "cantidad": v["cantidad"],
         }
-        for o, tot, c in filas_o
+        for k, v in sorted(acum.items(), key=lambda x: -x[1]["total"])
     ]
     monto_turnos = next(
         (o["total"] for o in por_origen if o["origen"] == "turno"), 0.0

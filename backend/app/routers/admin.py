@@ -32,6 +32,9 @@ from app.services import cobranza
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+
+
 def _ip_real(request: Request) -> str:
     """IP del cliente, mirando primero el header del proxy.
 
@@ -43,6 +46,33 @@ def _ip_real(request: Request) -> str:
     if reenviada:
         return reenviada
     return request.client.host if request.client else "desconocida"
+
+
+def _datos_del_pedido(request: Request) -> dict:
+    """Junta todo lo que el navegador cuenta de sí mismo, sin guardar nada.
+
+    Nada de esto se persiste: se arma acá, viaja en el mail y se descarta.
+    No hay tabla de auditoría ni registro de accesos en la base — el correo
+    ES el registro, y vive en tu casilla.
+    """
+    h = request.headers
+
+    # Cadena de proxies completa. Si hay más de un salto, el primero es el
+    # visitante y el resto son intermediarios: verlos ayuda a distinguir una
+    # conexión directa de uno que entra por VPN o por una red corporativa.
+    cadena = (h.get("x-forwarded-for") or "").strip()
+
+    return {
+        "ip": _ip_real(request),
+        "cadena_proxy": cadena if cadena.count(",") >= 1 else "",
+        "agente": (h.get("user-agent") or "desconocido")[:300],
+        "idioma": (h.get("accept-language") or "")[:80],
+        "plataforma": (h.get("sec-ch-ua-platform") or "").strip('"')[:40],
+        "movil": h.get("sec-ch-ua-mobile") == "?1",
+        "navegador_dice": (h.get("sec-ch-ua") or "")[:120],
+        "vino_de": (h.get("referer") or "")[:150],
+        "host": (h.get("host") or "")[:80],
+    }
 
 
 def _avisar_acceso(request: Request, *, email: str, exito: bool, nombre: str | None) -> None:
@@ -67,10 +97,15 @@ def _avisar_acceso(request: Request, *, email: str, exito: bool, nombre: str | N
         avisar_acceso_admin.delay(
             email_intentado=email,
             exito=exito,
-            ip=_ip_real(request),
-            agente=(request.headers.get("user-agent") or "desconocido")[:200],
-            cuando=ahora.strftime("%d/%m/%Y a las %H:%M") + " (hora de Argentina)",
+            # El día en castellano se arma a mano: strftime("%A") depende del
+            # locale del contenedor, que en la imagen slim es inglés.
+            cuando=(
+                f"{DIAS[ahora.weekday()]} "
+                + ahora.strftime("%d/%m/%Y a las %H:%M:%S")
+                + " (hora de Argentina)"
+            ),
             nombre=nombre,
+            datos=_datos_del_pedido(request),
         )
     except Exception:  # pragma: no cover - el login no depende de esto
         logging.getLogger(__name__).exception(

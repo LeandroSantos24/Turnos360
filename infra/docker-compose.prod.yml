@@ -90,6 +90,7 @@ services:
       ADMIN_ALERTA_EMAIL: ${ADMIN_ALERTA_EMAIL:-}
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
+      ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
     # --proxy-headers + --forwarded-allow-ips: uvicorn confía en el
     # X-Forwarded-For que manda Nginx, así slowapi limita por IP REAL.
     # Sin esto, todos los visitantes comparten la IP de Nginx y el límite

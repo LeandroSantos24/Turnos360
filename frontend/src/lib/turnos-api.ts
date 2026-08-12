@@ -29,6 +29,8 @@ export interface Turno {
   sena_monto: number | null;
   /** Lo ya cobrado por adelantado (señas acreditadas). */
   senado: number;
+  /** Toda la plata registrada del turno (seña + cobro del mostrador). */
+  pagado_total: number;
   /** total − senado: lo que falta cobrar al finalizar. */
   saldo: number | null;
   descuento_pct: number;

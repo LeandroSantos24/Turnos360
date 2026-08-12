@@ -689,6 +689,27 @@ export function TurnoDetalle({
                   ? "El turno se cancelará y el horario quedará libre. Esta acción no se puede deshacer."
                   : "El turno se marcará como finalizado. Esta acción no se puede deshacer."}
             </AlertDialogDescription>
+            {/* Plata ya registrada. El sistema NO la saca solo de la caja: si
+                el cobro fue un error, hay que anular el movimiento a mano.
+                Sin este aviso, el arqueo del día cierra con una diferencia
+                que después nadie sabe de dónde salió. */}
+            {(turno.pagado_total ?? 0) > 0 &&
+              (esReapertura(turno.estado) || confirmar === "cancelado") && (
+                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-medium">
+                    Este turno tiene ${(turno.pagado_total ?? 0).toLocaleString("es-AR")} ya
+                    cobrados
+                    {(turno.senado ?? 0) > 0 &&
+                      ` (incluye $${(turno.senado ?? 0).toLocaleString("es-AR")} de seña)`}
+                    .
+                  </p>
+                  <p className="mt-1">
+                    Esa plata queda en la caja. Si el cobro fue un error, anulá
+                    el movimiento desde Caja → Movimientos. Si el cliente ya
+                    pagó y no se le devuelve, dejalo como está.
+                  </p>
+                </div>
+              )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={procesando}>No, volver</AlertDialogCancel>
