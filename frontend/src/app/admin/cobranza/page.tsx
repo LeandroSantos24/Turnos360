@@ -213,7 +213,8 @@ export default function CobranzaPage() {
             )}
             {!cargando &&
               empresas.map((e) => {
-                const c = COLORES[e.semaforo_color];
+                // Fallback: un color nuevo del backend no puede tumbar la tabla.
+                const c = COLORES[e.semaforo_color] ?? COLORES.gris;
                 return (
                   <tr key={e.id} className="hover:bg-muted/30">
                     <td className="px-4 py-3">

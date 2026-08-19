@@ -72,7 +72,13 @@ export interface EmpresaAdmin {
   cantidad_usuarios: number;
   plan: string;
   suscripcion_vence: string | null;
-  estado_suscripcion: string;
+  /** Sale de estado_suscripcion(): incluye "prueba". */
+  estado_suscripcion:
+    | "prueba"
+    | "activa"
+    | "prorroga"
+    | "vencida"
+    | "sin_vencimiento";
 }
 export type RolUsuario = "dueno" | "admin" | "recepcion" | "profesional";
 export interface UsuarioAdmin {

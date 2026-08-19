@@ -159,7 +159,8 @@ export function TurnoDetalle({
   if (!turno) return null;
 
   const color = colorEstadoHex(turno.estado);
-  const acciones = TRANSICIONES[turno.estado];
+  // Fallback: un estado nuevo deja el panel sin botones, no roto.
+  const acciones = TRANSICIONES[turno.estado] ?? [];
 
   // Total a cobrar = (servicio + adicionales) − descuento.
   const subtotalItems = items.reduce((acc, i) => acc + i.precio * i.cantidad, 0);

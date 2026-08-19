@@ -138,7 +138,7 @@ class EmpresaCobranzaOut(BaseModel):
     capacidad_excedida: bool = False
     ultimo_pago: str | None = None
 
-    semaforo_color: str  # verde | amarillo | rojo | gris
+    semaforo_color: str  # azul | verde | amarillo | rojo | gris
     semaforo_dias_restantes: int | None = None
     semaforo_fin_prorroga: str | None = None
     semaforo_en_prorroga: bool = False

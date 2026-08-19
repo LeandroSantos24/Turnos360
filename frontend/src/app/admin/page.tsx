@@ -427,6 +427,9 @@ function ChipSuscripcion({ estado, plan }: { estado: string; plan: string }) {
     );
   }
   const map: Record<string, { txt: string; color: string }> = {
+    // "prueba" tiene que estar: sin ella el fallback de abajo pinta de
+    // verde "Activa" a una empresa que está en prueba y no pagó nada.
+    prueba: { txt: "En prueba", color: "#0ea5e9" },
     activa: { txt: "Activa", color: "#10b981" },
     prorroga: { txt: "En prórroga", color: "#f59e0b" },
     vencida: { txt: "Vencida", color: "#ef4444" },

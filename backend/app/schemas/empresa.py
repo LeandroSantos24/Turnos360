@@ -140,7 +140,7 @@ class AutomatizacionesConfig(BaseModel):
 
 class SuscripcionOut(BaseModel):
     plan: str
-    estado: str  # activa | prorroga | vencida | sin_vencimiento
+    estado: str  # prueba | activa | prorroga | vencida | sin_vencimiento
     vence: str | None
     dias_restantes: int | None
     en_prorroga: bool
