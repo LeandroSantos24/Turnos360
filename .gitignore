@@ -26,3 +26,6 @@ celerybeat-schedule
 .vscode/
 .idea/
 .DS_Store
+
+# Copias de seguridad de los fixes
+.backups/

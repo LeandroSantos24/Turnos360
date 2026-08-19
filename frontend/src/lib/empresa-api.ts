@@ -229,7 +229,13 @@ export function probarCampana(tipo: string, destino: string): Promise<{ detalle:
 
 export interface Suscripcion {
   plan: string;
-  estado: "activa" | "prorroga" | "vencida" | "sin_vencimiento";
+  /**
+   * Los CINCO estados que devuelve `estado_suscripcion()` en el backend.
+   * "prueba" se evalúa PRIMERO allá (services/suscripcion.py). Si falta en
+   * este union, TypeScript no avisa cuando una pantalla no lo contempla y
+   * el error aparece recién en runtime.
+   */
+  estado: "prueba" | "activa" | "prorroga" | "vencida" | "sin_vencimiento";
   vence: string | null;
   dias_restantes: number | null;
   en_prorroga: boolean;

@@ -119,13 +119,23 @@ function TarjetaSuscripcion() {
 
   if (!sus) return null;
 
-  // Color y ícono según el estado.
-  const estilo = {
+  // Tiene que cubrir los CINCO estados que devuelve estado_suscripcion()
+  // en el backend, "prueba" incluido: es el primero que evalúa allá, así
+  // que es el que ve toda empresa recién creada con período de prueba.
+  const ESTILOS: Record<
+    string,
+    { color: string; bg: string; Icono: typeof Crown; chip: string }
+  > = {
+    prueba: { color: "#0ea5e9", bg: "#0ea5e915", Icono: Crown, chip: "En prueba" },
     activa: { color: "#10b981", bg: "#10b98115", Icono: CheckCircle2, chip: "Activa" },
     prorroga: { color: "#f59e0b", bg: "#f59e0b15", Icono: AlertTriangle, chip: "En prórroga" },
     vencida: { color: "#ef4444", bg: "#ef444415", Icono: AlertTriangle, chip: "Vencida" },
     sin_vencimiento: { color: "#6b7280", bg: "#6b728015", Icono: Crown, chip: "—" },
-  }[sus.estado];
+  };
+
+  // Red de seguridad: si mañana aparece un estado nuevo, la tarjeta sale
+  // en gris en vez de tirar abajo toda la pantalla de Mi cuenta.
+  const estilo = ESTILOS[sus.estado] ?? ESTILOS.sin_vencimiento;
 
   const nombrePlan =
     sus.plan === "pro" ? "Plan Pro" : sus.plan === "gratuito" ? "Plan Gratuito" : sus.plan;
