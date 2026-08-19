@@ -30,4 +30,7 @@ psql:        ## Consola de PostgreSQL
 test:
 	$(COMPOSE) exec backend python -m pytest -q
 
-.PHONY: up down logs ps sh db-upgrade db-revision seed psql test
+typecheck:   ## Verifica los tipos del panel contra la linea de base
+	$(COMPOSE) exec -T frontend npm run typecheck
+
+.PHONY: up down logs ps sh db-upgrade db-revision seed psql test typecheck

@@ -61,3 +61,43 @@ jobs:
 
       - name: Tests
         run: cd backend && python -m pytest -q
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend. Antes no existía: el panel no se verificaba en ningún momento,
+  # así que un error de tipos o un build roto llegaba al servidor y recién
+  # ahí reventaba, con 15 minutos de deploy perdidos.
+  #
+  # El typecheck NO exige cero errores: compara contra typecheck-baseline.txt
+  # y falla solo si aparece uno nuevo. Los ~27 preexistentes de @base-ui están
+  # congelados ahí. Ver frontend/scripts/typecheck-baseline.mjs.
+  # ─────────────────────────────────────────────────────────────────────────
+  frontend:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Falla solo con errores de tipos NUEVOS, no con los ya conocidos.
+      - name: Tipos (contra la línea de base)
+        run: npm run typecheck
+
+      # Las NEXT_PUBLIC_* se hornean en tiempo de compilación. Acá van valores
+      # de mentira: no se despliega nada, solo se comprueba que compile.
+      - name: Build de producción
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://ci.invalido/api
+          NEXT_PUBLIC_SITE_URL: https://ci.invalido
+          NEXT_TELEMETRY_DISABLED: "1"
