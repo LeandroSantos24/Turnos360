@@ -1,8 +1,9 @@
 """Endpoints de la empresa actual: preset del rubro + landing pública editable."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.api.deps import DB, EmpresaActual, gate_dueno
+from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
+from app.core.rate_limit import limiter
 from app.schemas.empresa import MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
 
@@ -112,8 +113,9 @@ def guardar_automatizaciones(
 
 
 @router.post("/automatizaciones/probar", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/hour")
 def probar_campana(
-    tipo: str, destino: str, empresa_id: EmpresaActual, db: DB
+    request: Request, tipo: str, usuario: UsuarioActual, empresa_id: EmpresaActual, db: DB
 ) -> dict:
     """Manda una MUESTRA de la campaña al email que indique el dueño.
 
@@ -123,6 +125,13 @@ def probar_campana(
     validos = {"recordatorio_24h", "recordatorio_2h", "cumple", "resena_google", "inactivos"}
     if tipo not in validos:
         raise HTTPException(status_code=400, detail="Campaña desconocida")
+
+    # El destino ya NO se elige: va al email del usuario que pidió la prueba.
+    # Antes era un parámetro libre, así que con una cuenta de prueba gratuita
+    # se podía mandar cualquier contenido a cualquier destinatario desde la
+    # casilla oficial de Turnos360 (phishing con marca propia), y de paso
+    # quemar la cuota diaria de envíos que comparten todos los negocios.
+    destino = usuario.email
     try:
         from app.tasks.emails import enviar_prueba_campana
 

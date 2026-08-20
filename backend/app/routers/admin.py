@@ -1,5 +1,7 @@
 """Endpoints del panel de super-administración (alta de empresas y usuarios)."""
 
+import html
+import ipaddress
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -35,6 +37,18 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
 
+def _texto_seguro(valor: str, limite: int) -> str:
+    """Recorta y escapa un dato que vino del navegador.
+
+    Todo lo que devuelve _datos_del_pedido termina interpolado como HTML en
+    el mail de alerta. Sin escapar, cualquiera puede mandar un User-Agent
+    con etiquetas y falsificar el aviso ("falsa alarma, ignoralo") o meter
+    un link de phishing con tu propia marca. Y ese mail es, hoy, el único
+    registro de accesos que tiene el sistema.
+    """
+    return html.escape((valor or "")[:limite], quote=False)
+
+
 def _ip_real(request: Request) -> str:
     """IP del cliente, mirando primero el header del proxy.
 
@@ -42,10 +56,18 @@ def _ip_real(request: Request) -> str:
     dentro de Docker). El primer valor de X-Forwarded-For es el visitante
     real; los siguientes son los proxies intermedios.
     """
-    reenviada = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if reenviada:
-        return reenviada
-    return request.client.host if request.client else "desconocida"
+    # X-Real-IP lo sobreescribe Nginx en cada request, así que no se puede
+    # falsificar. X-Forwarded-For se acumula y su primer valor lo elige el
+    # cliente: no sirve para identificar a nadie.
+    candidata = (request.headers.get("x-real-ip") or "").strip()
+    if not candidata and request.client:
+        candidata = request.client.host
+    # Validar que sea una IP de verdad: este valor viaja al asunto del mail
+    # y a la URL del servicio de geolocalización.
+    try:
+        return str(ipaddress.ip_address(candidata))
+    except ValueError:
+        return "desconocida"
 
 
 def _datos_del_pedido(request: Request) -> dict:
@@ -64,14 +86,14 @@ def _datos_del_pedido(request: Request) -> dict:
 
     return {
         "ip": _ip_real(request),
-        "cadena_proxy": cadena if cadena.count(",") >= 1 else "",
-        "agente": (h.get("user-agent") or "desconocido")[:300],
-        "idioma": (h.get("accept-language") or "")[:80],
-        "plataforma": (h.get("sec-ch-ua-platform") or "").strip('"')[:40],
+        "cadena_proxy": _texto_seguro(cadena, 200) if cadena.count(",") >= 1 else "",
+        "agente": _texto_seguro(h.get("user-agent") or "desconocido", 300),
+        "idioma": _texto_seguro(h.get("accept-language") or "", 80),
+        "plataforma": _texto_seguro((h.get("sec-ch-ua-platform") or "").strip('"'), 40),
         "movil": h.get("sec-ch-ua-mobile") == "?1",
-        "navegador_dice": (h.get("sec-ch-ua") or "")[:120],
-        "vino_de": (h.get("referer") or "")[:150],
-        "host": (h.get("host") or "")[:80],
+        "navegador_dice": _texto_seguro(h.get("sec-ch-ua") or "", 120),
+        "vino_de": _texto_seguro(h.get("referer") or "", 150),
+        "host": _texto_seguro(h.get("host") or "", 80),
     }
 
 

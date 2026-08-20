@@ -96,7 +96,11 @@ git add . && git commit -m "..." && git push
 # 8 Apagar 
 make down
 
-{
-  "email": "dueno@lacueva.com",
-  "clave": "demo1234"
-}
+## Datos de prueba
+
+Los usuarios de demostración los crea `make seed`. El comando imprime
+las credenciales al terminar.
+
+No se listan acá a propósito: este repositorio es público, y aunque son
+datos de desarrollo, publicar un par usuario/clave invita a probarlo
+contra el entorno equivocado.

@@ -24,7 +24,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.9"]
+# ruff con techo a propósito: cada minor suya suma reglas por defecto y
+# encuentra cosas nuevas en código que no cambió. Sin el techo, el CI se
+# pone rojo solo el día que sale una versión. Para subirlo: cambiar el
+# rango, correr `ruff check` local, arreglar lo que aparezca, y recién ahí
+# commitear los dos juntos.
+dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.9,<0.10"]
 
 [build-system]
 requires = ["setuptools>=68"]

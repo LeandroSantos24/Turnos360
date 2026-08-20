@@ -16,6 +16,7 @@ explota y ninguna operación del negocio depende del email.
 """
 
 import datetime as dt
+import html
 import logging
 import urllib.parse
 
@@ -32,6 +33,17 @@ log = logging.getLogger(__name__)
 
 TEAL = "#17a08a"
 TINTA = "#0c1015"
+
+
+def esc(valor) -> str:
+    """Escapa un texto que escribió un usuario antes de meterlo en el HTML.
+
+    Las plantillas usan HTML a propósito (<b>, <a>), así que NO se escapa en
+    _plantilla: se escapa acá, en cada valor que no controlamos nosotros.
+    El caso concreto: el mensaje de campaña lo escribe el dueño del negocio
+    y le llega a sus clientes.
+    """
+    return html.escape(str(valor or ""), quote=False)
 
 
 # ============================================================
@@ -516,7 +528,7 @@ def enviar_cumpleanios() -> int:
                     "queremos festejar con vos.",
                 ]
                 if mensaje:
-                    lineas.append(f"🎁 <b>{mensaje}</b>")
+                    lineas.append(f"🎁 <b>{esc(mensaje)}</b>")
                 lineas.append(
                     f"Reservá tu turno: {_contacto_negocio(empresa)}."
                 )
@@ -593,7 +605,7 @@ def enviar_inactivos() -> int:
                     "y te extrañamos 💈",
                 ]
                 if mensaje:
-                    lineas.append(f"🎁 <b>{mensaje}</b>")
+                    lineas.append(f"🎁 <b>{esc(mensaje)}</b>")
                 lineas.append(f"Reservá tu turno: {_contacto_negocio(empresa)}.")
                 html = _plantilla(
                     f"¡Volvé, {cliente.nombre}!", lineas,
@@ -631,7 +643,7 @@ def enviar_prueba_campana(empresa_id: int, tipo: str, destino: str) -> None:
                 "festejar con vos.",
             ]
             if m:
-                lineas.append(f"🎁 <b>{m}</b>")
+                lineas.append(f"🎁 <b>{esc(m)}</b>")
             lineas.append(f"Reservá tu turno: {contacto}.")
             asunto = f"🎂 ¡{empresa.nombre} te quiere saludar!"
             html = _plantilla("¡Feliz cumple, Juan! 🎂", lineas, pie, marca=empresa.nombre)
@@ -643,7 +655,7 @@ def enviar_prueba_campana(empresa_id: int, tipo: str, destino: str) -> None:
                 "extrañamos 💈",
             ]
             if m:
-                lineas.append(f"🎁 <b>{m}</b>")
+                lineas.append(f"🎁 <b>{esc(m)}</b>")
             lineas.append(f"Reservá tu turno: {contacto}.")
             asunto = f"Te extrañamos en {empresa.nombre}"
             html = _plantilla("¡Volvé, Juan!", lineas, pie, marca=empresa.nombre)

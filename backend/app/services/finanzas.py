@@ -338,6 +338,16 @@ def registrar_cobro(
     total_cobrado = 0.0
     total_comision = 0.0
 
+    # Un id que no resolvió es de otra empresa (o no existe). Antes se
+    # guardaba igual: quedaba un pago apuntando a un método ajeno y con
+    # comisión 0, lo que además permitía maquillar el neto del arqueo.
+    faltantes = ids_metodos - set(metodos)
+    if faltantes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Alguno de los métodos de pago no existe en este negocio.",
+        )
+
     for linea in datos.pagos:
         metodo = metodos.get(linea.metodo_pago_id) if linea.metodo_pago_id else None
         comision = 0.0
@@ -401,6 +411,35 @@ def registrar_gasto(
     db: Session, empresa_id: int, datos: GastoCrear, usuario_id: int
 ) -> MovimientoFinanciero:
     caja = caja_abierta(db, empresa_id)
+
+    # Regla 1: los ids vienen del body, así que hay que verificar que sean
+    # de ESTA empresa. Sin esto se podía apuntar a un método de otro tenant
+    # (el listado devolvía su nombre) y de paso esquivar la comisión.
+    if datos.metodo_pago_id is not None:
+        existe = db.scalar(
+            select(MetodoPago.id).where(
+                MetodoPago.id == datos.metodo_pago_id,
+                MetodoPago.empresa_id == empresa_id,
+            )
+        )
+        if existe is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ese método de pago no existe en este negocio.",
+            )
+    if datos.categoria_id is not None:
+        existe = db.scalar(
+            select(CategoriaFinanciera.id).where(
+                CategoriaFinanciera.id == datos.categoria_id,
+                CategoriaFinanciera.empresa_id == empresa_id,
+            )
+        )
+        if existe is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Esa categoría no existe en este negocio.",
+            )
+
     mov = MovimientoFinanciero(
         empresa_id=empresa_id,
         caja_id=caja.id if caja else None,
@@ -418,15 +457,24 @@ def registrar_gasto(
     return mov
 
 
-def _resolver_metodos(db: Session, movs: list[MovimientoFinanciero]) -> None:
-    """Adjunta el nombre del método de pago a cada movimiento (para mostrarlo)."""
+def _resolver_metodos(
+    db: Session, movs: list[MovimientoFinanciero], empresa_id: int | None = None
+) -> None:
+    """Adjunta el nombre del método de pago a cada movimiento (para mostrarlo).
+
+    Filtra por empresa: sin eso, un id de otro tenant devolvía el nombre de
+    ESE tenant, y se podían enumerar los métodos de pago de todo el sistema.
+    """
     ids = {m.metodo_pago_id for m in movs if m.metodo_pago_id}
     if not ids:
         return
+    if empresa_id is None and movs:
+        empresa_id = movs[0].empresa_id
+    condiciones = [MetodoPago.id.in_(ids)]
+    if empresa_id is not None:
+        condiciones.append(MetodoPago.empresa_id == empresa_id)
     nombres = dict(
-        db.execute(
-            select(MetodoPago.id, MetodoPago.nombre).where(MetodoPago.id.in_(ids))
-        ).all()
+        db.execute(select(MetodoPago.id, MetodoPago.nombre).where(*condiciones)).all()
     )
     for m in movs:
         m.metodo_pago = nombres.get(m.metodo_pago_id)

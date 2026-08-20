@@ -9,9 +9,9 @@ Roles:
 - Asignar/cancelar membresía a un cliente = dueño + recepción (gate_gestion).
 - Listas y "membresía activa del cliente" = abiertas (las usa el cobro, la
   agenda y la ficha).
-- /membresias/estadisticas (rentabilidad de planes): por ahora ABIERTA, pero
-  ver la nota de abajo: conceptualmente es dueño, lo cerramos junto con la
-  pasada de front de la pantalla de membresías.
+- /membresias/estadisticas (rentabilidad de planes): dueño (gate_dueno).
+  Expone precio efectivo por corte y márgenes de cada plan; no es algo que
+  tenga que ver recepción ni, mucho menos, un profesional.
 """
 
 from fastapi import APIRouter, Depends, status
@@ -70,7 +70,7 @@ def borrar_plan(plan_id: int, empresa_id: EmpresaActual, db: DB) -> None:
 
 # OJO: esta ruta va ANTES de las que usan /membresias/{id} para que
 # FastAPI no confunda "estadisticas" con un id de membresía.
-@router.get("/membresias/estadisticas")
+@router.get("/membresias/estadisticas", dependencies=[Depends(gate_dueno)])
 def estadisticas(empresa_id: EmpresaActual, db: DB) -> dict:
     """Estadísticas de rentabilidad de los planes de abono."""
     return svc.estadisticas_planes(db, empresa_id)

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.crypto import hash_clave, verificar_clave
+from app.core.crypto import hash_clave, hash_senuelo, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
 
@@ -15,7 +15,11 @@ from app.models.enums import RolUsuario
 def autenticar_admin(db: Session, email: str, clave: str) -> SuperAdmin | None:
     """Valida las credenciales del super-admin (tiempo constante ante email inexistente)."""
     sa = db.scalar(select(SuperAdmin).where(SuperAdmin.email == email))
-    hash_guardado = sa.hash_clave if sa else "pbkdf2$1$00$00"
+    # El señuelo tiene que costar lo MISMO que un hash real. El anterior
+    # usaba 1 iteración contra las 390.000 reales, así que un email
+    # inexistente respondía en microsegundos y uno real en ~230 ms: con una
+    # sola muestra de curl se descubría cuál es la cuenta de super-admin.
+    hash_guardado = sa.hash_clave if sa else hash_senuelo()
     ok = verificar_clave(clave, hash_guardado)
     if sa is None or not sa.activo or not ok:
         return None
