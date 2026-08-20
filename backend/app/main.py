@@ -18,7 +18,7 @@ from app.core.observabilidad import (
     registrar_observabilidad,
 )
 from app.core.rate_limit import limiter
-from app.routers import cupones
+from app.routers import cupones, equipo
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico, giftcards
 
 
@@ -84,6 +84,7 @@ app.include_router(membresias.router)
 app.include_router(giftcards.router)
 app.include_router(salud.router)
 app.include_router(empresa.router)
+app.include_router(equipo.router)
 app.include_router(items.router)
 app.include_router(cupones.router)
 app.include_router(finanzas.router)

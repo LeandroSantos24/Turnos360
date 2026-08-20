@@ -100,6 +100,17 @@ def crear_empresa(db: Session, datos) -> Empresa:
     if rubro is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Rubro no encontrado")
 
+    # El email del dueño se valida ACÁ, antes de crear nada. Si se validara
+    # después, un email repetido dejaría la empresa creada y sin dueño: un
+    # registro huérfano para limpiar a mano.
+    if db.scalar(
+        select(Usuario).where(func.lower(Usuario.email) == datos.dueno.email.lower())
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ese email ya está en uso por otro usuario del sistema. Cada persona entra con una dirección propia: usá otra para el dueño de este negocio.",
+        )
+
     # La prueba arranca al crear la empresa. Se guarda la fecha de fin, no los
     # días: así "faltan 3 días" se calcula siempre contra el calendario y no
     # depende de cuándo se corra ningún proceso.
@@ -165,15 +176,21 @@ def listar_usuarios(db: Session, empresa_id: int) -> list[Usuario]:
 
 def crear_usuario(db: Session, empresa_id: int, datos) -> Usuario:
     _empresa_o_404(db, empresa_id)
+    # El chequeo es GLOBAL, no por empresa: el email identifica a la
+    # persona en todo el sistema. Antes se miraba solo dentro de la
+    # empresa, así que crear un usuario con el email de alguien de OTRO
+    # negocio pasaba sin problema... y dejaba a esa persona sin poder
+    # entrar a su cuenta, sin ningún error a la vista.
     existe = db.scalar(
-        select(Usuario).where(
-            Usuario.empresa_id == empresa_id, Usuario.email == datos.email
-        )
+        select(Usuario).where(func.lower(Usuario.email) == datos.email.lower())
     )
     if existe:
+        propia = existe.empresa_id == empresa_id
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Ya hay un usuario con ese email en esta empresa",
+            "Ya hay un usuario con ese email en este negocio."
+            if propia
+            else "Ese email ya está en uso en otro negocio del sistema. Cada persona entra con una dirección propia: usá otra.",
         )
     usuario = Usuario(
         empresa_id=empresa_id,

@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter, HTTPException, Request, status
 from jwt.exceptions import InvalidTokenError
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import DB, UsuarioActual, verificar_empresa_activa
 from app.core.seguridad import (
@@ -41,8 +41,16 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
         detail="Email o contraseña incorrectos",
     )
 
-    # 1. Buscar el usuario por email
-    usuario = db.scalar(select(Usuario).where(Usuario.email == datos.email))
+    # 1. Buscar el usuario por email.
+    #    Sin distinguir mayúsculas: para una persona Juan@Gmail.com y
+    #    juan@gmail.com son la misma dirección.
+    #    one_or_none() y no scalar(): si alguna vez hubiera un duplicado,
+    #    que explote ruidosamente en vez de devolver una fila al azar, que
+    #    es lo que hacía antes y por lo que alguien podía terminar logueado
+    #    en la empresa equivocada.
+    usuario = db.scalars(
+        select(Usuario).where(func.lower(Usuario.email) == datos.email.lower())
+    ).one_or_none()
 
     # 2. Verificar que exista, esté activo y la clave coincida con el hash.
     #    Verificamos la clave SIEMPRE (aunque el usuario no exista) para no
@@ -144,9 +152,12 @@ def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> d
     SIEMPRE responde lo mismo: no revelamos si un email está registrado o no.
     El token viaja por email; acá solo guardamos su hash, con 60 min de vida.
     """
-    usuario = db.scalar(
-        select(Usuario).where(Usuario.email == datos.email, Usuario.activo.is_(True))
-    )
+    usuario = db.scalars(
+        select(Usuario).where(
+            func.lower(Usuario.email) == datos.email.lower(),
+            Usuario.activo.is_(True),
+        )
+    ).one_or_none()
     if usuario is not None:
         token = secrets.token_urlsafe(32)
         usuario.reset_token_hash = hashlib.sha256(token.encode()).hexdigest()

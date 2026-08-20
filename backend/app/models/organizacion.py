@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text, Numeric
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func, text, Numeric
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -165,7 +165,23 @@ class Sucursal(TenantMixin, Base):
 
 class Usuario(TenantMixin, Base):
     __tablename__ = "usuario"
-    __table_args__ = (UniqueConstraint("empresa_id", "email"),)
+    # El email identifica a la PERSONA en todo el sistema, no dentro de su
+    # empresa. Antes era UNIQUE(empresa_id, email), pero el login busca por
+    # email SIN empresa (el usuario todavía no dijo a cuál entra), y
+    # Session.scalar() con varias filas devuelve una al azar en vez de
+    # fallar. Con la misma persona en dos negocios eso significaba entrar a
+    # la empresa equivocada, o quedar afuera de una de las dos sin ninguna
+    # explicación.
+    #
+    # Va sobre lower(email) porque para una persona Juan@Gmail.com y
+    # juan@gmail.com son la misma dirección, y si el sistema las trata como
+    # dos cuentas vuelve el mismo problema por otra puerta.
+    #
+    # Índice y no UniqueConstraint: Postgres no admite expresiones en una
+    # constraint.
+    __table_args__ = (
+        Index("uq_usuario_email_lower", text("lower(email)"), unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))

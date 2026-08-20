@@ -3,14 +3,14 @@
 import re
 import unicodedata
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime as dt
 
 from app.models.enums import RolUsuario
 
 
 class AdminLogin(BaseModel):
-    email: str
+    email: EmailStr = Field(max_length=200)
     clave: str = Field(min_length=1, max_length=100)
 
 
@@ -91,7 +91,16 @@ class SuscripcionAdminIn(BaseModel):
 
 class UsuarioCrear(BaseModel):
     nombre: str = Field(min_length=2)
-    email: str
+    # EmailStr y no str: antes se podía crear un usuario con email
+    # "barbero1", y esa persona no podía recuperar su contraseña nunca
+    # porque el link no tenía a dónde llegar.
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _normalizar(cls, v: str) -> str:
+        """A minúsculas: la unicidad no distingue mayúsculas."""
+        return v.strip().lower()
     clave: str = Field(min_length=8, max_length=100)
     rol: RolUsuario
 
