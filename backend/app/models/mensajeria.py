@@ -31,6 +31,10 @@ class Mensaje(TenantMixin, Base):
     __table_args__ = (
         Index("ix_mensaje_empresa_fecha", "empresa_id", "fecha"),
         Index("ix_mensaje_empresa_cliente", "empresa_id", "cliente_id"),
+        # `mensaje` es la tabla que más rápido crece (~5 filas por turno).
+        # El pedido de reseña la consulta por turno_id y sin este índice
+        # escanea todos los mensajes de la empresa.
+        Index("ix_mensaje_empresa_turno", "empresa_id", "turno_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

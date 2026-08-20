@@ -21,6 +21,9 @@ class ItemTurno(TenantMixin, Base):
     __tablename__ = "item_turno"
     __table_args__ = (
         Index("ix_item_turno_empresa_turno", "empresa_id", "turno_id"),
+        # El cálculo de totales del turno consulta por turno_id SIN
+        # empresa_id, así que el índice de arriba no lo cubre.
+        Index("ix_item_turno_turno", "turno_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

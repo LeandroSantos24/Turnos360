@@ -313,6 +313,18 @@ def registrar_cobro(
     if turno is None:
         return None
 
+    # Idempotencia. El flag `cobrado` se escribía y no se leía nunca, así
+    # que un reintento (red que corta, dos pestañas, el proxy que devuelve
+    # timeout mientras el backend sí procesó) dejaba DOS movimientos y DOS
+    # pagos por la misma atención. La caja cerraba con el doble, y el
+    # duplicado no se puede anular desde la app: anular_movimiento rechaza
+    # los movimientos con pago asociado. La única salida era entrar a psql.
+    if turno.cobrado:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este turno ya fue cobrado.",
+        )
+
     caja = caja_abierta(db, empresa_id)
     caja_id = caja.id if caja else None
 

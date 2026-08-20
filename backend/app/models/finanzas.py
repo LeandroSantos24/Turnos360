@@ -88,7 +88,31 @@ class MovimientoFinanciero(TenantMixin, Base):
 
 class Pago(TenantMixin, Base):
     __tablename__ = "pago"
-    __table_args__ = (Index("ix_pago_empresa_origen", "empresa_id", "origen"),)
+    # Los cuatro accesos reales a esta tabla. Sin ellos, Postgres escanea
+    # `pago` entero en cada carga de agenda, de estadísticas, de ficha de
+    # cliente y en cada webhook de Mercado Pago.
+    #
+    # OJO con turno_id y movimiento_id: esas consultas NO filtran por
+    # empresa_id, así que un índice que empiece por empresa_id no las
+    # ayuda. Tienen que ir con la columna de la izquierda.
+    __table_args__ = (
+        Index("ix_pago_empresa_origen", "empresa_id", "origen"),
+        Index("ix_pago_empresa_fecha", "empresa_id", "fecha"),
+        Index("ix_pago_turno", "turno_id"),
+        Index("ix_pago_empresa_cliente", "empresa_id", "cliente_id"),
+        Index("ix_pago_movimiento", "movimiento_id"),
+        # Idempotencia de la seña a nivel base. El chequeo en Python es un
+        # SELECT seguido de un INSERT: dos notificaciones simultáneas de MP
+        # (que llegan en paralelo, no en fila) pasaban las dos y registraban
+        # la seña dos veces. Con este índice la segunda falla y se puede
+        # atrapar.
+        Index(
+            "uq_pago_sena_turno",
+            "turno_id",
+            unique=True,
+            postgresql_where=text("origen = 'sena'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     turno_id: Mapped[int | None] = mapped_column(ForeignKey("turno.id"))

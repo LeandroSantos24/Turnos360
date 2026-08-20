@@ -60,10 +60,24 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     if not payment_id.isdigit() or len(payment_id) > 24:
         return {"ok": True}
 
+    # Todo lo que sigue es sincrónico (base + llamada a MP) y va al
+    # threadpool en UNA sola pasada. Antes las consultas a la base corrían
+    # en el event loop y frenaban a todos los demás usuarios mientras
+    # Postgres respondía.
+    await to_thread.run_sync(_procesar_notificacion_mp, db, slug, payment_id)
+    return {"ok": True}
+
+
+def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
+    """Valida el pago contra MP y lo registra. Corre fuera del event loop.
+
+    Nunca levanta: el webhook siempre tiene que responder 200 o MP reintenta
+    para siempre.
+    """
     try:
         empresa = svc.resolver_empresa(db, slug)
     except HTTPException:
-        return {"ok": True}
+        return
 
     # Idempotencia: MP reintenta la misma notificación varias veces. Si este
     # pago ya quedó registrado en un turno de la empresa, cortamos acá y nos
@@ -75,22 +89,20 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
         )
     )
     if ya_procesado is not None:
-        return {"ok": True}
+        return
 
     token = mp.token_de(empresa)
     if not token:
-        return {"ok": True}
+        return
 
-    # El cliente de MP es httpx sincrónico y este endpoint es async: la llamada
-    # va al threadpool para no frenar el event loop mientras responde MP.
-    pago = await to_thread.run_sync(mp.consultar_pago, token, str(payment_id))
+    pago = mp.consultar_pago(token, str(payment_id))
     if not pago or pago.get("status") != "approved":
-        return {"ok": True}
+        return
 
     ref = pago.get("external_reference")
     turno = db.get(Turno, int(ref)) if ref and str(ref).isdigit() else None
     if turno is None or turno.empresa_id != empresa.id:
-        return {"ok": True}
+        return
 
     turno.sena_estado = "pagada"
     turno.mp_payment_id = str(pago.get("id", payment_id))
@@ -113,7 +125,6 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
         db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))
     )
     db.commit()
-    return {"ok": True}
 
 
 @router.get("/slugs", response_model=list[str])

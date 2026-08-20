@@ -2,7 +2,18 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,6 +29,22 @@ class Turno(TenantMixin, Base):
         Index("ix_turno_empresa_cliente", "empresa_id", "cliente_id"),
         Index("ix_turno_empresa_estado_inicio", "empresa_id", "estado", "fecha_inicio"),
         Index("ix_turno_empresa_cupon", "empresa_id", "cupon_id"),
+        # Índices PARCIALES para la tarea de recordatorios, que corre cada
+        # 15 minutos y filtra por fecha + flag SIN empresa_id. Como los tres
+        # índices de arriba empiezan por empresa_id, ninguno le servía:
+        # Postgres escaneaba la tabla entera, dos veces cada cuarto de hora.
+        # Son parciales porque casi todos los turnos ya tienen el flag en
+        # true, así que el índice queda chico.
+        Index(
+            "ix_turno_recordatorio_pendiente",
+            "fecha_inicio",
+            postgresql_where=text("recordatorio_enviado = false"),
+        ),
+        Index(
+            "ix_turno_recordatorio_2h_pendiente",
+            "fecha_inicio",
+            postgresql_where=text("recordatorio_2h_enviado = false"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
