@@ -8,7 +8,7 @@ que el usuario podría manipular).
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
@@ -41,6 +41,7 @@ def verificar_empresa_activa(empresa: Empresa | None) -> None:
 
 
 def get_current_usuario(
+    request: Request,
     credenciales: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
     db: Annotated[Session, Depends(get_db)],
 ) -> Usuario:
@@ -85,6 +86,13 @@ def get_current_usuario(
     #    acá queda cubierto todo el panel de una sola vez.
     empresa = db.get(Empresa, usuario.empresa_id)
     verificar_empresa_activa(empresa)
+
+    # Contexto para los logs. Va por request.state y no por ContextVar
+    # porque esta dependencia es SINCRÓNICA: FastAPI la corre en el
+    # threadpool, y anyio copia el contexto hacia el hilo pero no lo trae
+    # de vuelta. scope['state'] es un dict compartido y sí cruza hilos.
+    request.state.empresa_id = usuario.empresa_id
+    request.state.usuario_id = usuario.id
 
     return usuario
 

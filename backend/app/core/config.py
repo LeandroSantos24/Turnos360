@@ -11,6 +11,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: str = "dev"
+
+    # --- Observabilidad ------------------------------------------------
+    # Antes no había NADA: ni logging configurado, ni manejador global de
+    # excepciones, ni alertas. Un error en producción se descubría porque
+    # llamaba un cliente.
+    #
+    # log_json: en producción conviene (una línea de JSON por evento, para
+    # filtrar con jq o mandar a un agregador). En dev, humano y con color.
+    log_level: str = "INFO"
+    log_json: bool = False
+    # Sentry es OPCIONAL: sin DSN el sistema anda igual. Ponerlo es lo que
+    # convierte "me enteré por un cliente" en "me llegó una alerta".
+    sentry_dsn: str = ""
     database_url: str = "postgresql+psycopg://turnos360:turnos360@localhost:5432/turnos360"
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str = PLACEHOLDER_SECRET

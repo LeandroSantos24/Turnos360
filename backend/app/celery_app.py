@@ -22,6 +22,26 @@ celery_app.conf.update(
     enable_utc=True,
     task_ignore_result=True,      # no usamos backend de resultados
     broker_connection_retry_on_startup=True,
+    # La tarea se confirma DESPUÉS de ejecutarse, no antes. Sin esto, si
+    # el worker moría a mitad (falta de memoria, un deploy, un `down`), la
+    # tarea se daba por hecha y el email no salía nunca. Nadie se enteraba.
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    # Un worker toma de a una: las tareas son envíos de email, no cálculo.
+    # Con prefetch alto, un worker acapara la cola y el resto espera.
+    worker_prefetch_multiplier=1,
+    # Reintentos automáticos ante fallas transitorias (Gmail que rechaza
+    # por rate limit, DNS que parpadea, Redis que se reinicia). Antes no
+    # había ninguno: el primer error era definitivo.
+    task_annotations={
+        "*": {
+            "autoretry_for": (Exception,),
+            "retry_backoff": True,      # 1s, 2s, 4s, 8s...
+            "retry_backoff_max": 600,
+            "retry_jitter": True,       # evita que 300 emails reintenten juntos
+            "max_retries": 3,
+        }
+    },
     beat_schedule={
         # Cada 15 min: recordatorios de 24 h y de 2 h (doble recordatorio).
         "recordatorios": {

@@ -1,9 +1,19 @@
 name: turnos360
 
+x-logs: &logs
+  # Sin límite, el log de un contenedor crece hasta llenar el disco del
+  # servidor y tira abajo TODO el stack. 3 archivos de 10 MB por servicio
+  # son 30 MB: suficiente para diagnosticar, imposible que moleste.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-turnos360}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-turnos360}
@@ -21,6 +31,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *logs
     ports:
       - "6379:6379"
     healthcheck:
@@ -32,6 +43,7 @@ services:
   backend:
     build: ../backend
     restart: unless-stopped
+    logging: *logs
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
@@ -66,6 +78,7 @@ services:
   worker:
     build: ../backend
     restart: unless-stopped
+    logging: *logs
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
@@ -96,6 +109,7 @@ services:
   beat:
     build: ../backend
     restart: unless-stopped
+    logging: *logs
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
@@ -127,6 +141,7 @@ services:
     build:
       context: ../frontend
     restart: unless-stopped
+    logging: *logs
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       # URL del backend DESDE el contenedor frontend (la usa sitemap.ts, que

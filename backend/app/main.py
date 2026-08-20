@@ -4,12 +4,19 @@ Punto de entrada de FastAPI. Acá se montan los routers de cada módulo
 y los middlewares transversales (CORS, security headers, rate limiting).
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.logging import configurar_logging
+from app.core.observabilidad import (
+    estado_listo,
+    estado_vivo,
+    iniciar_sentry,
+    registrar_observabilidad,
+)
 from app.core.rate_limit import limiter
 from app.routers import cupones
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico, giftcards
@@ -19,6 +26,10 @@ from app.routers import agenda, auth, clientes, recursos, servicios, turnos, mem
 # nada por sí sola, pero publica el mapa completo de la API (85 rutas, sus
 # parámetros y sus schemas) y eso es trabajo de reconocimiento regalado.
 # En desarrollo sigue disponible en /docs como siempre.
+# El logging se prende antes de crear la app, para que hasta los mensajes
+# de arranque de uvicorn salgan con el formato y el contexto correctos.
+configurar_logging(nivel=settings.log_level, json_salida=settings.log_json)
+
 _docs = None if settings.es_produccion else "/docs"
 
 app = FastAPI(
@@ -29,6 +40,10 @@ app = FastAPI(
     redoc_url=None if settings.es_produccion else "/redoc",
     openapi_url=None if settings.es_produccion else "/openapi.json",
 )
+
+# Sentry (si hay DSN) + logging de pedidos + manejador global de errores.
+iniciar_sentry()
+registrar_observabilidad(app)
 
 # Rate limiting: registramos el limiter y el handler que responde 429 al pasarse.
 app.state.limiter = limiter
@@ -84,4 +99,24 @@ def root() -> dict:
 
 @app.get("/health", tags=["meta"])
 def health() -> dict:
-    return {"status": "ok"}
+    """¿El proceso está vivo? NO mira dependencias, a propósito.
+
+    Es lo que mira un orquestador para decidir si reiniciar el contenedor.
+    Si acá se consultara la base, un Postgres caído dispararía un bucle de
+    reinicios del backend: no arregla nada y encima borra los logs que
+    explicarían qué pasó.
+    """
+    return estado_vivo()
+
+
+@app.get("/ready", tags=["meta"])
+def ready(response: Response) -> dict:
+    """¿Puede atender pedidos de verdad? Mira base y Redis.
+
+    Esto es lo que tienen que mirar el healthcheck del compose y un
+    balanceador. Antes /health devolvía {"status": "ok"} sin consultar
+    nada: el backend se reportaba sano con Postgres caído.
+    """
+    cuerpo, codigo = estado_listo()
+    response.status_code = codigo
+    return cuerpo

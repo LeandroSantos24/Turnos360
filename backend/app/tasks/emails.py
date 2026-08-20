@@ -24,8 +24,9 @@ from sqlalchemy import extract, func, or_ as sa_or, select
 
 from app.celery_app import celery_app
 from app.core import mailer
+from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno
+from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno, Usuario
 from app.models.enums import CanalMensaje, EstadoMensaje, EstadoTurno
 from app.services.empresa import automs_de
 
@@ -434,6 +435,51 @@ def pedir_resena(turno_id: int, manual: bool = False) -> None:
             html, f"pedido_resena turno={ctx['turno'].id}",
             cliente_id=ctx["cliente"].id, turno_id=ctx["turno"].id,
         )
+
+
+@celery_app.task(name="app.tasks.emails.enviar_reset_password")
+def enviar_reset_password(usuario_id: int, token: str) -> None:
+    """Link para elegir una contraseña nueva.
+
+    Esta tarea FALTABA. routers/auth.py la importaba y la llamaba, pero no
+    estaba definida en ningún lado: el ImportError caía en un `except` que
+    solo loguea, así que el token quedaba guardado en la base y el mail nunca
+    salía. "Olvidé mi contraseña" no funcionaba, sin ningún error visible.
+
+    Es un email de PLATAFORMA, no de un negocio: no lleva la marca del local
+    ni pasa por _mandar() (que escribe en la tabla Mensaje, que es por
+    empresa y para mensajería con clientes).
+    """
+    with SessionLocal() as db:
+        usuario = db.get(Usuario, usuario_id)
+        if usuario is None or not usuario.activo or not usuario.email:
+            return
+
+        url = f"{settings.public_base_url}/restablecer?token={urllib.parse.quote(token)}"
+        html = _plantilla(
+            "Restablecer tu contraseña",
+            [
+                f"Hola{(' ' + esc(usuario.nombre)) if usuario.nombre else ''}, "
+                "pediste cambiar la contraseña de tu cuenta de Turnos360.",
+                "Tocá el botón y elegí una nueva. El link "
+                "<b>vence en 60 minutos</b> y sirve <b>una sola vez</b>.",
+                "<span style='font-size:13px;color:#8a94a6'>Si no fuiste vos, "
+                "ignorá este mail: tu contraseña actual sigue funcionando y "
+                "nadie puede cambiarla sin este link.</span>",
+            ],
+            "Turnos360 · Gestión de turnos para tu negocio",
+            boton=("Elegir contraseña nueva", url),
+            marca="Turnos360",
+        )
+        try:
+            mailer.enviar(usuario.email, "Restablecer tu contraseña · Turnos360", html)
+            log.info("Email de restablecimiento enviado (usuario %s)", usuario_id)
+        except Exception:
+            # Se propaga para que Celery reintente (autoretry_for está puesto
+            # en celery_app). Un fallo transitorio de SMTP no puede dejar a
+            # alguien sin poder entrar a su cuenta.
+            log.exception("Falló el email de restablecimiento (usuario %s)", usuario_id)
+            raise
 
 
 @celery_app.task(name="app.tasks.emails.encolar_recordatorios")

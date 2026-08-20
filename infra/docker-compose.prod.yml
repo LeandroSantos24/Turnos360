@@ -17,10 +17,20 @@
 
 name: turnos360-prod
 
+x-logs: &logs
+  # Sin límite, el log de un contenedor crece hasta llenar el disco del
+  # servidor y tira abajo TODO el stack. 3 archivos de 10 MB por servicio
+  # son 30 MB: suficiente para diagnosticar, imposible que moleste.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -37,6 +47,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *logs
     # SIN ports. Además con contraseña: si algún día alguien entra a la red
     # interna, tampoco puede encolar tareas de Celery a mano.
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "no"]
@@ -51,10 +62,17 @@ services:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging: *logs
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       ENV: prod
+      # JSON en producción: una línea por evento, filtrable con jq.
+      LOG_JSON: "true"
+      LOG_LEVEL: "INFO"
+      # Opcional. Con esto puesto, los errores llegan a Sentry en vez de
+      # quedarse en un log que nadie mira.
+      SENTRY_DSN: ${SENTRY_DSN:-}
       SECRET_KEY: ${SECRET_KEY}
       FERNET_KEY: ${FERNET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
@@ -110,7 +128,7 @@ services:
       --proxy-headers --forwarded-allow-ips="172.16.0.0/12"
       --no-access-log
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -126,6 +144,7 @@ services:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging: *logs
     environment: *backend_env
     command: celery -A app.celery_app worker --loglevel=warning --concurrency=2
     depends_on:
@@ -139,6 +158,7 @@ services:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging: *logs
     environment: *backend_env
     # --schedule fuera del código: el archivo de estado del beat es runtime,
     # no fuente (por eso también salió del repo).
@@ -165,6 +185,7 @@ services:
         # y no carga la imagen — justo el canal principal de difusión.
         NEXT_PUBLIC_SITE_URL: ${PUBLIC_BASE_URL}
     restart: unless-stopped
+    logging: *logs
     environment:
       # Esta sí es de runtime: la usa el sitemap, que corre server-side
       # dentro del contenedor y llega al backend por la red interna.
@@ -175,6 +196,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging: *logs
     # El ÚNICO servicio que publica puertos al servidor.
     ports:
       - "80:80"
