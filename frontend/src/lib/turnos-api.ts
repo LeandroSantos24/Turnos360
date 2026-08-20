@@ -56,13 +56,14 @@ export function listarTurnos(
   recursoId: number,
   desde: string,
   hasta: string,
+  signal?: AbortSignal,
 ): Promise<TurnosPagina> {
   const params = new URLSearchParams({
     recurso_id: String(recursoId),
     desde,
     hasta,
   });
-  return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
+  return api.get<TurnosPagina>(`/turnos?${params.toString()}`, signal);
 }
 
 /**
@@ -72,9 +73,10 @@ export function listarTurnos(
 export function listarTurnosDelDia(
   desde: string,
   hasta: string,
+  signal?: AbortSignal,
 ): Promise<TurnosPagina> {
   const params = new URLSearchParams({ desde, hasta });
-  return api.get<TurnosPagina>(`/turnos?${params.toString()}`);
+  return api.get<TurnosPagina>(`/turnos?${params.toString()}`, signal);
 }
 
 /** Cambia el estado de un turno (confirmar, cancelar, en curso, etc.). */

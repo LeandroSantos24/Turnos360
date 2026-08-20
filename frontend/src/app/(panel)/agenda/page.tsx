@@ -36,7 +36,7 @@ import {
   horaDe,
   inicialDe,
 } from "@/lib/turno-visual";
-import { ApiError } from "@/lib/api";
+import { ApiError, esCancelado } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -106,7 +106,7 @@ export default function AgendaPage() {
       .catch(() => setServicios([]));
   }, []);
  
-  const cargarTurnos = useCallback(async () => {
+  const cargarTurnos = useCallback(async (signal?: AbortSignal) => {
     if (recursoId === null) return;
     setCargando(true);
     setError(null);
@@ -131,26 +131,37 @@ export default function AgendaPage() {
  
       if (vista === "equipo") {
         // Equipo: todos los barberos del día (sin filtrar por recurso)
-        const data = await listarTurnosDelDia(desdeDia, hastaDia);
+        const data = await listarTurnosDelDia(desdeDia, hastaDia, signal);
         setTurnos(ordenarPorHora(data.items));
         setTurnosDia(data.items);
       } else {
         const [delRecurso, delDia] = await Promise.all([
-          listarTurnos(recursoId, desde, hasta),
-          listarTurnosDelDia(desdeDia, hastaDia),
+          listarTurnos(recursoId, desde, hasta, signal),
+          listarTurnosDelDia(desdeDia, hastaDia, signal),
         ]);
         setTurnos(ordenarPorHora(delRecurso.items));
         setTurnosDia(delDia.items);
       }
     } catch (err) {
+      // Cancelado porque el usuario cambió de día: no es una falla, no
+      // hay que mostrar nada ni apagar el indicador de carga (ya viene
+      // otro pedido en camino).
+      if (esCancelado(err)) return;
       setError(err instanceof ApiError ? err.message : "Error al cargar turnos");
     } finally {
-      setCargando(false);
+      if (!signal?.aborted) setCargando(false);
     }
   }, [recursoId, dia, vista]);
  
   useEffect(() => {
-    cargarTurnos();
+    // Al cambiar de día, de vista o de profesional, se cancela el pedido
+    // anterior. Sin esto, tres clics rápidos en la flecha disparan tres
+    // pedidos y la grilla muestra el que conteste ÚLTIMO, que puede ser
+    // el del primer día: la agenda queda mostrando otra fecha sin que
+    // nada lo delate.
+    const control = new AbortController();
+    cargarTurnos(control.signal);
+    return () => control.abort();
   }, [cargarTurnos]);
 
   // Mantener el panel de detalle en sincronía: cuando la agenda se recarga
