@@ -18,7 +18,7 @@ import hashlib
 import logging
 import secrets
 
-from app.core.crypto import hash_clave, hash_senuelo, verificar_clave
+from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Usuario
 from app.schemas.auth import CambiarPasswordRequest, OlvidePasswordRequest, RestablecerPasswordRequest, LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
 
@@ -60,6 +60,28 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
 
     if usuario is None or not usuario.activo or not clave_ok:
         raise credenciales_invalidas
+
+    # 2b. Si la clave estaba guardada con menos iteraciones de las que
+    #     usamos hoy, se rehashea AHORA — que es el único momento en que
+    #     tenemos la clave en texto plano. Sin esto, subir el costo del
+    #     hash no protege a nadie que ya tenga cuenta.
+    #
+    #     Nunca puede voltear el login: si falla, el usuario entra igual
+    #     con su hash viejo y se reintenta la próxima vez.
+    #
+    #     Va dentro de un SAVEPOINT (begin_nested) y no de un rollback
+    #     pelado: si algo falla, se deshace SOLO este cambio. Un
+    #     db.rollback() acá se llevaría puesto cualquier otro trabajo
+    #     pendiente en la misma sesión — hoy no hay ninguno, pero el día
+    #     que alguien agregue una escritura arriba, esto la borraría sin
+    #     que nadie lo note.
+    if necesita_rehash(usuario.hash_clave):
+        try:
+            with db.begin_nested():
+                usuario.hash_clave = hash_clave(datos.clave)
+            db.commit()
+        except Exception:
+            log.exception("no pude rehashear la clave", extra={"usuario_id": usuario.id})
 
     # 3. La empresa no debe estar pausada por el super-admin.
     #    Va DESPUÉS de validar la clave a propósito: solo un usuario legítimo

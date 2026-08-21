@@ -43,6 +43,15 @@ if [ "$TAMANO" -lt 1024 ]; then
     exit 1
 fi
 
+# Y que el gzip esté ENTERO. Un dump cortado a mitad (el disco se llenó,
+# el contenedor se reinició) pesa muchísimo y se ve perfecto en un `ls`.
+# Esto lo detecta ahora, no dentro de un mes cuando lo necesites.
+if ! gzip -t "$ARCHIVO" 2>/dev/null; then
+    echo "ERROR: el backup está cortado o corrupto. Se borra." >&2
+    rm -f "$ARCHIVO"
+    exit 1
+fi
+
 echo "[$(date -Is)] OK — $(du -h "$ARCHIVO" | cut -f1)"
 
 # Rotación

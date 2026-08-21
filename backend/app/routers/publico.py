@@ -23,6 +23,7 @@ from app.schemas.publico import (
 from app.models import Turno
 from app.models.enums import EstadoTurno
 from app.services import finanzas as svc_fin
+from app.core import firma_mp
 from app.services import mercadopago as mp
 from app.services import publico as svc
 
@@ -58,6 +59,12 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     # sin tocar la red ni la base.
     payment_id = str(payment_id)
     if not payment_id.isdigit() or len(payment_id) > 24:
+        return {"ok": True}
+
+    # La firma de MP. Con MP_FIRMA_MODO=off (default) esto devuelve True
+    # siempre y el comportamiento es idéntico al de antes. Ver
+    # app/core/firma_mp.py: el rollout va off -> log -> enforce.
+    if not firma_mp.acepta(request, payment_id):
         return {"ok": True}
 
     # Todo lo que sigue es sincrónico (base + llamada a MP) y va al

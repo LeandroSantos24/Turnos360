@@ -37,7 +37,14 @@ def desencriptar_credenciales(blob: bytes) -> dict:
 
 # --- hash de claves de usuario ---
 
-_ITERACIONES = 390_000
+# OWASP recomienda 600.000 para PBKDF2-HMAC-SHA256 (estaba en 390.000,
+# que era el número recomendado un par de años atrás). Subirlo encarece
+# proporcionalmente el trabajo de quien intente romper los hashes si
+# algún día se lleva la base.
+#
+# El costo para nosotros: el login pasa de ~240 ms a ~370 ms. Es una vez
+# por sesión y no está en ningún camino caliente.
+_ITERACIONES = 600_000
 
 
 def hash_clave(clave: str) -> str:
@@ -53,6 +60,24 @@ def verificar_clave(clave: str, almacenada: str) -> bool:
         return secrets.compare_digest(dk.hex(), esperado)
     except (ValueError, AttributeError):
         return False
+
+
+def necesita_rehash(almacenada: str) -> bool:
+    """¿Este hash se guardó con menos iteraciones de las que usamos hoy?
+
+    Subir el número no sirve de nada si las claves viejas se quedan con el
+    valor viejo para siempre: al día siguiente del cambio, TODAS lo están.
+
+    La única oportunidad de rehashear es el login, que es el único momento
+    en que el sistema tiene la clave en texto plano. Por eso esto se llama
+    ahí y en ningún otro lado.
+    """
+    try:
+        _, iters, _, _ = almacenada.split("$")
+        return int(iters) < _ITERACIONES
+    except (ValueError, AttributeError):
+        # Formato que no reconocemos: que lo rehashee y quede prolijo.
+        return True
 
 
 @lru_cache(maxsize=1)

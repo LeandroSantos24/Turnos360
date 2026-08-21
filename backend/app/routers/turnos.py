@@ -37,6 +37,29 @@ from app.services.disponibilidad import calcular_huecos
 
 router = APIRouter(prefix="/turnos", tags=["turnos"])
 
+
+def sin_plata(turno) -> TurnoOut:
+    """El mismo turno, sin un solo importe adentro.
+
+    El filtro por recurso ya estaba bien: un profesional ve solo SUS
+    turnos. Lo que faltaba es que esos turnos no vinieran con el total,
+    la seña y el saldo. El barbero que atiende no tiene por qué saber
+    cuánto factura el local, y hoy lo veía en cada fila de su agenda.
+
+    `cobrado` SÍ se deja: es un booleano operativo, no un importe, y el
+    profesional necesita saber si al cliente ya le cobraron para no
+    pedirle plata de nuevo en el mostrador.
+    """
+    salida = TurnoOut.model_validate(turno)
+    salida.total = 0.0
+    salida.senado = 0.0
+    salida.pagado_total = 0.0
+    salida.saldo = None
+    salida.sena_monto = None
+    salida.importe_previsto = None
+    salida.descuento_pct = 0.0
+    return salida
+
 @router.get("/huecos", response_model=list[dt.datetime])
 def buscar_huecos(
     empresa_id: EmpresaActual,
@@ -94,16 +117,21 @@ def listar_turnos(
         recurso_id=recurso_id, cliente_id=cliente_id,
         desde=desde, hasta=hasta, estado=estado,
     )
+    if es_prof:
+        items = [sin_plata(t) for t in items]
     return TurnosPagina(total=total, items=items)
 
 
 @router.get("/{turno_id}", response_model=TurnoOut)
-def obtener_turno(turno_id: int, empresa_id: EmpresaActual, db: DB) -> TurnoOut:
+def obtener_turno(
+    turno_id: int, usuario: UsuarioActual, empresa_id: EmpresaActual, db: DB
+) -> TurnoOut:
     """Devuelve un turno por id. 404 si no existe o es de otra empresa."""
     turno = svc.obtener(db, empresa_id, turno_id)
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
-    return turno
+    es_prof, _ = contexto_profesional(usuario)
+    return sin_plata(turno) if es_prof else turno
 
 
 @router.post(
@@ -172,7 +200,7 @@ def cambiar_estado_turno(
     )
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
-    return turno
+    return sin_plata(turno) if es_prof else turno
 
 
 @router.patch(

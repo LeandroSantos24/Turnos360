@@ -7,10 +7,13 @@ Es idempotente: si los rubros ya existen, no duplica nada.
 """
 
 import datetime as dt
+import os
 import random
+import secrets
 
 from faker import Faker
 
+from app.core.config import settings
 from app.core.crypto import encriptar_credenciales, hash_clave
 from app.db.session import SessionLocal
 from app.models import (
@@ -141,7 +144,41 @@ def _turnos(db, empresa, clientes, recursos, servicios, n: int) -> None:
         ))
 
 
+def _credenciales_superadmin() -> tuple[str, str, bool]:
+    """(email, clave, es_clave_generada) para el super-admin del seed.
+
+    Antes acá había una dirección y una clave de super-admin escritas a mano.
+    Este repo es PÚBLICO: las dos estaban publicadas en GitHub, y son
+    exactamente las que alguien va a probar primero. Que lleguen avisos de
+    intentos de acceso a esa casilla no es casualidad.
+
+    (A propósito no las repito acá: una clave que estuvo publicada no vuelve
+    a escribirse en el código ni de ejemplo, porque el próximo que lea este
+    archivo la va a probar.)
+
+    Ahora salen del entorno. Y si no hay clave, se genera una al azar y se
+    imprime UNA vez: sigue siendo cómodo para desarrollo, pero deja de ser
+    una clave que cualquiera puede leer en internet.
+    """
+    email = (os.environ.get("SUPERADMIN_EMAIL") or "admin@turnos360.local").strip()
+    clave = (os.environ.get("SUPERADMIN_PASS") or "").strip()
+    if clave:
+        return email, clave, False
+    return email, secrets.token_urlsafe(18), True
+
+
 def run() -> None:
+    # Este seed crea DOS NEGOCIOS FICTICIOS con clientes, turnos y pagos
+    # inventados. En una base de producción eso no es un riesgo de seguridad:
+    # es basura imposible de distinguir de los datos reales una vez mezclada.
+    if settings.es_produccion:
+        raise SystemExit(
+            "Este seed carga negocios de demostración y NO puede correr en "
+            "producción. Si necesitás crear el super-admin en una base real, "
+            "usá:  python -m app.seeds_minimo  con SUPERADMIN_EMAIL y "
+            "SUPERADMIN_PASS seteadas."
+        )
+
     db = SessionLocal()
     try:
         if db.query(Rubro).count():
@@ -155,8 +192,9 @@ def run() -> None:
         db.flush()
 
         # --- super admin ---
-        db.add(SuperAdmin(nombre="Leandro", email="admin@turnos360.com",
-                          hash_clave=hash_clave("superadmin360")))
+        sa_email, sa_clave, sa_generada = _credenciales_superadmin()
+        db.add(SuperAdmin(nombre="Leandro", email=sa_email,
+                          hash_clave=hash_clave(sa_clave)))
 
         # ================= BARBERÍA =================
         barberia = Empresa(
@@ -230,6 +268,13 @@ def run() -> None:
 
         db.commit()
         print("Seeds OK: Barbería La Cueva + Consultorio San Martín cargados.")
+        if sa_generada:
+            print()
+            print("  ANOTÁ ESTO AHORA — no se vuelve a mostrar:")
+            print(f"  Super-admin: {sa_email} / {sa_clave}")
+            print("  (clave generada al azar porque no seteaste SUPERADMIN_PASS)")
+        else:
+            print(f"  Super-admin: {sa_email}  (clave: la de SUPERADMIN_PASS)")
     finally:
         db.close()
 

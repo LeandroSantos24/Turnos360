@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     # son gratis y no tiene sentido descontarle crédito al negocio por
     # algo que no nos cuesta. Ese día: WA_COBRAR_SERVICIO=true en el .env.
     wa_cobrar_servicio: bool = False
+    # ── Firma del webhook de Mercado Pago ────────────────────────────
+    # Tres estados a propósito, porque esto es plata y no se puede probar
+    # en local: 'off' se comporta como antes; 'log' valida y AVISA sin
+    # bloquear (para confirmar contra tráfico real que la firma cierra);
+    # 'enforce' rechaza lo que no venga firmado. Se sube un escalón por
+    # vez, mirando los logs. Ver routers/publico.py.
+    mp_firma_modo: str = "off"          # off | log | enforce
+    mp_webhook_secret: str = ""
     wa_webhook_verify_token: str = ""
     wa_app_secret: str = ""
 

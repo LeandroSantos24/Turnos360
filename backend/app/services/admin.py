@@ -1,15 +1,18 @@
 """Lógica del panel de super-administración: empresas, usuarios y rubros."""
 
 import datetime as dt
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.crypto import hash_clave, hash_senuelo, verificar_clave
+from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
+
+log = logging.getLogger(__name__)
 
 
 def autenticar_admin(db: Session, email: str, clave: str) -> SuperAdmin | None:
@@ -23,6 +26,15 @@ def autenticar_admin(db: Session, email: str, clave: str) -> SuperAdmin | None:
     ok = verificar_clave(clave, hash_guardado)
     if sa is None or not sa.activo or not ok:
         return None
+    # Misma actualización que en el login normal: el super-admin es
+    # justamente la cuenta que más conviene tener con el hash más caro.
+    if necesita_rehash(sa.hash_clave):
+        try:
+            with db.begin_nested():
+                sa.hash_clave = hash_clave(clave)
+            db.commit()
+        except Exception:
+            log.exception("no pude rehashear la clave del super-admin")
     return sa
 
 

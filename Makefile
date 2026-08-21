@@ -24,6 +24,10 @@ db-revision: ## Nueva migración: make db-revision m="mensaje"
 seed:        ## Carga las empresas ficticias
 	$(COMPOSE) exec backend python -m app.seeds
 
+dbml:        ## Regenera docs/turnos360.dbml desde los modelos
+	$(COMPOSE) exec -T backend python -m app.tools.generar_dbml --stdout > docs/turnos360.dbml
+	@echo "  docs/turnos360.dbml regenerado ($$(grep -c '^Table ' docs/turnos360.dbml) tablas)"
+
 psql:        ## Consola de PostgreSQL
 	$(COMPOSE) exec db psql -U turnos360 -d turnos360
 
@@ -33,4 +37,4 @@ test:
 typecheck:   ## Verifica los tipos del panel contra la linea de base
 	$(COMPOSE) exec -T frontend npm run typecheck
 
-.PHONY: up down logs ps sh db-upgrade db-revision seed psql test typecheck
+.PHONY: up down logs ps sh db-upgrade db-revision seed psql test typecheck dbml

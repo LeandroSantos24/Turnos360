@@ -41,6 +41,22 @@ fi
 echo "→ Parando backend, worker y beat..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE" stop backend worker beat
 
+# La red antes del salto: si este backup resulta ser el equivocado, o si
+# lo que había era mejor que lo que viene, sin esto no hay vuelta atrás.
+PREVIO="/var/backups/turnos360/ANTES-DE-RESTAURAR-$(date +%Y%m%d-%H%M%S).sql.gz"
+mkdir -p "$(dirname "$PREVIO")"
+echo "→ Guardando el estado actual en $PREVIO ..."
+if docker compose --env-file "$ENV_FILE" -f "$COMPOSE" exec -T db \
+     pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists \
+     | gzip > "$PREVIO" && gzip -t "$PREVIO" 2>/dev/null; then
+    echo "   OK ($(du -h "$PREVIO" | cut -f1)). Si algo sale mal, restaurá ESE archivo."
+else
+    echo "   No pude guardar el estado actual." >&2
+    read -r -p "   ¿Seguir igual? Escribí SIGO: " igual
+    [ "$igual" = "SIGO" ] || { echo "Cancelado."; \
+        docker compose --env-file "$ENV_FILE" -f "$COMPOSE" start backend worker beat; exit 1; }
+fi
+
 echo "→ Restaurando..."
 gunzip -c "$ARCHIVO" | docker compose --env-file "$ENV_FILE" -f "$COMPOSE" exec -T db \
     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --quiet

@@ -12,9 +12,11 @@ y cobros pero no tiene por qué leer antecedentes, mediciones ni adjuntos.
 Antes el módulo entero no tenía ningún control de rol.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.api.deps import DB, EmpresaActual, requiere_rol
+from app.api.deps import DB, EmpresaActual, UsuarioActual, requiere_rol
+from app.core.rate_limit import ip_del_cliente
+from app.services import auditoria
 from app.models.enums import RolUsuario
 from app.schemas.salud import (
     AdjuntoCrear,
@@ -38,9 +40,42 @@ router = APIRouter(
 )
 
 
+def _auditar(db, request, usuario, empresa_id, cliente_id, que: str) -> None:
+    """Deja constancia de QUIÉN leyó la historia clínica de QUIÉN.
+
+    La Ley 25.326 trata la historia clínica como dato sensible, y el
+    comentario del modelo prometía desde la primera migración que acá se
+    registraba cada lectura. No se registraba ninguna.
+
+    Se audita la LECTURA, no solo la escritura, porque el daño de este
+    dato es que alguien lo mire: el empleado que se fija los antecedentes
+    de la vecina no modifica nada.
+
+    No hace commit ni levanta: auditar no puede voltear la operación.
+    """
+    auditoria.registrar(
+        db,
+        accion="leer_ficha",
+        empresa_id=empresa_id,
+        usuario_id=usuario.id,
+        tabla="ficha_clinica",
+        registro_id=cliente_id,
+        detalle={"que": que, "rol": usuario.rol.value},
+        ip=ip_del_cliente(request),
+    )
+    db.commit()
+
+
 @router.get("/{cliente_id}/ficha", response_model=FichaOut)
-def obtener_ficha(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> FichaOut:
+def obtener_ficha(
+    cliente_id: int,
+    request: Request,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+) -> FichaOut:
     """Devuelve la ficha del paciente. 404 si todavía no tiene o es de otra empresa."""
+    _auditar(db, request, usuario, empresa_id, cliente_id, "ficha")
     ficha = svc.obtener_ficha(db, empresa_id, cliente_id)
     if ficha is None:
         raise HTTPException(
@@ -70,8 +105,15 @@ def guardar_ficha(
 
 
 @router.get("/{cliente_id}/entradas", response_model=list[EntradaOut])
-def listar_entradas(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> list[EntradaOut]:
+def listar_entradas(
+    cliente_id: int,
+    request: Request,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+) -> list[EntradaOut]:
     """Controles del paciente, del más reciente al más viejo."""
+    _auditar(db, request, usuario, empresa_id, cliente_id, "entradas")
     return svc.listar_entradas(db, empresa_id, cliente_id)
 
 
@@ -99,8 +141,15 @@ def borrar_entrada(
 
 
 @router.get("/{cliente_id}/mediciones", response_model=list[MedicionOut])
-def listar_mediciones(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> list[MedicionOut]:
+def listar_mediciones(
+    cliente_id: int,
+    request: Request,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+) -> list[MedicionOut]:
     """Mediciones en orden cronológico (listas para graficar la evolución)."""
+    _auditar(db, request, usuario, empresa_id, cliente_id, "mediciones")
     return svc.listar_mediciones(db, empresa_id, cliente_id)
 
 
@@ -129,7 +178,14 @@ def borrar_medicion(
 
 
 @router.get("/{cliente_id}/adjuntos", response_model=list[AdjuntoOut])
-def listar_adjuntos(cliente_id: int, empresa_id: EmpresaActual, db: DB) -> list[AdjuntoOut]:
+def listar_adjuntos(
+    cliente_id: int,
+    request: Request,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+) -> list[AdjuntoOut]:
+    _auditar(db, request, usuario, empresa_id, cliente_id, "adjuntos")
     return svc.listar_adjuntos(db, empresa_id, cliente_id)
 
 
