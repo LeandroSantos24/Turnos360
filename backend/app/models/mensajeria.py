@@ -23,6 +23,12 @@ class PlantillaMensaje(TenantMixin, Base):
     nombre: Mapped[str] = mapped_column(String(120))
     cuerpo: Mapped[str] = mapped_column(Text)
     aprobada_meta: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Si lleva los botones "Confirmo" / "No puedo ir". Tiene que coincidir
+    # con la plantilla aprobada en Meta: mandar componentes de botón contra
+    # una plantilla que no los tiene es un rechazo garantizado.
+    con_botones: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

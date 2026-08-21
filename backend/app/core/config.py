@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     # Webhook de estados. Sin estos dos, el endpoint público rechaza todo:
     # es un endpoint sin autenticación nuestra y la firma es la única
     # defensa contra que cualquiera marque mensajes como leídos.
+    # Meta cobra los mensajes de servicio (las respuestas dentro de la
+    # ventana de 24 h) A PARTIR DEL 1 DE OCTUBRE DE 2026. Hasta esa fecha
+    # son gratis y no tiene sentido descontarle crédito al negocio por
+    # algo que no nos cuesta. Ese día: WA_COBRAR_SERVICIO=true en el .env.
+    wa_cobrar_servicio: bool = False
     wa_webhook_verify_token: str = ""
     wa_app_secret: str = ""
 

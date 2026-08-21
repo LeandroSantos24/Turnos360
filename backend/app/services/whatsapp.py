@@ -71,7 +71,14 @@ class ProveedorSimulado:
 
     nombre = "simulado"
 
-    def enviar(self, destino: str, plantilla: str, variables: list[str], texto: str) -> Enviado:
+    def enviar(
+        self,
+        destino: str,
+        plantilla: str,
+        variables: list[str],
+        texto: str,
+        botones: list[str] | None = None,
+    ) -> Enviado:
         semilla = f"{destino}|{plantilla}|{'|'.join(variables)}"
         wamid = "sim." + hashlib.sha256(semilla.encode()).hexdigest()[:24]
         log.info(
@@ -81,7 +88,16 @@ class ProveedorSimulado:
                 "plantilla": plantilla,
                 "wamid": wamid,
                 "texto": texto,
+                "botones": botones or [],
             },
+        )
+        return Enviado(wamid=wamid, proveedor=self.nombre)
+
+    def enviar_texto(self, destino: str, texto: str) -> Enviado:
+        wamid = "sim." + hashlib.sha256(f"{destino}|{texto}".encode()).hexdigest()[:24]
+        log.info(
+            "whatsapp simulado (respuesta)",
+            extra={"destino": destino, "wamid": wamid, "texto": texto},
         )
         return Enviado(wamid=wamid, proveedor=self.nombre)
 
@@ -104,7 +120,35 @@ class ProveedorMetaCloud:
     def url(self) -> str:
         return f"https://graph.facebook.com/{self.version}/{self.phone_number_id}/messages"
 
-    def enviar(self, destino: str, plantilla: str, variables: list[str], texto: str) -> Enviado:
+    def enviar(
+        self,
+        destino: str,
+        plantilla: str,
+        variables: list[str],
+        texto: str,
+        botones: list[str] | None = None,
+    ) -> Enviado:
+        componentes: list[dict] = []
+        if variables:
+            componentes.append(
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": v} for v in variables],
+                }
+            )
+        # Los botones EXISTEN en la plantilla aprobada en Meta; lo que se manda
+        # acá es el payload de cada uno, que es lo que vuelve por el webhook
+        # cuando el cliente lo toca. Por eso podemos meterle el id del turno.
+        for i, payload in enumerate(botones or []):
+            componentes.append(
+                {
+                    "type": "button",
+                    "sub_type": "quick_reply",
+                    "index": str(i),
+                    "parameters": [{"type": "payload", "payload": payload}],
+                }
+            )
+
         cuerpo = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
@@ -115,13 +159,8 @@ class ProveedorMetaCloud:
                 "language": {"code": settings.wa_idioma_plantillas},
             },
         }
-        if variables:
-            cuerpo["template"]["components"] = [
-                {
-                    "type": "body",
-                    "parameters": [{"type": "text", "text": v} for v in variables],
-                }
-            ]
+        if componentes:
+            cuerpo["template"]["components"] = componentes
 
         try:
             with httpx.Client(timeout=TIMEOUT) as cli:
@@ -144,6 +183,38 @@ class ProveedorMetaCloud:
             wamid = datos["messages"][0]["id"]
         except (KeyError, IndexError, TypeError):
             raise ErrorProveedor(f"Respuesta inesperada de Meta: {json.dumps(datos)[:300]}") from None
+        return Enviado(wamid=wamid, proveedor=self.nombre)
+
+    def enviar_texto(self, destino: str, texto: str) -> Enviado:
+        """Mensaje libre. SOLO vale dentro de la ventana de 24 h de servicio.
+
+        Se usa para contestarle a alguien que acaba de tocar un botón, que es
+        justo cuando la ventana está abierta. Fuera de la ventana Meta lo
+        rechaza, y está bien que lo haga: mandar texto libre a alguien que no
+        te escribió es exactamente lo que la ventana existe para impedir.
+        """
+        cuerpo = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": destino,
+            "type": "text",
+            "text": {"body": texto},
+        }
+        try:
+            with httpx.Client(timeout=TIMEOUT) as cli:
+                r = cli.post(
+                    self.url,
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    json=cuerpo,
+                )
+        except httpx.HTTPError as e:
+            raise ErrorProveedor(f"No pude hablar con Meta: {e}") from e
+        if r.status_code >= 400:
+            raise ErrorProveedor(f"Meta respondió {r.status_code}: {r.text[:400]}")
+        try:
+            wamid = r.json()["messages"][0]["id"]
+        except (KeyError, IndexError, TypeError):
+            raise ErrorProveedor("Respuesta inesperada de Meta al contestar") from None
         return Enviado(wamid=wamid, proveedor=self.nombre)
 
 
@@ -230,6 +301,43 @@ def buscar_plantilla(db: Session, empresa_id: int, codigo: str) -> PlantillaMens
     ).first()
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  Los botones del recordatorio
+# ══════════════════════════════════════════════════════════════════════════
+#
+# El orden de esta tupla ES el orden de los botones en la plantilla aprobada
+# en Meta: el índice 0 es el primero. Si algún día se reordenan allá, hay que
+# reordenar acá o el cliente va a confirmar cuando quiso cancelar.
+
+ACCIONES_BOTON = ("confirmar", "cancelar")
+
+PREFIJO_PAYLOAD = "t360"
+
+
+def payload_boton(turno_id: int, accion: str) -> str:
+    """`t360:481:cancelar` — lo que vuelve por el webhook cuando lo tocan.
+
+    El id del turno viaja adentro del payload en vez de resolverse después por
+    teléfono y fecha. Es la diferencia entre "el turno que este número tiene
+    más o menos ahora" y "ESTE turno". Con dos turnos el mismo día, lo segundo
+    es lo único que no se equivoca.
+    """
+    return f"{PREFIJO_PAYLOAD}:{turno_id}:{accion}"
+
+
+def leer_payload(payload: str) -> tuple[int, str] | None:
+    """Al revés. None si no es nuestro o si viene deformado."""
+    partes = (payload or "").split(":")
+    if len(partes) != 3 or partes[0] != PREFIJO_PAYLOAD:
+        return None
+    if partes[2] not in ACCIONES_BOTON:
+        return None
+    try:
+        return int(partes[1]), partes[2]
+    except ValueError:
+        return None
+
+
 def render(cuerpo: str, variables: list[str]) -> str:
     """`{{1}}` → primer variable, como las plantillas de Meta.
 
@@ -301,6 +409,14 @@ def enviar_plantilla(
     # Lo que se puede escribir en un log. En rubros de salud, nada.
     texto_visible = "(oculto: rubro sensible)" if es_sensible(empresa) else texto
 
+    # Los botones solo tienen sentido si hay un turno sobre el cual actuar.
+    # Un mensaje sin turno con un botón "No puedo ir" no sabría qué cancelar.
+    botones = (
+        [payload_boton(turno_id, accion) for accion in ACCIONES_BOTON]
+        if plantilla.con_botones and turno_id
+        else None
+    )
+
     # Meta exige que la plantilla esté aprobada. Mandar una sin aprobar es un
     # error garantizado que igual consume una llamada; mejor no salir.
     if proveedor.nombre == "meta" and not plantilla.aprobada_meta:
@@ -335,7 +451,9 @@ def enviar_plantilla(
     db.flush()
 
     try:
-        resultado = proveedor.enviar(destino, plantilla.codigo, variables, texto_visible)
+        resultado = proveedor.enviar(
+            destino, plantilla.codigo, variables, texto_visible, botones
+        )
     except ErrorProveedor as e:
         mensaje.estado = EstadoMensaje.FALLIDO
         mensaje.error = str(e)[:300]
@@ -343,6 +461,64 @@ def enviar_plantilla(
         db.commit()
         log.warning("envío de WhatsApp fallido",
                     extra={"empresa_id": empresa.id, "mensaje_id": mensaje.id})
+        return mensaje
+
+    mensaje.estado = EstadoMensaje.ENVIADO
+    mensaje.externo_id = resultado.wamid
+    db.commit()
+    return mensaje
+
+
+def responder_texto(
+    db: Session,
+    empresa: Empresa,
+    cliente: Cliente,
+    texto: str,
+) -> Mensaje | None:
+    """Contesta con un mensaje libre. Solo vale dentro de la ventana de 24 h.
+
+    SOBRE EL COSTO, Y ES UNA FECHA EN EL CALENDARIO
+    ------------------------------------------------
+    Hoy (agosto 2026) un mensaje de servicio dentro de la ventana de 24 h es
+    GRATIS para Meta, así que por defecto esto NO descuenta crédito: cobrarle
+    al negocio algo que no nos cuesta sería mentirle.
+
+    **El 1 de octubre de 2026 Meta empieza a cobrarlos.** Ese día hay que poner
+    WA_COBRAR_SERVICIO=true en el .env y estas respuestas pasan a descontar
+    como cualquier otro mensaje. Está como interruptor y no como constante
+    justamente para que ese día sea una línea del .env y no un deploy.
+    """
+    try:
+        destino = normalizar_ar(cliente.telefono)
+    except TelefonoInvalido:
+        return None
+
+    cobra = bool(settings.wa_cobrar_servicio)
+    if cobra:
+        try:
+            creditos_wa.consumir(db, empresa.id, detalle="respuesta de servicio")
+        except creditos_wa.SinSaldo:
+            return None
+
+    mensaje = Mensaje(
+        empresa_id=empresa.id,
+        cliente_id=cliente.id,
+        canal=CanalMensaje.WHATSAPP,
+        direccion=DireccionMensaje.SALIENTE,
+        contenido=None if es_sensible(empresa) else texto,
+        estado=EstadoMensaje.PENDIENTE,
+    )
+    db.add(mensaje)
+    db.flush()
+
+    try:
+        resultado = proveedor_de(empresa).enviar_texto(destino, texto)
+    except ErrorProveedor as e:
+        mensaje.estado = EstadoMensaje.FALLIDO
+        mensaje.error = str(e)[:300]
+        if cobra:
+            creditos_wa.devolver(db, empresa.id, mensaje.id, detalle="falló la respuesta")
+        db.commit()
         return mensaje
 
     mensaje.estado = EstadoMensaje.ENVIADO

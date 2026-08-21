@@ -34,6 +34,7 @@ from app.schemas.whatsapp import (
 )
 from app.services import creditos_wa
 from app.services import whatsapp as svc
+from app.services import whatsapp_entrante as entrante
 
 log = logging.getLogger("turnos360.whatsapp")
 
@@ -223,6 +224,11 @@ def guardar_credenciales(
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe esa empresa.")
 
+    # En claro y aparte: NO es un secreto (el secreto es el token, que va
+    # cifrado al lado) y es la llave por la que entra cada mensaje del webhook.
+    # Sin esto habría que desencriptar las credenciales de TODAS las empresas
+    # en cada mensaje que llega para saber de quién es.
+    empresa.wa_phone_number_id = datos.phone_number_id
     empresa.wa_credenciales = encriptar_credenciales(
         {
             "token": datos.token,
@@ -321,9 +327,23 @@ async def recibir_webhook(request: Request, db: DB) -> dict:
         return {"ok": True}  # cuerpo raro: no es nuestro problema, no reintentar
 
     actualizados = 0
+    entrantes = 0
     for entrada in datos.get("entry") or []:
         for cambio in entrada.get("changes") or []:
-            for estado in (cambio.get("value") or {}).get("statuses") or []:
+            valor = cambio.get("value") or {}
+
+            # Lo que MANDA el cliente: botones del recordatorio y texto libre.
+            # Va primero porque es lo que dispara acciones sobre turnos; los
+            # estados son solo contabilidad.
+            try:
+                entrantes += entrante.procesar(db, valor)
+            except Exception:
+                # Un mensaje raro no puede hacer que Meta reintente el lote
+                # entero durante días y termine desactivando el webhook.
+                log.exception("falló el procesamiento de un mensaje entrante")
+                db.rollback()
+
+            for estado in valor.get("statuses") or []:
                 nuevo = _ESTADOS.get(estado.get("status"))
                 wamid = estado.get("id")
                 if not nuevo or not wamid:
@@ -344,4 +364,4 @@ async def recibir_webhook(request: Request, db: DB) -> dict:
         db.commit()
     # Siempre 200: si devolvemos error, Meta reintenta el lote entero durante
     # días y termina desactivando el webhook.
-    return {"ok": True, "actualizados": actualizados}
+    return {"ok": True, "actualizados": actualizados, "entrantes": entrantes}

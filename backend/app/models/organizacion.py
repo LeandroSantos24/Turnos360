@@ -101,6 +101,10 @@ class Empresa(Base):
     # Galería de la landing: lista de URLs de fotos del local/trabajos.
     galeria: Mapped[list | None] = mapped_column(JSONB, default=list)
     wa_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)  # Fernet (app.core.crypto)
+    # El id del número en Meta. En claro y con índice a propósito: es por
+    # donde se resuelve a qué empresa pertenece cada mensaje entrante, y
+    # hacerlo desencriptando credenciales sería un Fernet por mensaje.
+    wa_phone_number_id: Mapped[str | None] = mapped_column(String(40), index=True)
     email_credenciales: Mapped[bytes | None] = mapped_column(BYTEA)
 
     # Campañas / automatizaciones del negocio (switches + config de cada una).

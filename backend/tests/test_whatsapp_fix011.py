@@ -314,7 +314,7 @@ def test_si_el_proveedor_falla_el_credito_vuelve(db, armar_empresa, monkeypatch)
     cliente = _cliente_ok(db, ctx)
     creditos_wa.acreditar(db, ctx.empresa.id, 5)
 
-    def explota(self, destino, plantilla, variables, texto):
+    def explota(self, destino, plantilla, variables, texto, botones=None):
         raise wa.ErrorProveedor("Meta respondió 500")
 
     monkeypatch.setattr(wa.ProveedorSimulado, "enviar", explota)
