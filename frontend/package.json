@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "node scripts/typecheck-baseline.mjs",
+    "check:seguimiento": "node scripts/verificar-seguimiento.mjs",
     "typecheck:actualizar": "node scripts/typecheck-baseline.mjs --actualizar"
   },
   "dependencies": {

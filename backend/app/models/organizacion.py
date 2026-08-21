@@ -96,6 +96,10 @@ class Empresa(Base):
     # formato se valida en el schema ANTES de escribirlos en un <script>.
     meta_pixel_id: Mapped[str | None] = mapped_column(String(40))
     google_tag_id: Mapped[str | None] = mapped_column(String(40))
+    # La etiqueta de conversión de Google Ads. Sin ella, un tag AW- mide
+    # visitas pero NO cuenta una sola conversión: Ads necesita el par
+    # completo AW-XXXX/etiqueta en el send_to. Solo aplica a tags AW-.
+    google_conversion_label: Mapped[str | None] = mapped_column(String(60))
     horarios_atencion: Mapped[dict | None] = mapped_column(JSONB, default=None)
     redes: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     # Galería de la landing: lista de URLs de fotos del local/trabajos.

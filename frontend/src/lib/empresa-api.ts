@@ -147,6 +147,11 @@ export function leerMiSuscripcion(): Promise<MiSuscripcion> {
 export interface SeguimientoConfig {
   meta_pixel_id: string | null;
   google_tag_id: string | null;
+  /**
+   * Etiqueta de conversión de Google Ads. Solo aplica con un tag AW-.
+   * Sin ella, Ads mide visitas pero no cuenta una sola conversión.
+   */
+  google_conversion_label: string | null;
 }
 
 export function leerSeguimiento(): Promise<SeguimientoConfig> {
@@ -163,11 +168,28 @@ export function guardarSeguimiento(
 // Señas con Mercado Pago (config del negocio, solo dueño)
 // ============================================================
 
+export interface CuentaMP {
+  id: number | null;
+  nombre: string;
+  email: string;
+  pais: string;
+}
+
 export interface SenasConfig {
   sena_activa: boolean;
   sena_monto: number | null;
   cobro_modo: "ninguno" | "sena" | "total";
   mp_conectado: boolean;
+  /**
+   * A qué cuenta de Mercado Pago quedó conectado. "Conectado ✓" a secas no
+   * dice nada: el dueño tiene que poder ver que es SU cuenta y no otra.
+   */
+  mp_cuenta: CuentaMP | null;
+}
+
+/** Revalida contra Mercado Pago el token ya guardado. */
+export function probarSenas(): Promise<{ ok: boolean; cuenta: CuentaMP }> {
+  return api.post<{ ok: boolean; cuenta: CuentaMP }>("/empresa/senas/probar", {});
 }
 
 export function obtenerSenas(): Promise<SenasConfig> {

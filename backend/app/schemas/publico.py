@@ -41,6 +41,7 @@ class VidrieraOut(BaseModel):
     reserva_permite_cancelar: bool = True
     meta_pixel_id: str | None = None
     google_tag_id: str | None = None
+    google_conversion_label: str | None = None
     color_marca: str | None = None
     horarios_atencion: dict | None = None
     redes: dict = {}

@@ -50,6 +50,7 @@ import {
 } from "./vidriera-ui";
 import { IconoWhatsApp } from "@/components/iconos-redes";
 import { registrarReservaConfirmada } from "@/components/scripts-seguimiento";
+import { destinoConversion } from "@/lib/seguimiento";
 import { duracionLegible } from "@/lib/duracion";
 
 type Paso = 1 | 2 | 3 | 4 | 5;
@@ -343,7 +344,12 @@ export function ReservaWizard({
       // Conversión para las campañas del negocio. Sin este evento el pixel
       // mide visitas pero no sabe cuáles terminaron en turno, que es lo único
       // que sirve para decidir si la publicidad rinde. Nunca rompe la reserva.
-      registrarReservaConfirmada(servicio?.precio ?? null);
+      registrarReservaConfirmada(
+        servicio?.precio ?? null,
+        // Sin esto la conversión llega a Analytics pero NO a Google Ads,
+        // que necesita el par AW-XXXX/etiqueta en el send_to.
+        destinoConversion(v.google_tag_id, v.google_conversion_label),
+      );
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError("Ese horario se acaba de ocupar. Elegí otro, por favor.");

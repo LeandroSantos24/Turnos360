@@ -22,6 +22,7 @@ import {
   obtenerConfigEmpresa,
   obtenerSenas,
   guardarSenas,
+  probarSenas,
   type SenasConfig,
   LandingConfig,
   HorariosAtencion,
@@ -809,6 +810,7 @@ function SeccionSenas() {
   const [monto, setMonto] = useState("");
   const [token, setToken] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [probando, setProbando] = useState(false);
 
   useEffect(() => {
     obtenerSenas()
@@ -819,6 +821,20 @@ function SeccionSenas() {
       })
       .catch(() => toast.error("No se pudo cargar la config de señas"));
   }, []);
+
+  async function probar() {
+    setProbando(true);
+    try {
+      const r = await probarSenas();
+      setConfig((c) => (c ? { ...c, mp_cuenta: r.cuenta } : c));
+      toast.success(`Mercado Pago responde bien · cuenta: ${r.cuenta.nombre}`);
+    } catch (e) {
+      // El backend manda el motivo escrito para mostrárselo tal cual.
+      toast.error(e instanceof ApiError ? e.message : "No pude probar la conexión");
+    } finally {
+      setProbando(false);
+    }
+  }
 
   async function guardar() {
     const montoNum = monto.trim() === "" ? null : Number(monto);
@@ -855,11 +871,45 @@ function SeccionSenas() {
       className="lg:col-span-2"
     >
       <div className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          {config?.mp_conectado
-            ? "Cuenta de Mercado Pago conectada ✓"
-            : "Todavía sin conectar Mercado Pago"}
-        </p>
+        {/* Qué cuenta quedó conectada, y un botón para confirmar que
+            sigue andando. Antes acá decía "conectada ✓" sin haber verificado
+            nada: si el dueño pegaba la Public Key en vez del Access Token,
+            el tilde verde aparecía igual y el problema salía a la luz recién
+            cuando un cliente no podía pagar. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {config?.mp_conectado ? (
+            <div className="flex-1 rounded-xl border bg-muted/40 p-3 text-xs">
+              <p className="font-medium text-foreground">
+                Conectado a Mercado Pago ✓
+              </p>
+              {config.mp_cuenta ? (
+                <p className="mt-0.5 text-muted-foreground">
+                  Cuenta: <strong>{config.mp_cuenta.nombre}</strong>
+                  {config.mp_cuenta.email ? ` · ${config.mp_cuenta.email}` : ""}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-muted-foreground">
+                  Se conectó antes de que verificáramos la cuenta. Tocá
+                  &ldquo;Probar conexión&rdquo; para confirmar que anda.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="flex-1 text-xs text-muted-foreground">
+              Todavía sin conectar Mercado Pago
+            </p>
+          )}
+          {config?.mp_conectado && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={probar}
+              disabled={probando}
+            >
+              {probando ? "Probando…" : "Probar conexión"}
+            </Button>
+          )}
+        </div>
 
         {/* Qué se cobra al reservar: lo elige el negocio. */}
         <div className="grid gap-2 sm:grid-cols-3">

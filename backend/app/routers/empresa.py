@@ -6,6 +6,7 @@ from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
 from app.schemas.empresa import MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
+from app.services import mercadopago as mp
 
 router = APIRouter(prefix="/empresa", tags=["empresa"])
 
@@ -88,7 +89,26 @@ def guardar_senas(datos: SenasConfigIn, empresa_id: EmpresaActual, db: DB) -> Se
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Para activar señas hay que definir el monto.",
         )
-    return svc.guardar_senas(db, empresa_id, datos)
+    try:
+        return svc.guardar_senas(db, empresa_id, datos)
+    except mp.TokenInvalido as e:
+        # 422 y no 500: no es un error del sistema, es un dato mal pegado.
+        # El mensaje viene escrito para mostrárselo al dueño tal cual.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+
+
+@router.post("/senas/probar", dependencies=[Depends(gate_dueno)])
+def probar_senas(empresa_id: EmpresaActual, db: DB) -> dict:
+    """Revalida contra Mercado Pago el token ya guardado.
+
+    Es el botón que permite contestar «¿está funcionando?» sin tener que
+    esperar a que un cliente intente pagar.
+    """
+    try:
+        cuenta = svc.probar_mp(db, empresa_id)
+    except mp.TokenInvalido as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    return {"ok": True, "cuenta": cuenta}
 
 
 @router.get(

@@ -254,6 +254,7 @@ Table empresa {
   reserva_pide_nacimiento boolean [not null]
   meta_pixel_id varchar(40)
   google_tag_id varchar(40)
+  google_conversion_label varchar(60)
   horarios_atencion jsonb
   redes jsonb
   galeria jsonb

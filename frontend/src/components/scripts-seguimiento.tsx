@@ -7,18 +7,17 @@
  * página en sus propias campañas. Si no cargó ninguno, este componente no
  * renderiza nada y la vidriera no pide un solo byte de más.
  *
- * SEGURIDAD: los IDs se escriben dentro de un <script>. El backend ya los
- * valida contra una lista blanca cerrada (solo dígitos para Meta, formato
- * G-/AW- para Google), pero acá se vuelve a chequear: cualquier ID que no
- * calce simplemente no se inyecta. Es la clase de dato donde conviene
- * desconfiar en las dos puntas, porque un ID mal formado dentro de un script
- * es XSS en la página donde los clientes dejan su teléfono.
+ * SEGURIDAD: los IDs se escriben dentro de un <script>. La validación vive en
+ * `@/lib/seguimiento` — sin React ni Next adentro, justamente para poder
+ * ejecutarla sola contra una lista de venenos (`npm run check:seguimiento`).
+ * Cualquier valor que no calce simplemente no se inyecta.
  */
 
 import Script from "next/script";
 
-const META_OK = /^\d{6,20}$/;
-const GOOGLE_OK = /^(G|AW|GT|UA)-[A-Z0-9-]{4,30}$/i;
+import { destinoConversion, pixelValido, tagValido } from "@/lib/seguimiento";
+
+export { destinoConversion };
 
 export function ScriptsSeguimiento({
   metaPixelId,
@@ -36,10 +35,8 @@ export function ScriptsSeguimiento({
   habilitado?: boolean;
 }) {
   if (!habilitado) return null;
-  const meta = (metaPixelId ?? "").trim();
-  const google = (googleTagId ?? "").trim();
-  const metaValido = META_OK.test(meta) ? meta : null;
-  const googleValido = GOOGLE_OK.test(google) ? google : null;
+  const metaValido = pixelValido(metaPixelId);
+  const googleValido = tagValido(googleTagId);
 
   if (!metaValido && !googleValido) return null;
 
@@ -91,10 +88,24 @@ gtag('js',new Date());gtag('config','${googleValido}');`}
  * pero no sabe cuáles terminaron en un turno, que es lo único que le importa
  * para decidir si la publicidad le rinde.
  *
- * Nunca rompe la reserva: si el script no cargó (bloqueador, sin conexión),
- * falla en silencio.
+ * POR QUÉ SON DOS EVENTOS DE GOOGLE Y NO UNO
+ * -------------------------------------------
+ * `generate_lead` es un evento recomendado de Google ANALYTICS. Aparece en
+ * GA4 y sirve para mirar el embudo, pero **Google ADS no lo cuenta como
+ * conversión**. Ads necesita su propio evento con el par completo
+ * AW-XXXXXXXXX/etiqueta en el `send_to`.
+ *
+ * Antes solo se mandaba `generate_lead`. Un negocio que conectaba su tag de
+ * Ads veía las visitas subir y las conversiones en CERO, y concluía que la
+ * publicidad no le rendía — con un dato falso. Medir mal es peor que no medir.
+ *
+ * Nunca rompe la reserva: si el script no cargó (bloqueador, sin conexión, el
+ * visitante rechazó las cookies), falla en silencio.
  */
-export function registrarReservaConfirmada(valor?: number | null) {
+export function registrarReservaConfirmada(
+  valor?: number | null,
+  destino?: string | null,
+) {
   try {
     const w = window as unknown as {
       fbq?: (...args: unknown[]) => void;
@@ -104,10 +115,19 @@ export function registrarReservaConfirmada(valor?: number | null) {
       value: valor ?? undefined,
       currency: "ARS",
     });
+    // Analytics: el embudo.
     w.gtag?.("event", "generate_lead", {
       value: valor ?? undefined,
       currency: "ARS",
     });
+    // Ads: la conversión de verdad, solo si el negocio cargó la etiqueta.
+    if (destino) {
+      w.gtag?.("event", "conversion", {
+        send_to: destino,
+        value: valor ?? undefined,
+        currency: "ARS",
+      });
+    }
   } catch {
     /* medir nunca puede romper una reserva */
   }

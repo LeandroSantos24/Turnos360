@@ -65,6 +65,25 @@ def actualizar_landing(db: Session, empresa_id: int, datos: LandingConfig) -> di
     db.commit()
     return obtener_landing(db, empresa_id)
 
+def probar_mp(db: Session, empresa_id: int) -> dict:
+    """Revalida el token guardado. Para el botón «Probar conexión».
+
+    Existe porque un token que andaba puede dejar de andar: el dueño lo
+    revoca desde Mercado Pago, cambia de cuenta, o da de baja la
+    aplicación. Sin esto, la única forma de enterarse es que un cliente no
+    pueda pagar.
+    """
+    empresa = db.get(Empresa, empresa_id)
+    token = mp.token_de(empresa)
+    if not token:
+        raise mp.TokenInvalido("Todavía no conectaste Mercado Pago.")
+    cuenta = mp.validar_token(token)
+    # Se re-guarda por si la cuenta cambió de nombre.
+    mp.guardar_token(empresa, token, cuenta)
+    db.commit()
+    return cuenta
+
+
 def config_senas(db: Session, empresa_id: int) -> dict:
     """Estado de señas para el panel (sin exponer el token)."""
     empresa = db.get(Empresa, empresa_id)
@@ -73,6 +92,7 @@ def config_senas(db: Session, empresa_id: int) -> dict:
         "sena_monto": float(empresa.sena_monto) if empresa.sena_monto else None,
         "cobro_modo": empresa.cobro_modo or "ninguno",
         "mp_conectado": empresa.mp_credenciales is not None,
+        "mp_cuenta": mp.cuenta_de(empresa),
     }
 
 
@@ -84,7 +104,11 @@ def guardar_senas(db: Session, empresa_id: int, datos) -> dict:
     empresa.sena_activa = datos.cobro_modo != "ninguno"
     empresa.sena_monto = datos.sena_monto
     if datos.mp_access_token and datos.mp_access_token.strip():
-        mp.guardar_token(empresa, datos.mp_access_token)
+        # Se valida ANTES de guardar. Si el token no sirve, no se guarda
+        # nada y el dueño ve el motivo — en vez de un tilde verde mentiroso
+        # y un cliente que dentro de tres días no puede pagar.
+        cuenta = mp.validar_token(datos.mp_access_token)
+        mp.guardar_token(empresa, datos.mp_access_token, cuenta)
     db.commit()
     return config_senas(db, empresa_id)
 
@@ -164,6 +188,7 @@ def obtener_seguimiento(db: Session, empresa_id: int) -> dict:
     return {
         "meta_pixel_id": empresa.meta_pixel_id,
         "google_tag_id": empresa.google_tag_id,
+        "google_conversion_label": empresa.google_conversion_label,
     }
 
 
@@ -173,9 +198,18 @@ def actualizar_seguimiento(db: Session, empresa_id: int, datos) -> dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
     empresa.meta_pixel_id = datos.meta_pixel_id
     empresa.google_tag_id = datos.google_tag_id
+    # La etiqueta solo sirve con un tag de Ads. Si el negocio pasó a un
+    # G- de Analytics, se limpia sola: dejarla colgada haría que el día
+    # que vuelva a Ads dispare contra una conversión que ya no existe.
+    empresa.google_conversion_label = (
+        datos.google_conversion_label
+        if (datos.google_tag_id or "").upper().startswith("AW-")
+        else None
+    )
     db.commit()
     db.refresh(empresa)
     return {
         "meta_pixel_id": empresa.meta_pixel_id,
         "google_tag_id": empresa.google_tag_id,
+        "google_conversion_label": empresa.google_conversion_label,
     }

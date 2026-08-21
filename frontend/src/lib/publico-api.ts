@@ -38,6 +38,8 @@ export interface Vidriera {
   reserva_permite_cancelar: boolean;
   meta_pixel_id: string | null;
   google_tag_id: string | null;
+  /** Solo con un tag AW-. Sin esto, Google Ads no cuenta la conversión. */
+  google_conversion_label: string | null;
   color_marca: string | null;
   horarios_atencion: Record<string, Franja[]> | null;
   redes: Record<string, string>;

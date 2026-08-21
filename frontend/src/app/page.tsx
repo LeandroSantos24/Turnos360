@@ -262,7 +262,7 @@ export default function Page() {
         <div style={{ flex: "1 1 420px", minWidth: 300 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho para barberías, peluquerías y salones de Argentina</div>
           <h1 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
-          <p style={{ fontSize: "clamp(16px,2vw,19px)", lineHeight: 1.6, color: "#5d6578", margin: "0 0 28px", maxWidth: 520, textWrap: "pretty" as any }}>Con Turnos360 tus clientes reservan solos, pagan la seña con Mercado Pago y reciben recordatorios por WhatsApp. Vos atendés; el sistema agenda, cobra y te muestra los números.</p>
+          <p style={{ fontSize: "clamp(16px,2vw,19px)", lineHeight: 1.6, color: "#5d6578", margin: "0 0 28px", maxWidth: 520, textWrap: "pretty" as any }}>Con Turnos360 tus clientes reservan solos, pagan la seña con Mercado Pago y reciben recordatorios automáticos. Vos atendés; el sistema agenda, cobra y te muestra los números.</p>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
             <a href={WA_LINK} target="_blank" style={{ display: "flex", alignItems: "center", gap: 10, background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#8bc540" }} />

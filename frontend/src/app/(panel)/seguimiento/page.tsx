@@ -90,6 +90,8 @@ export default function SeguimientoPage() {
         await guardarSeguimiento({
           meta_pixel_id: form.meta_pixel_id?.trim() || null,
           google_tag_id: form.google_tag_id?.trim() || null,
+          google_conversion_label:
+            form.google_conversion_label?.trim() || null,
         }),
       );
       toast.success("Guardado");
@@ -164,6 +166,33 @@ export default function SeguimientoPage() {
         <p className="text-xs text-muted-foreground">
           Tiene la forma G-XXXXXXX (Analytics) o AW-XXXXXXXXX (Ads).
         </p>
+
+        {/* La etiqueta SOLO tiene sentido con un tag de Ads, y sin ella Ads
+            no cuenta ni una conversión: necesita el par AW-XXXX/etiqueta.
+            Aparece sola cuando hace falta para no confundir a nadie que use
+            Analytics. */}
+        {(form.google_tag_id ?? "").toUpperCase().startsWith("AW-") && (
+          <div className="mt-4 space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <Label htmlFor="label">Etiqueta de conversión</Label>
+            <Input
+              id="label"
+              placeholder="AbC-D_efG-h12_34-567"
+              value={form.google_conversion_label ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  google_conversion_label: e.target.value || null,
+                })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              <strong>Sin esto, Google Ads no cuenta ni una conversión</strong>{" "}
+              — vas a ver visitas y cero reservas, y no es cierto. La sacás de
+              Google Ads → Objetivos → tu conversión → «Configurar con la
+              etiqueta»: es la parte que va después de la barra.
+            </p>
+          </div>
+        )}
       </Tarjeta>
 
       <section className="rounded-2xl border bg-muted/40 p-5 text-sm">

@@ -92,6 +92,7 @@ def vidriera(db: Session, slug: str) -> dict:
         "reserva_permite_cancelar": bool(empresa.reserva_permite_cancelar),
         "meta_pixel_id": empresa.meta_pixel_id,
         "google_tag_id": empresa.google_tag_id,
+        "google_conversion_label": empresa.google_conversion_label,
         "color_marca": empresa.color_marca,
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},

@@ -99,6 +99,9 @@ class SenasConfigOut(BaseModel):
     sena_monto: float | None
     cobro_modo: str = "ninguno"
     mp_conectado: bool
+    # Nombre y mail de la cuenta de MP conectada. «Conectado ✓» a secas no
+    # dice nada: el dueño tiene que poder ver que es SU cuenta.
+    mp_cuenta: dict | None = None
 
 
 class SenasConfigIn(BaseModel):
@@ -218,6 +221,10 @@ class ReglasReservaConfig(BaseModel):
 # clientes que reservan. Por eso el formato es una lista blanca cerrada.
 _META_PIXEL = re.compile(r"^\d{6,20}$")                    # solo dígitos
 _GOOGLE_TAG = re.compile(r"^(G|AW|GT|UA)-[A-Z0-9-]{4,30}$", re.IGNORECASE)
+# La etiqueta de conversión de Ads: letras, números, guiones y guión bajo.
+# Google las genera con ese alfabeto (ej: AbC-D_efG-h12_34-567). Va adentro
+# del mismo <script>, así que se valida con el mismo criterio cerrado.
+_GOOGLE_LABEL = re.compile(r"^[A-Za-z0-9_-]{6,40}$")
 
 
 class SeguimientoConfig(BaseModel):
@@ -225,6 +232,8 @@ class SeguimientoConfig(BaseModel):
 
     meta_pixel_id: str | None = None
     google_tag_id: str | None = None
+    # Solo tiene sentido con un tag AW-. Con G- (Analytics) se ignora.
+    google_conversion_label: str | None = None
 
     @field_validator("meta_pixel_id", mode="after")
     @classmethod
@@ -250,3 +259,17 @@ class SeguimientoConfig(BaseModel):
                 "El ID de Google tiene la forma G-XXXXXXX o AW-XXXXXXXXX."
             )
         return limpio.upper()
+
+    @field_validator("google_conversion_label", mode="after")
+    @classmethod
+    def _validar_label(cls, v: str | None) -> str | None:
+        limpio = (v or "").strip()
+        if not limpio:
+            return None
+        # A propósito NO se pasa a mayúsculas: las etiquetas de Google
+        # distinguen mayúsculas de minúsculas y cambiarlas la rompe.
+        if not _GOOGLE_LABEL.match(limpio):
+            raise ValueError(
+                "La etiqueta de conversión son letras, números, guiones y guión bajo (algo como AbC-D_efG-h12_34-567). La sacás de Google Ads → Objetivos → tu conversión → Configurar con la etiqueta."
+            )
+        return limpio
