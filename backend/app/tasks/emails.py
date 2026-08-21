@@ -28,6 +28,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno, Usuario
 from app.models.enums import CanalMensaje, EstadoMensaje, EstadoTurno
+from app.services import whatsapp as wa
 from app.services.empresa import automs_de
 
 log = logging.getLogger(__name__)
@@ -168,6 +169,41 @@ def _cargar(db, turno_id: int):
         "servicio": db.get(Servicio, turno.servicio_id) if turno.servicio_id else None,
         "recurso": db.get(Recurso, turno.recurso_id) if turno.recurso_id else None,
     }
+
+
+def _intento_whatsapp(db, ctx, codigo: str) -> bool:
+    """Intenta el aviso por WhatsApp. True si salió y NO hay que mandar el email.
+
+    El email pasa a ser el respaldo, no el canal principal. Si el WhatsApp
+    salió, mandar además el mail es molestar dos veces por lo mismo; si no
+    salió —sin saldo, sin teléfono, sin consentimiento, sin plantilla— el
+    mail sale como salía antes y el cliente igual se entera.
+
+    Nunca levanta: esto corre adentro de un barrido que toca todas las
+    empresas, y una mal configurada no puede frenar a las otras cien.
+    """
+    empresa, cliente, turno = ctx["empresa"], ctx["cliente"], ctx["turno"]
+    servicio = wa.servicio_para_mensaje(
+        empresa, ctx["servicio"].nombre if ctx["servicio"] else None
+    )
+    try:
+        mensaje = wa.enviar_plantilla(
+            db,
+            empresa,
+            cliente,
+            codigo,
+            [
+                cliente.nombre,
+                servicio,
+                empresa.nombre,
+                _fecha_legible(turno.fecha_inicio),
+            ],
+            turno_id=turno.id,
+        )
+    except Exception:
+        log.exception("falló el intento de WhatsApp", extra={"turno_id": turno.id})
+        return False
+    return bool(mensaje and mensaje.estado == EstadoMensaje.ENVIADO)
 
 
 def _registrar(db, *, empresa_id, cliente_id, turno_id, contenido, ok, error=None):
@@ -348,7 +384,11 @@ def enviar_recordatorio(turno_id: int) -> None:
     """24 h antes."""
     with SessionLocal() as db:
         ctx = _cargar(db, turno_id)
-        if not ctx or not ctx["cliente"] or not ctx["cliente"].email:
+        if not ctx or not ctx["cliente"]:
+            return
+        if _intento_whatsapp(db, ctx, "recordatorio_24h"):
+            return
+        if not ctx["cliente"].email:
             return
         turno, empresa = ctx["turno"], ctx["empresa"]
         servicio = ctx["servicio"].nombre if ctx["servicio"] else "tu turno"
@@ -376,7 +416,11 @@ def enviar_recordatorio_2h(turno_id: int) -> None:
     """2 h antes (el segundo del doble recordatorio)."""
     with SessionLocal() as db:
         ctx = _cargar(db, turno_id)
-        if not ctx or not ctx["cliente"] or not ctx["cliente"].email:
+        if not ctx or not ctx["cliente"]:
+            return
+        if _intento_whatsapp(db, ctx, "recordatorio_2h"):
+            return
+        if not ctx["cliente"].email:
             return
         turno, empresa = ctx["turno"], ctx["empresa"]
         servicio = ctx["servicio"].nombre if ctx["servicio"] else "tu turno"

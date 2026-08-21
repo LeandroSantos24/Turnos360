@@ -32,6 +32,7 @@ from app.models.items import ItemTurno
 from app.models.cupon import CuponDescuento
 
 from app.models.saas import PagoSuscripcion  # cobranza del SaaS (super-admin)
+from app.models.whatsapp import MovimientoWhatsapp, SaldoWhatsapp
 
 __all__ = [
     "CuponDescuento",
@@ -46,6 +47,7 @@ __all__ = [
     "PlantillaMensaje", "Mensaje",
     "LogAuditoria",
     "PagoSuscripcion",
+    "SaldoWhatsapp", "MovimientoWhatsapp",
     "Turno",
     "ItemTurno",
 ]

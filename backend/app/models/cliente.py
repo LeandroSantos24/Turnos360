@@ -35,6 +35,14 @@ class Cliente(TenantMixin, Base):
     acepta_marketing: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    # Consentimiento para los mensajes de WhatsApp del turno (utility).
+    # Arranca en True, al revés que acepta_marketing, porque no es
+    # publicidad: le avisa a alguien sobre un turno que esa misma persona
+    # sacó, al teléfono que dio para sacarlo. Las CAMPAÑAS siguen mirando
+    # acepta_marketing.
+    acepta_whatsapp: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
     ultimo_inactivo_enviado: Mapped[dt.date | None] = mapped_column(Date)
     campos_rubro: Mapped[dict] = mapped_column(JSONB, default=dict)  # lo define el preset
     preferencias: Mapped[dict] = mapped_column(JSONB, default=dict)

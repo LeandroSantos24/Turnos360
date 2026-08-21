@@ -67,6 +67,7 @@ const NAV: NavItem[] = [
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
+  { href: "/equipo", label: "Equipo", icon: Users, grupo: "negocio", soloDueno: true },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
   { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards" },
   { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },

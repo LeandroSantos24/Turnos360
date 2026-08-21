@@ -53,6 +53,26 @@ class Settings(BaseSettings):
     smtp_pass: str = ""          # contraseña de APLICACIÓN (no la de la cuenta)
     smtp_from: str = ""          # opcional; default = smtp_user
 
+    # ── WhatsApp ──────────────────────────────────────────────────────
+    # El freno de mano del sistema. Con 'simulado' NO sale un mensaje a la
+    # calle aunque todas las empresas tengan sus tokens cargados: el
+    # circuito corre entero (descuenta saldo, registra el mensaje, escribe
+    # el texto en el log) pero nadie recibe nada. Es el default a
+    # propósito: para pasar a 'meta' hay que decidirlo.
+    wa_proveedor: str = "simulado"          # simulado | meta
+    wa_api_version: str = "v21.0"
+    wa_idioma_plantillas: str = "es_AR"
+    # Precio de venta de UN mensaje, en pesos. Calculado sobre el PEOR
+    # escenario de tarifa (USD 0,0260) + impuestos + 20 % de rentabilidad.
+    # Ver app/services/creditos_wa.py. Se cambia acá cuando se mueva el
+    # dólar o cuando sepamos la tarifa real de Meta para Argentina.
+    wa_precio_mensaje_ars: float = 73.0
+    # Webhook de estados. Sin estos dos, el endpoint público rechaza todo:
+    # es un endpoint sin autenticación nuestra y la firma es la única
+    # defensa contra que cualquiera marque mensajes como leídos.
+    wa_webhook_verify_token: str = ""
+    wa_app_secret: str = ""
+
     # Zona horaria de los negocios. El motor de agenda trabaja con "hora de
     # pared etiquetada UTC" (un turno de las 10:00 se guarda como 10:00+00:00),
     # así que para saber si un horario ya pasó hay que preguntar qué hora es

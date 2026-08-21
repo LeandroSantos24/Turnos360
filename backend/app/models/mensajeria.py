@@ -50,4 +50,7 @@ class Mensaje(TenantMixin, Base):
         enum_pg(EstadoMensaje, "estado_mensaje"), default=EstadoMensaje.PENDIENTE
     )
     error: Mapped[str | None] = mapped_column(String(300))
+    # El id que devuelve el proveedor (wamid de Meta). Es la única llave
+    # que trae el webhook de "entregado"/"leído" para encontrar esta fila.
+    externo_id: Mapped[str | None] = mapped_column(String(80), index=True)
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

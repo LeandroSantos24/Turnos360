@@ -15,6 +15,41 @@
  *   npm run typecheck              -> verifica contra la línea de base
  *   npm run typecheck:actualizar   -> regenera la línea de base
  *
+ *
+ * QUÉ CUENTA COMO "EL MISMO ERROR"  (y por qué NO es el texto del mensaje)
+ * ═══════════════════════════════════════════════════════════════════════
+ * La primera versión comparaba `archivo :: TSxxxx :: mensaje completo`, y eso
+ * daba FALSOS POSITIVOS: el texto que imprime tsc no es estable entre
+ * corridas. TypeScript ordena los miembros de una unión según el orden en que
+ * los fue resolviendo, y eso cambia cuando cambia el conjunto de archivos del
+ * proyecto. El MISMO error se imprime distinto:
+ *
+ *   ... type '(value: "persona" | "box" | "equipo" | null, ...
+ *   ... type '(value: "equipo" | "persona" | "box" | null, ...
+ *
+ * Peor todavía cuando la unión es larga y tsc la abrevia, porque también
+ * cambia CUÁL miembro sobrevive al recorte:
+ *
+ *   ... Omit<..., "color"     | ... 3 more ... | "defaultValue"> ...
+ *   ... Omit<..., "className" | ... 3 more ... | "defaultValue"> ...
+ *
+ * Agregar un archivo nuevo y sin errores alcanzaba para que 4 errores viejos
+ * se vieran como nuevos. Un guardián que grita cuando no pasó nada se termina
+ * ignorando, y ese día deja de servir para lo único que existe.
+ *
+ * Así que la identidad es `archivo :: código`, CONTADA:
+ *
+ *   · aparece un TS2322 en un archivo que no tenía  -> ROJO
+ *   · un archivo pasa de 1 a 2 errores TS2322       -> ROJO
+ *   · el mismo error con el texto reordenado        -> verde, como debe ser
+ *
+ * Lo que se resigna: cambiar un TS2322 por OTRO TS2322 distinto en el mismo
+ * archivo, en la misma corrida, pasa desapercibido. Es un caso raro y de bajo
+ * riesgo al lado de un guardián que da rojo porque sí.
+ *
+ * El mensaje se sigue guardando en typecheck-baseline.txt: sirve para leerlo y
+ * saber qué deuda hay, no para comparar.
+ *
  * Las firmas se guardan SIN número de línea a propósito: agregar un comentario
  * corre todas las líneas de un archivo y no debería romper la verificación.
  */
@@ -31,13 +66,6 @@ const ACTUALIZAR = process.argv.includes("--actualizar");
 const V = "\x1b[0;32m", R = "\x1b[0;31m", A = "\x1b[0;33m", C = "\x1b[0;36m", N = "\x1b[0m";
 
 /**
- * Comprueba que tsc se pueda ejecutar de verdad.
- *
- * Sin esto, si `npx` o `typescript` no están, execSync tira una excepción sin
- * salida parseable y el script concluye "0 errores": una línea de base vacía
- * y un guardián que no guarda nada. Un falso verde es peor que un rojo.
- */
-/**
  * Preferimos el binario local a `npx`: npx puede no estar en el PATH (nvm a
  * medio cargar, cron, un script no interactivo) y además, si no encuentra el
  * paquete, se lo baja de internet, que no es lo que queremos acá.
@@ -45,6 +73,13 @@ const V = "\x1b[0;32m", R = "\x1b[0;31m", A = "\x1b[0;33m", C = "\x1b[0;36m", N 
 const TSC_LOCAL = join(RAIZ, "node_modules", ".bin", "tsc");
 const TSC = existsSync(TSC_LOCAL) ? JSON.stringify(TSC_LOCAL) : "npx tsc";
 
+/**
+ * Comprueba que tsc se pueda ejecutar de verdad.
+ *
+ * Sin esto, si `npx` o `typescript` no están, execSync tira una excepción sin
+ * salida parseable y el script concluye "0 errores": una línea de base vacía
+ * y un guardián que no guarda nada. Un falso verde es peor que un rojo.
+ */
 function exigirTsc() {
   try {
     const v = execSync(`${TSC} --version`, { cwd: RAIZ, encoding: "utf8", stdio: "pipe" });
@@ -87,18 +122,34 @@ function correrTsc() {
   }
 }
 
-/**
- * archivo(12,34): error TS2322: Blah  ->  archivo :: TS2322 :: Blah
- * Sin línea ni columna: mover código no invalida la línea de base.
- */
-function firma(linea) {
+/** `archivo(12,34): error TS2322: Blah` -> { archivo, codigo, mensaje } */
+function partirError(linea) {
   const m = /^(.*?)\(\d+,\d+\): error (TS\d+): (.*)$/.exec(linea);
-  if (!m) return linea.trim();
-  return `${m[1]} :: ${m[2]} :: ${m[3].trim()}`;
+  if (!m) return { archivo: linea.trim(), codigo: "TS?", mensaje: "" };
+  return { archivo: m[1], codigo: m[2], mensaje: m[3].trim() };
+}
+
+/** `archivo :: TS2322 :: Blah` (formato del baseline) -> lo mismo. */
+function partirLineaBase(linea) {
+  const p = linea.split(" :: ");
+  if (p.length < 2) return { archivo: linea.trim(), codigo: "TS?", mensaje: "" };
+  return { archivo: p[0].trim(), codigo: p[1].trim(), mensaje: p.slice(2).join(" :: ").trim() };
+}
+
+/** La identidad que se compara. El mensaje queda AFUERA a propósito (ver arriba). */
+const clave = (e) => `${e.archivo} :: ${e.codigo}`;
+
+/** Cuenta cuántas veces aparece cada clave. */
+function contar(errores) {
+  const m = new Map();
+  for (const e of errores) m.set(clave(e), (m.get(clave(e)) ?? 0) + 1);
+  return m;
 }
 
 exigirTsc();
-const actuales = correrTsc().map(firma).sort();
+const actuales = correrTsc()
+  .map(partirError)
+  .sort((a, b) => `${a.archivo}${a.codigo}${a.mensaje}`.localeCompare(`${b.archivo}${b.codigo}${b.mensaje}`));
 
 // ── Modo actualizar ─────────────────────────────────────────────────────────
 if (ACTUALIZAR) {
@@ -112,13 +163,19 @@ if (ACTUALIZAR) {
     "# `npm run typecheck` falla si aparece un error que NO esté en esta lista.",
     "# El objetivo es que este archivo solo se achique con el tiempo.",
     "#",
+    "# La comparación se hace por ARCHIVO + CÓDIGO, contando cuántos hay de cada",
+    "# uno. El texto del mensaje se guarda para poder leerlo, pero NO se compara:",
+    "# tsc reordena los miembros de las uniones entre corridas y el mismo error",
+    "# se imprime distinto. Ver el comentario de scripts/typecheck-baseline.mjs.",
+    "#",
     "# Para regenerarlo (solo después de arreglar errores de verdad):",
     "#     npm run typecheck:actualizar",
     "#",
     `# Errores congelados: ${actuales.length}`,
     "",
   ].join("\n");
-  writeFileSync(BASELINE, cabecera + actuales.join("\n") + "\n", "utf8");
+  const cuerpo = actuales.map((e) => `${e.archivo} :: ${e.codigo} :: ${e.mensaje}`);
+  writeFileSync(BASELINE, cabecera + cuerpo.join("\n") + "\n", "utf8");
   console.log(`${V}✔${N} Línea de base regenerada: ${actuales.length} errores congelados`);
   console.log(`  ${BASELINE}`);
   process.exit(0);
@@ -134,23 +191,24 @@ if (!existsSync(BASELINE)) {
 const base = readFileSync(BASELINE, "utf8")
   .split("\n")
   .map((l) => l.trim())
-  .filter((l) => l && !l.startsWith("#"));
-
-// Comparamos con multiconjuntos: si un archivo pasa de 1 a 3 errores iguales,
-// eso también es una regresión.
-function contar(lista) {
-  const m = new Map();
-  for (const x of lista) m.set(x, (m.get(x) ?? 0) + 1);
-  return m;
-}
+  .filter((l) => l && !l.startsWith("#"))
+  .map(partirLineaBase);
 
 const mapaBase = contar(base);
 const mapaAct = contar(actuales);
 
+// Un error es NUEVO si su (archivo, código) aparece más veces que en la base.
+// Mostramos los mensajes de verdad, que para leer sí sirven.
+const porClave = new Map();
+for (const e of actuales) {
+  if (!porClave.has(clave(e))) porClave.set(clave(e), []);
+  porClave.get(clave(e)).push(e);
+}
+
 const nuevos = [];
 for (const [k, n] of mapaAct) {
   const extra = n - (mapaBase.get(k) ?? 0);
-  for (let i = 0; i < extra; i++) nuevos.push(k);
+  if (extra > 0) nuevos.push(...porClave.get(k).slice(-extra));
 }
 
 const arreglados = [];
@@ -173,7 +231,11 @@ if (arreglados.length) {
 if (nuevos.length) {
   console.log(`${R}✘ ${nuevos.length} ERROR(ES) DE TIPOS NUEVO(S)${N}`);
   console.log();
-  for (const e of nuevos) console.log(`  ${R}•${N} ${e.replace(/ :: /g, "\n      ")}`);
+  for (const e of nuevos) {
+    console.log(`  ${R}•${N} ${e.archivo}`);
+    console.log(`      ${e.codigo}`);
+    console.log(`      ${e.mensaje}`);
+  }
   console.log();
   console.log("  Estos no estaban antes. Arreglalos.");
   console.log("  Si de verdad son inevitables y los aceptás a conciencia,");
