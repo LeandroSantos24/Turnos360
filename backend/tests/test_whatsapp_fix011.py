@@ -354,8 +354,20 @@ def test_el_texto_se_arma_con_las_variables_como_en_meta():
 
 
 def _volver_sensible(db, ctx, codigo: str = "medico"):
-    rubro = db.get(Rubro, ctx.empresa.rubro_id)
-    rubro.codigo = codigo
+    """Apunta la empresa al rubro «medico», que es lo que pasa en la realidad.
+
+    Ojo con la tentación de renombrar el rubro descartable que arma el fixture:
+    `rubro.codigo` es UNIQUE y el seed ya trae un «medico», así que en una base
+    sembrada —o sea, la de cualquiera que corrió `make seed`— eso explota con
+    una violación de clave única. Acá se reusa el que exista y se crea solo si
+    falta, para que el test dé lo mismo en una base sembrada y en una vacía.
+    """
+    rubro = db.scalars(select(Rubro).where(Rubro.codigo == codigo)).first()
+    if rubro is None:
+        rubro = Rubro(codigo=codigo, nombre="Salud", preset={})
+        db.add(rubro)
+        db.flush()
+    ctx.empresa.rubro_id = rubro.id
     db.flush()
     db.refresh(ctx.empresa)
     return ctx
