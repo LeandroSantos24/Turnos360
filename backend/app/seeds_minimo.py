@@ -14,8 +14,10 @@ Uso (dentro del contenedor):
     docker compose -f infra/docker-compose.yml exec backend python -m app.seeds_minimo
 """
 
+import argparse
 import os
 
+from app.core.claves import ClaveDebil, revisar_clave_superadmin
 from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.db.session import SessionLocal
@@ -32,7 +34,18 @@ EMAIL_DEV = "admin@turnos360.com"
 CLAVE_DEV = "superadmin360"
 
 
-def run() -> None:
+def run(rotar_clave: bool = False) -> None:
+    """Crea el super-admin y los rubros. Idempotente.
+
+    rotar_clave: cambia la clave del super-admin que YA existe. Es explícito a
+    propósito —una bandera, no el comportamiento por defecto— porque el resto
+    del tiempo este seed tiene que poder correrse sin miedo a pisar nada.
+
+    Existe porque no había NINGUNA forma de cambiar esa clave: el panel no
+    tiene pantalla para eso y el seed solo creaba el usuario si no existía. Una
+    clave que no se puede rotar es una clave que, el día que se filtre, hay
+    que arreglar a mano contra la base de producción.
+    """
     email = (os.environ.get("SUPERADMIN_EMAIL") or EMAIL_DEV).strip() or EMAIL_DEV
     clave = (os.environ.get("SUPERADMIN_PASS") or "").strip()
     clave_es_dev = not clave
@@ -46,10 +59,24 @@ def run() -> None:
             )
         clave = CLAVE_DEV  # SOLO desarrollo
 
+    # En producción la clave se revisa de verdad. Antes alcanzaba con que no
+    # estuviera vacía: SUPERADMIN_PASS=1234 pasaba sin chistar, y este usuario
+    # controla el alta de TODAS las empresas, la pausa de cualquier negocio y
+    # las suscripciones del SaaS entero.
+    #
+    # Se revisa en producción y también cuando se rota a mano, que son los dos
+    # momentos en que alguien elige esta clave. En desarrollo no molesta.
+    if settings.es_produccion or rotar_clave:
+        try:
+            revisar_clave_superadmin(clave, email)
+        except ClaveDebil as e:
+            raise SystemExit(f"SUPERADMIN_PASS: {e}") from e
+
     db = SessionLocal()
     try:
         # Super-administrador (para entrar al panel /admin)
-        if db.query(SuperAdmin).filter_by(email=email).first() is None:
+        existente = db.query(SuperAdmin).filter_by(email=email).first()
+        if existente is None:
             db.add(
                 SuperAdmin(
                     nombre="Leandro",
@@ -57,6 +84,12 @@ def run() -> None:
                     hash_clave=hash_clave(clave),
                 )
             )
+            rotada = False
+        elif rotar_clave:
+            existente.hash_clave = hash_clave(clave)
+            rotada = True
+        else:
+            rotada = False
 
         # Catálogo de rubros (con sus presets de terminología/módulos)
         for codigo, nombre, preset in RUBROS:
@@ -65,6 +98,10 @@ def run() -> None:
 
         db.commit()
         print("Seed base OK.")
+        if rotada:
+            print(f"  Clave de {email} ROTADA. La anterior ya no sirve.")
+        elif rotar_clave:
+            print(f"  No existía {email}: se creó con la clave de SUPERADMIN_PASS.")
         if clave_es_dev:
             print(f"  Super-admin: {email} / {CLAVE_DEV}  (clave de DESARROLLO)")
         else:
@@ -76,4 +113,13 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    _p = argparse.ArgumentParser(description="Seed base de Turnos360.")
+    _p.add_argument(
+        "--rotar-clave",
+        action="store_true",
+        help=(
+            "Cambia la clave del super-admin que ya existe por la de "
+            "SUPERADMIN_PASS. Sin esto, un super-admin existente no se toca."
+        ),
+    )
+    run(rotar_clave=_p.parse_args().rotar_clave)
