@@ -20,7 +20,7 @@ function H2({ id, children }: { id: string; children: React.ReactNode }) {
     <h2
       id={id}
       className="mt-10 scroll-mt-24 text-xl font-bold tracking-tight"
-      style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+      style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
     >
       {children}
     </h2>
@@ -47,7 +47,7 @@ export default function TerminosPage() {
           <Link href="/" className="flex items-center gap-2">
             <span
               className="text-lg font-bold"
-              style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+              style={{ fontFamily: "var(--fuente-marca)", color: TINTA }}
             >
               Turnos<span style={{ color: TEAL }}>360</span>
             </span>
@@ -61,7 +61,7 @@ export default function TerminosPage() {
       <article className="mx-auto max-w-3xl px-5 pb-24 pt-12">
         <h1
           className="text-3xl font-bold tracking-tight md:text-4xl"
-          style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+          style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
         >
           Términos y condiciones
         </h1>

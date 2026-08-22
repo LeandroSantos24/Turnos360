@@ -92,7 +92,7 @@ export function CalendarioMes({ turnos, dia, onClickDia }: CalendarioMesProps) {
                       ? ""
                       : "text-muted-foreground"
                 }`}
-                style={{ fontFamily: "Syne, sans-serif" }}
+                style={{ fontFamily: "var(--fuente-titulos)" }}
               >
                 {format(d, "d")}
               </span>

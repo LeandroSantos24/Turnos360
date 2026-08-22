@@ -64,8 +64,9 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["DM Sans", "system-ui", "sans-serif"],
-        display: ["Syne", "system-ui", "sans-serif"],
+        // Apuntan a las variables de globals.css: una sola fuente de verdad.
+        sans: ["var(--fuente)"],
+        display: ["var(--fuente-titulos)"],
       },
     },
   },

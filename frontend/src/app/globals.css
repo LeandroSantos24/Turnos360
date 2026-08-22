@@ -2,27 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fuentes del panel: Syne (títulos) + DM Sans (texto).
-   Sora se suma para la landing comercial (app/page.tsx): es la tipografía
-   de display del rediseño. Autohospedada con fontsource, igual que las
-   otras: sin pedidos a Google Fonts (más rápido y sin fuga de IPs de los
-   visitantes a un tercero). */
-@import "@fontsource/sora/500.css";
-@import "@fontsource/sora/600.css";
+/* TIPOGRAFÍA DEL PRODUCTO
+   ─────────────────────────
+   Figtree en todo: títulos, texto, panel, vidriera y landing. Es una sans
+   de formas abiertas y redondeadas, cálida sin ser infantil, que aguanta
+   bien los tamaños chicos de una tabla de turnos.
+
+   Antes había TRES: Syne para los títulos del panel, Sora para la landing y
+   DM Sans para el texto. Syne es una fuente de display —pensada para
+   carteles, no para encabezados de una agenda— y a tamaño chico se pagaba
+   en legibilidad.
+
+   Sora queda SOLO para el logotipo «Turnos360». Ahí una fuente de display
+   sí rinde: dos palabras, grandes, una vez por pantalla.
+
+   Autohospedadas con fontsource: sin pedidos a Google Fonts desde la
+   máquina del visitante (más rápido y sin filtrar sus IPs a un tercero). */
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";
 @import "@fontsource/sora/700.css";
-@import "@fontsource/syne/400.css";
-@import "@fontsource/syne/500.css";
-@import "@fontsource/syne/600.css";
-@import "@fontsource/syne/700.css";
-@import "@fontsource/dm-sans/400.css";
-@import "@fontsource/dm-sans/500.css";
-@import "@fontsource/dm-sans/600.css";
 
 @layer base {
   :root {
     /* Los controles nativos (desplegable del select, calendario del date)
        los pinta el navegador: hay que declararle el esquema de color. */
     color-scheme: light;
+
+    /* LA ÚNICA fuente de verdad de la tipografía. Cambiar acá cambia todo
+       el producto: el resto del código apunta a estas variables y no
+       nombra ninguna familia. Antes el nombre "Syne, sans-serif" estaba
+       escrito a mano en 66 lugares, así que cambiar de tipografía era
+       tocar 36 archivos y rezar. */
+    --fuente: "Figtree", system-ui, sans-serif;
+    --fuente-titulos: "Figtree", system-ui, sans-serif;
+    /* Solo el logotipo Turnos360. */
+    --fuente-marca: "Sora", system-ui, sans-serif;
     /* Fondo claro, contenido sobre gris muy suave (como TurnosPro) */
     --background: 220 33% 98%;        /* #f8f9fc */
     --foreground: 222 47% 11%;        /* #0f172a navy texto */
@@ -94,12 +110,12 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "DM Sans", system-ui, sans-serif;
+    font-family: var(--fuente);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: "Syne", system-ui, sans-serif;
+    font-family: var(--fuente-titulos);
     font-variant-numeric: lining-nums tabular-nums;
   }
 

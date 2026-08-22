@@ -375,7 +375,7 @@ export default function InicioPage() {
               <p
                 className="mb-1 text-2xl font-bold tabular-nums"
                 style={{
-                  fontFamily: "Syne, sans-serif",
+                  fontFamily: "var(--fuente-titulos)",
                   fontVariantNumeric: "lining-nums tabular-nums",
                 }}
               >
@@ -466,7 +466,7 @@ export default function InicioPage() {
                   >
                     <span
                       className="w-12 shrink-0 text-sm font-bold tabular-nums"
-                      style={{ fontFamily: "Syne, sans-serif" }}
+                      style={{ fontFamily: "var(--fuente-titulos)" }}
                     >
                       {t.fecha_inicio && horaDe(t.fecha_inicio)}
                     </span>
@@ -509,7 +509,7 @@ export default function InicioPage() {
                 <div>
                   <p
                     className="text-xl font-bold tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif" }}
+                    style={{ fontFamily: "var(--fuente-titulos)" }}
                   >
                     {estadisticas.resumen.total_abonados}
                   </p>
@@ -518,7 +518,7 @@ export default function InicioPage() {
                 <div>
                   <p
                     className="text-xl font-bold tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif" }}
+                    style={{ fontFamily: "var(--fuente-titulos)" }}
                   >
                     ${estadisticas.resumen.total_ingreso.toLocaleString("es-AR")}
                   </p>
@@ -527,7 +527,7 @@ export default function InicioPage() {
                 <div>
                   <p
                     className="text-xl font-bold tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif" }}
+                    style={{ fontFamily: "var(--fuente-titulos)" }}
                   >
                     {estadisticas.resumen.total_cortes}
                   </p>

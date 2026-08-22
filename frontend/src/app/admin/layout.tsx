@@ -44,7 +44,7 @@ export default function AdminLayout({
           <div>
             <span
               className="text-lg font-bold"
-              style={{ fontFamily: "Syne, sans-serif" }}
+              style={{ fontFamily: "var(--fuente-marca)" }}
             >
               Turnos360
             </span>

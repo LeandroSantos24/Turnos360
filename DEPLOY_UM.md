@@ -79,9 +79,30 @@ COBRO_CUIT=
 COBRO_BANCO=
 COBRO_MP_LINK=
 COBRO_WHATSAPP=
+MP_FIRMA_MODO=off
+MP_WEBHOOK_SECRET=
+WA_PROVEEDOR=simulado
+WA_WEBHOOK_VERIFY_TOKEN=
+WA_APP_SECRET=
+WA_PRECIO_MENSAJE_ARS=73
+WA_COBRAR_SERVICIO=false
 ```
 
 Los `COBRO_*` son **tus** datos de cobro: los ve el dueño del negocio en "Mi suscripción" para transferirte. Si los dejás vacíos, esa pantalla sale en blanco.
+
+### Las dos que son decisiones, no ajustes
+
+**`MP_FIRMA_MODO`** — la verificación de firma de los webhooks de Mercado Pago. El default `off` se comporta como si esto no existiera, que es lo que venís corriendo. Con plata real conviene el camino de tres escalones:
+
+1. `log` — valida y escribe en el log si la firma cierra, **sin bloquear nada**.
+2. Mirás los logs un par de días con pagos reales: `docker compose -f infra/docker-compose.prod.yml logs backend | grep "firma"`. Todas las notificaciones legítimas tienen que dar firma válida.
+3. Recién ahí `enforce`.
+
+Al revés —saltar directo a `enforce`— arriesgás que el manifiesto no cierre por un detalle y **dejen de acreditarse señas reales**, y te enterás cuando un cliente reclame. El secreto sale de Mercado Pago → Tus integraciones → tu aplicación → Webhooks → «Clave secreta». Sin secreto cargado no se bloquea nada ni siquiera en `enforce`.
+
+**`WA_PROVEEDOR`** — el freno de mano de la mensajería. En `simulado` el circuito corre entero pero **no sale un mensaje a la calle**. Es lo que querés mientras WhatsApp no esté habilitado. Se pasa a `meta` el día que lo prendas.
+
+> Desde esta versión, un valor que no existe en cualquiera de estas tres (`ENV`, `WA_PROVEEDOR`, `MP_FIRMA_MODO`) hace que **el backend no levante**, y el log dice cuál está mal escrita. Antes se ignoraban en silencio: `WA_PROVEEDOR=Simulado` con S mayúscula caía del lado de Meta y los mensajes salían.
 
 > `NEXT_PUBLIC_SITE_URL` no se carga a mano: el compose se la pasa al frontend tomando el valor de `PUBLIC_BASE_URL`.
 

@@ -80,4 +80,6 @@ class GiftCard(TenantMixin, Base):
 
     @property
     def esta_vencida(self) -> bool:
-        return self.vence is not None and self.vence < dt.date.today()
+        from app.core.reloj import hoy_de_pared
+
+        return self.vence is not None and self.vence < hoy_de_pared()

@@ -103,7 +103,7 @@ export function Torta({ datos, size = 160, centro }: TortaProps) {
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
             className="text-xl font-bold tabular-nums"
-            style={{ fontFamily: "Syne, sans-serif" }}
+            style={{ fontFamily: "var(--fuente-titulos)" }}
           >
             {centro ?? total}
           </span>

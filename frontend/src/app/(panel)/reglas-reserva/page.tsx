@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 /** Opciones de anticipación mínima, en minutos. */
 const ANTICIPACIONES = [

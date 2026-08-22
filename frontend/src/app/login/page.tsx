@@ -54,7 +54,7 @@ export default function LoginPage() {
         <div className="relative">
           <h1
             className="text-4xl font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif" }}
+            style={{ fontFamily: "var(--fuente-marca)" }}
           >
             Turnos<span className="text-[#00d4aa]">360</span>
           </h1>
@@ -105,13 +105,13 @@ export default function LoginPage() {
           {/* Marca chica (solo móvil, donde no se ve el panel de la izquierda) */}
           <h1
             className="mb-8 text-center text-3xl font-bold lg:hidden"
-            style={{ fontFamily: "Syne, sans-serif" }}
+            style={{ fontFamily: "var(--fuente-marca)" }}
           >
             Turnos<span className="text-[#00d4aa]">360</span>
           </h1>
 
           <div className="mb-6">
-            <h2 className="text-2xl font-bold" style={{ fontFamily: "Syne, sans-serif" }}>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
               Bienvenido de nuevo
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">Ingresá a tu panel</p>

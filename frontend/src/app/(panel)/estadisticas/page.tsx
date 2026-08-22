@@ -44,7 +44,7 @@ import { RequiereDueno } from "@/components/requiere-rol";
 // tabular-nums, aparte, les da a todas el mismo ancho para que las columnas
 // de plata queden alineadas.
 const NUM = { fontVariantNumeric: "lining-nums tabular-nums" } as const;
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 function pesos(n: number): string {
   return `$${Math.round(n).toLocaleString("es-AR")}`;

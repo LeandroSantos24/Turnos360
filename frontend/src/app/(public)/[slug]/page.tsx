@@ -120,7 +120,7 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-2 bg-white px-6 text-center">
         <h1
           className="text-xl font-bold"
-          style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+          style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
         >
           {error === "no-existe" ? "Este negocio no existe" : "No pudimos cargar la página"}
         </h1>

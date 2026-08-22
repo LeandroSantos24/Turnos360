@@ -143,7 +143,7 @@ export default function MiDiaPage() {
                 <div
                   className="w-16 shrink-0 text-sm font-bold tabular-nums"
                   style={{
-                    fontFamily: "Syne, sans-serif",
+                    fontFamily: "var(--fuente-titulos)",
                     fontVariantNumeric: "lining-nums tabular-nums",
                   }}
                 >

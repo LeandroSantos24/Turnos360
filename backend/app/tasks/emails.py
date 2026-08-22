@@ -25,6 +25,7 @@ from sqlalchemy import extract, func, or_ as sa_or, select
 from app.celery_app import celery_app
 from app.core import mailer
 from app.core.config import settings
+from app.core.reloj import ahora_de_pared
 from app.db.session import SessionLocal
 from app.models import Cliente, Empresa, Mensaje, Recurso, Servicio, Turno, Usuario
 from app.models.enums import CanalMensaje, EstadoMensaje, EstadoTurno
@@ -158,9 +159,22 @@ def _link_gcal(titulo: str, inicio: dt.datetime, fin: dt.datetime | None, lugar:
     return f"https://calendar.google.com/calendar/render?{params}"
 
 
-def _cargar(db, turno_id: int):
+def _cargar(db, turno_id: int, *, solo_vigentes: bool = False):
+    """El turno y todo lo que cuelga de él, o None.
+
+    solo_vigentes: para los recordatorios. Entre que el barrido encola y el
+    worker desagota pueden pasar minutos, y en ese rato el turno se pudo
+    cancelar. Sin este control el cliente recibe "mañana tenés tu turno"
+    DESPUÉS de haberlo cancelado — el peor mail posible, porque lo hace dudar
+    de si la cancelación entró.
+    """
     turno = db.get(Turno, turno_id)
     if turno is None:
+        return None
+    if solo_vigentes and turno.estado not in (
+        EstadoTurno.PENDIENTE,
+        EstadoTurno.CONFIRMADO,
+    ):
         return None
     return {
         "turno": turno,
@@ -229,6 +243,18 @@ def _mandar(db, empresa, destino: str, asunto: str, html: str, contenido_log: st
         ok, error = True, None
     except Exception as e:
         ok, error = False, str(e)
+        # Queda en la tabla Mensaje como FALLIDO, pero hoy ninguna pantalla
+        # muestra los mensajes de canal EMAIL: sin esta línea, un SMTP mal
+        # configurado quema los recordatorios de todo el mes y NADIE se entera.
+        # El healthcheck sigue dando 200 y todo parece sano.
+        log.warning(
+            "email no enviado",
+            extra={
+                "empresa_id": empresa.id,
+                "contenido": contenido_log,
+                "error": str(e)[:200],
+            },
+        )
     _registrar(
         db, empresa_id=empresa.id, cliente_id=cliente_id, turno_id=turno_id,
         contenido=contenido_log, ok=ok, error=error,
@@ -383,7 +409,7 @@ def enviar_reprogramacion(turno_id: int) -> None:
 def enviar_recordatorio(turno_id: int) -> None:
     """24 h antes."""
     with SessionLocal() as db:
-        ctx = _cargar(db, turno_id)
+        ctx = _cargar(db, turno_id, solo_vigentes=True)
         if not ctx or not ctx["cliente"]:
             return
         if _intento_whatsapp(db, ctx, "recordatorio_24h"):
@@ -415,7 +441,7 @@ def enviar_recordatorio(turno_id: int) -> None:
 def enviar_recordatorio_2h(turno_id: int) -> None:
     """2 h antes (el segundo del doble recordatorio)."""
     with SessionLocal() as db:
-        ctx = _cargar(db, turno_id)
+        ctx = _cargar(db, turno_id, solo_vigentes=True)
         if not ctx or not ctx["cliente"]:
             return
         if _intento_whatsapp(db, ctx, "recordatorio_2h"):
@@ -534,7 +560,17 @@ def encolar_recordatorios() -> int:
     turno se escapa aunque un ciclo se pierda, y jamás se manda dos veces.
     Cada envío respeta el switch de SU empresa.
     """
-    ahora = dt.datetime.now(dt.timezone.utc)
+    # OJO: tiene que ser el reloj de pared, no datetime.now(UTC).
+    #
+    # `turno.fecha_inicio` NO guarda UTC real: guarda la hora de pared
+    # etiquetada UTC (un turno de las 10:00 se guarda como 10:00+00:00). Con
+    # now(UTC) en un servidor UTC, este barrido se creía tres horas en el
+    # futuro y la ventana de "2 horas antes" caía entre las 3:30 y las 4:15 de
+    # la MADRUGADA: el cliente recibía "en un rato, a las 09:00" mientras
+    # dormía. El de 24 h salía 26-28 h antes, y como efecto de costado un
+    # turno reservado con menos de ~26 h de anticipación no entraba nunca en
+    # la ventana y no recibía recordatorio jamás.
+    ahora = ahora_de_pared()
     encolados = 0
     with SessionLocal() as db:
         empresas_cfg: dict[int, dict] = {}
@@ -554,11 +590,17 @@ def encolar_recordatorios() -> int:
             )
         ).all()
         for turno in turnos:
+            # El flag se marca SOLO si el recordatorio se encola de verdad.
+            # Antes se marcaba siempre, incluso con la campaña apagada: los
+            # turnos que pasaban por la ventana con el switch en off quedaban
+            # marcados para siempre. El dueño prendía la campaña y "no
+            # funcionaba" durante el primer día, sin ningún error.
+            if not cfg_de(turno.empresa_id).get("recordatorio_24h", {}).get("activa"):
+                continue
             turno.recordatorio_enviado = True
             db.commit()
-            if cfg_de(turno.empresa_id).get("recordatorio_24h", {}).get("activa"):
-                enviar_recordatorio.delay(turno.id)
-                encolados += 1
+            enviar_recordatorio.delay(turno.id)
+            encolados += 1
 
         # --- 2 h ---
         turnos2 = db.scalars(
@@ -570,11 +612,13 @@ def encolar_recordatorios() -> int:
             )
         ).all()
         for turno in turnos2:
+            # Mismo criterio que el de 24 h: marcar solo si se manda de verdad.
+            if not cfg_de(turno.empresa_id).get("recordatorio_2h", {}).get("activa"):
+                continue
             turno.recordatorio_2h_enviado = True
             db.commit()
-            if cfg_de(turno.empresa_id).get("recordatorio_2h", {}).get("activa"):
-                enviar_recordatorio_2h.delay(turno.id)
-                encolados += 1
+            enviar_recordatorio_2h.delay(turno.id)
+            encolados += 1
     return encolados
 
 
@@ -724,7 +768,8 @@ def enviar_prueba_campana(empresa_id: int, tipo: str, destino: str) -> None:
         cfg = automs_de(empresa)
         contacto = _contacto_negocio(empresa)
         pie = _pie_negocio(empresa)
-        maniana = dt.datetime.now() + dt.timedelta(days=1)
+        # Sin zona: usaba la del SERVIDOR, que en producción es UTC.
+        maniana = ahora_de_pared() + dt.timedelta(days=1)
 
         if tipo == "cumple":
             m = (cfg["cumple"].get("mensaje") or "").strip()

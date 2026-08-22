@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 const ROLES: { value: RolUsuario; label: string }[] = [
   { value: "dueno", label: "Dueño (acceso total)" },

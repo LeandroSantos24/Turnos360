@@ -282,14 +282,14 @@ export function TurnoDetalle({
             <div className="mt-3 flex items-center gap-3">
               <div
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-bold text-white"
-                style={{ backgroundColor: color, fontFamily: "Syne, sans-serif" }}
+                style={{ backgroundColor: color, fontFamily: "var(--fuente-titulos)" }}
               >
                 {inicialDe(turno.cliente_nombre)}
               </div>
               <div className="min-w-0 flex-1">
                 <SheetTitle
                   className="truncate text-lg font-bold leading-tight"
-                  style={{ fontFamily: "Syne, sans-serif" }}
+                  style={{ fontFamily: "var(--fuente-titulos)" }}
                 >
                   {turno.cliente_nombre}
                 </SheetTitle>
@@ -340,7 +340,7 @@ export function TurnoDetalle({
                     )}
                     <span
                       className="text-lg font-bold tabular-nums"
-                      style={{ fontFamily: "Syne, sans-serif" }}
+                      style={{ fontFamily: "var(--fuente-titulos)" }}
                     >
                       ${Number(turno.importe_previsto).toLocaleString("es-AR")}
                     </span>
@@ -492,7 +492,7 @@ export function TurnoDetalle({
                     <span className="text-sm font-medium">Total</span>
                     <span
                       className="text-lg font-bold tabular-nums"
-                      style={{ fontFamily: "Syne, sans-serif" }}
+                      style={{ fontFamily: "var(--fuente-titulos)" }}
                     >
                       ${totalTurno.toLocaleString("es-AR")}
                     </span>
@@ -510,7 +510,7 @@ export function TurnoDetalle({
                   </span>
                   <span
                     className="font-bold tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif" }}
+                    style={{ fontFamily: "var(--fuente-titulos)" }}
                   >
                     ${totalCobrado.toLocaleString("es-AR")}
                   </span>

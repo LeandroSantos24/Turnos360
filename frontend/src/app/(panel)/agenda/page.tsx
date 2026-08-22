@@ -540,7 +540,7 @@ export default function AgendaPage() {
                   <span
                     className="text-sm font-bold"
                     style={{
-                      fontFamily: "Syne, sans-serif",
+                      fontFamily: "var(--fuente-titulos)",
                       fontVariantNumeric: "lining-nums tabular-nums",
                     }}
                   >
@@ -563,7 +563,7 @@ export default function AgendaPage() {
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
                     style={{
                       backgroundColor: color,
-                      fontFamily: "Syne, sans-serif",
+                      fontFamily: "var(--fuente-titulos)",
                     }}
                   >
                     {inicialDe(turno.cliente_nombre)}

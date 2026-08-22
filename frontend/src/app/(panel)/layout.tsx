@@ -195,7 +195,7 @@ export default function PanelLayout({
             <div>
               <div
                 className="font-semibold leading-none text-white"
-                style={{ fontFamily: "Syne, sans-serif", fontSize: "16px" }}
+                style={{ fontFamily: "var(--fuente-marca)", fontSize: "16px" }}
               >
                 Turnos360
               </div>
@@ -304,7 +304,7 @@ export default function PanelLayout({
                 background: "hsl(217 35% 19%)",
                 color: "hsl(168 100% 42%)",
                 border: "1px solid rgba(0,212,170,0.2)",
-                fontFamily: "Syne, sans-serif",
+                fontFamily: "var(--fuente-titulos)",
               }}
             >
               {usuario.nombre?.charAt(0).toUpperCase()}

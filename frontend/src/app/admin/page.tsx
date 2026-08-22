@@ -34,7 +34,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 /**
  * Texto libre -> slug de URL.

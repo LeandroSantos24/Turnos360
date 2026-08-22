@@ -9,14 +9,15 @@ import type { CSSProperties } from "react";
  * En una tabla de caja eso se lee como si las columnas no fueran del mismo
  * dato.
  *
- * - lining-nums: Syne trae por defecto cifras de estilo geométrico, con
- *   alturas y formas distintas entre sí. Esto fuerza las alineadas de altura
- *   uniforme, que es como se espera leer plata.
+ * - lining-nums: fuerza las cifras de altura uniforme, que es como se
+ *   espera leer plata. (Hacía falta sobre todo con Syne, que traía cifras
+ *   de estilo geométrico; se deja igual porque no cuesta nada y protege
+ *   de la próxima fuente que sí las traiga).
  * - tabular-nums: todas las cifras del mismo ancho, para que las columnas de
  *   una tabla queden alineadas verticalmente.
  */
 export const NUM: CSSProperties = {
-  fontFamily: "Syne, sans-serif",
+  fontFamily: "var(--fuente-titulos)",
   fontVariantNumeric: "lining-nums tabular-nums",
 };
 

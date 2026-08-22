@@ -5,11 +5,11 @@ La validación devuelve SIEMPRE un motivo claro cuando el cupón no corre:
 que tipea un código merece saber por qué no le funcionó.
 """
 
-import datetime as dt
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.reloj import hoy_de_pared
 from app.models.cupon import CuponDescuento
 from app.models.agenda import Servicio
 from app.schemas.cupon import CuponCrear, CuponEditar
@@ -110,7 +110,7 @@ def validar_cupon(
     if cupon is None or not cupon.activo:
         return None, 0.0, "El código no existe o ya no está vigente"
 
-    if cupon.vence_el is not None and dt.date.today() > cupon.vence_el:
+    if cupon.vence_el is not None and hoy_de_pared() > cupon.vence_el:
         return None, 0.0, "El código venció"
 
     if cupon.max_usos is not None and cupon.usos >= cupon.max_usos:

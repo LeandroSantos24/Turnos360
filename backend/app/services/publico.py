@@ -10,13 +10,12 @@ salen de disponibilidad.calcular_huecos().
 """
 
 import datetime as dt
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.reloj import ahora_de_pared
 from app.models import Cliente, Empresa, Recurso, Servicio
 from app.models.enums import TipoRecurso
 from app.schemas.publico import ReservaPublicaCrear
@@ -124,16 +123,12 @@ DIAS_MAXIMOS_A_FUTURO = 180
 MARGEN_MINUTOS_PASADO = 5  # tolerancia por relojes desfasados del celular
 
 
-def _ahora_de_pared() -> dt.datetime:
-    """El "ahora" en la convención del motor: hora local, etiquetada UTC.
-
-    El motor guarda un turno de las 10:00 como 10:00+00:00 sin convertir. Si
-    comparásemos contra datetime.now(UTC), en un servidor con TZ=UTC el sistema
-    creería que son las 13:00 cuando en Mendoza son las 10:00, y rechazaría
-    como "pasados" turnos de las próximas tres horas.
-    """
-    local = dt.datetime.now(ZoneInfo(settings.zona_horaria))
-    return local.replace(tzinfo=dt.timezone.utc)
+# La definición vive en app/core/reloj.py: es la convención de TODO el
+# sistema, no de este módulo. Mientras era privada de acá, las tareas de fondo
+# no la podían importar y terminaron usando datetime.now(UTC) — con las tres
+# horas de corrimiento puestas. Se mantiene el nombre para no tocar el resto
+# del archivo.
+_ahora_de_pared = ahora_de_pared
 
 
 def _texto_anticipacion(minutos: int) -> str:
@@ -238,6 +233,13 @@ def huecos(
         minutes=int(empresa.reserva_anticipacion_min or 0)
     )
 
+    # Toda la ventana de una sola vez: 3 consultas en lugar de 3 por cada
+    # combinación de día y profesional. Con 31 días y 8 profesionales eran 744
+    # idas y vueltas a Postgres para pintar la primera pantalla que ve un
+    # cliente. El cálculo es exactamente el mismo, sobre los mismos datos.
+    ultimo = min(desde + dt.timedelta(days=dias - 1), tope)
+    agenda = disp.precargar(db, empresa.id, [r.id for r in elegibles], desde, ultimo)
+
     resultado: list[dict] = []
     for i in range(dias):
         fecha = desde + dt.timedelta(days=i)
@@ -255,6 +257,7 @@ def huecos(
                     buffer_min=servicio.buffer_min,
                     paso_min=servicio.paso_turno_min,
                     grupo_agenda=servicio.grupo_agenda,
+                    agenda=agenda,
                 )
             )
         # Se descartan los horarios anteriores al corte de anticipación. El

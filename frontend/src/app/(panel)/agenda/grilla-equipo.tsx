@@ -216,7 +216,7 @@ export function GrillaEquipo({
                         <div className="flex items-center gap-1.5">
                           <div
                             className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white"
-                            style={{ backgroundColor: color, fontFamily: "Syne, sans-serif" }}
+                            style={{ backgroundColor: color, fontFamily: "var(--fuente-titulos)" }}
                           >
                             {inicialDe(turno.cliente_nombre)}
                           </div>

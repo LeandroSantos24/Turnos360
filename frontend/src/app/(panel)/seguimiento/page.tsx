@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 function Tarjeta({
   titulo,

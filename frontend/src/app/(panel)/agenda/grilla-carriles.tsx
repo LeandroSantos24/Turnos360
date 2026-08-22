@@ -156,7 +156,7 @@ export function GrillaCarriles({
           <div
             key={carril.id}
             className="flex-1 border-r px-4 py-3 text-center text-sm font-bold last:border-r-0"
-            style={{ fontFamily: "Syne, sans-serif" }}
+            style={{ fontFamily: "var(--fuente-titulos)" }}
           >
             {carril.label}
           </div>
@@ -274,7 +274,7 @@ export function GrillaCarriles({
                           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
                           style={{
                             backgroundColor: color,
-                            fontFamily: "Syne, sans-serif",
+                            fontFamily: "var(--fuente-titulos)",
                           }}
                         >
                           {inicialDe(turno.cliente_nombre)}

@@ -162,7 +162,7 @@ export function CobroDialog({
                     ? "text-sm tabular-nums text-muted-foreground"
                     : "text-xl font-bold tabular-nums"
                 }
-                style={senado > 0 ? undefined : { fontFamily: "Syne, sans-serif" }}
+                style={senado > 0 ? undefined : { fontFamily: "var(--fuente-titulos)" }}
               >
                 ${total.toLocaleString("es-AR")}
               </span>
@@ -181,7 +181,7 @@ export function CobroDialog({
                   <span className="text-sm font-medium">A cobrar ahora</span>
                   <span
                     className="text-xl font-bold tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif" }}
+                    style={{ fontFamily: "var(--fuente-titulos)" }}
                   >
                     ${aCobrar.toLocaleString("es-AR")}
                   </span>

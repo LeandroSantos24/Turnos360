@@ -14,7 +14,7 @@ from app.core.config import settings
 celery_app = Celery(
     "turnos360",
     broker=settings.redis_url,
-    include=["app.tasks.emails"],
+    include=["app.tasks.emails", "app.tasks.agenda"],
 )
 
 celery_app.conf.update(
@@ -48,7 +48,17 @@ celery_app.conf.update(
             "task": "app.tasks.emails.encolar_recordatorios",
             "schedule": 900.0,
         },
-        # Diarios a las 12:00 UTC (~09:00 Argentina): cumpleaños e inactivos.
+        # Cada 5 min: suelta los horarios de las señas que no se pagaron.
+        # Más seguido que los recordatorios a propósito: acá lo que está en
+        # juego es un horario que el negocio no puede vender mientras tanto.
+        "senas_vencidas": {
+            "task": "app.tasks.agenda.expirar_senas_pendientes",
+            "schedule": 300.0,
+        },
+        # Diarios a las 12:00 y 12:30 HORA ARGENTINA: cumpleaños e
+        # inactivos. (Con `timezone=` configurada, Celery evalúa los
+        # crontab en esa zona, no en UTC. El comentario anterior decía UTC
+        # y estaba mal.)
         "cumpleanios": {
             "task": "app.tasks.emails.enviar_cumpleanios",
             "schedule": crontab(hour=12, minute=0),
@@ -57,9 +67,9 @@ celery_app.conf.update(
             "task": "app.tasks.emails.enviar_inactivos",
             "schedule": crontab(hour=12, minute=30),
         },
-        # Cobranza del SaaS: avisos de vencimiento a los negocios. 13:00 UTC
-        # (~10:00 Argentina), después de los otros para no amontonar envíos
-        # en el límite diario de Gmail.
+        # Cobranza del SaaS: avisos de vencimiento a los negocios. 13:00
+        # hora argentina, después de los otros para no amontonar envíos en
+        # el límite diario de Gmail.
         "vencimientos": {
             "task": "app.tasks.emails.avisar_vencimientos",
             "schedule": crontab(hour=13, minute=0),

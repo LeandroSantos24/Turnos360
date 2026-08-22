@@ -104,7 +104,7 @@ export default function CobranzaPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: "Syne, sans-serif" }}>
+        <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
           Cobranza
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -334,7 +334,7 @@ function Tarjeta({
       </div>
       <p
         className="mt-2 text-2xl font-bold tabular-nums"
-        style={{ fontFamily: "Syne, sans-serif" }}
+        style={{ fontFamily: "var(--fuente-titulos)" }}
       >
         {valor}
       </p>
@@ -393,7 +393,7 @@ function DialogCobro({
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle style={{ fontFamily: "Syne, sans-serif" }}>
+          <DialogTitle style={{ fontFamily: "var(--fuente-titulos)" }}>
             Registrar pago · {empresa.nombre}
           </DialogTitle>
           <DialogDescription>
@@ -549,7 +549,7 @@ function DialogFicha({
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle style={{ fontFamily: "Syne, sans-serif" }}>
+          <DialogTitle style={{ fontFamily: "var(--fuente-titulos)" }}>
             Ficha comercial · {empresa.nombre}
           </DialogTitle>
           <DialogDescription>

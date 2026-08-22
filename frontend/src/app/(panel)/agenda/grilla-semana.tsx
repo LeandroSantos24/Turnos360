@@ -190,7 +190,7 @@ export function GrillaSemana({
                   className={`text-sm font-bold tabular-nums ${
                     esHoy ? "text-primary" : ""
                   }`}
-                  style={{ fontFamily: "Syne, sans-serif" }}
+                  style={{ fontFamily: "var(--fuente-titulos)" }}
                 >
                   {format(d, "d")}
                 </p>

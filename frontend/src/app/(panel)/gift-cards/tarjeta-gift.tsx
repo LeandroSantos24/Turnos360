@@ -242,7 +242,7 @@ export function TarjetaGift({
       >
         <div className="relative p-6 pb-4">
           {tema.deco && <span className="absolute right-5 top-5 text-3xl">{tema.deco}</span>}
-          <p className="pr-10 text-xl font-extrabold leading-tight" style={{ fontFamily: "Syne, sans-serif" }}>
+          <p className="pr-10 text-xl font-extrabold leading-tight" style={{ fontFamily: "var(--fuente-titulos)" }}>
             {negocio}
           </p>
           <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: tema.acento }}>

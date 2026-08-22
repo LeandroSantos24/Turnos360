@@ -49,7 +49,7 @@ import {
 import { SoloDueno } from "@/components/si-rol";
 
 const NUM_STYLE: React.CSSProperties = {
-  fontFamily: "Syne, sans-serif",
+  fontFamily: "var(--fuente-titulos)",
   fontVariantNumeric: "lining-nums tabular-nums",
 };
 
@@ -249,7 +249,7 @@ export default function MembresiasPage() {
                     {/* Nombre + precio */}
                     <h3
                       className="text-lg font-bold"
-                      style={{ fontFamily: "Syne, sans-serif" }}
+                      style={{ fontFamily: "var(--fuente-titulos)" }}
                     >
                       {plan.nombre}
                     </h3>

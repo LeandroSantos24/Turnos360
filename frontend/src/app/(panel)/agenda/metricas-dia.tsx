@@ -72,7 +72,7 @@ export function MetricasDia({ turnos }: MetricasProps) {
             <p
               className="mb-1 text-2xl font-bold tabular-nums"
               style={{
-                fontFamily: "Syne, sans-serif",
+                fontFamily: "var(--fuente-titulos)",
                 fontVariantNumeric: "lining-nums tabular-nums",
               }}
             >

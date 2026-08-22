@@ -12,7 +12,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 
 from app.api.deps import DB
+import logging
+
 from app.core.rate_limit import limiter
+from app.core.reloj import hoy_de_pared
 from app.schemas.cupon import CuponValidarIn, CuponValidarOut
 from app.schemas.publico import (
     HuecosDia,
@@ -26,6 +29,8 @@ from app.services import finanzas as svc_fin
 from app.core import firma_mp
 from app.services import mercadopago as mp
 from app.services import publico as svc
+
+log = logging.getLogger("turnos360.mp")
 
 router = APIRouter(prefix="/publico", tags=["publico"])
 
@@ -111,6 +116,31 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
     if turno is None or turno.empresa_id != empresa.id:
         return
 
+    # El pago puede llegar sobre un turno que ya no está en pie: el cliente
+    # lo canceló, el negocio lo canceló, o venció el plazo de la seña y el
+    # horario se soltó. La plata ENTRÓ igual —está en la cuenta de Mercado
+    # Pago del negocio— así que se registra: esconderla haría que el arqueo
+    # del día diera diferencia y nada explicara por qué.
+    #
+    # Lo que NO se hace es revivir el turno en silencio. El horario puede
+    # estar vendido a otra persona, y confirmarlo sería crear la silla doble
+    # por la puerta de atrás. Queda anotado en el turno y en el log para que
+    # el negocio lo vea y decida: devolver o reprogramar.
+    if turno.estado not in (EstadoTurno.PENDIENTE, EstadoTurno.CONFIRMADO):
+        log.warning(
+            "pago de Mercado Pago sobre un turno que ya no está vigente",
+            extra={
+                "turno_id": turno.id,
+                "estado": turno.estado.value,
+                "payment_id": str(pago.get("id", payment_id)),
+            },
+        )
+        turno.motivo_cancelacion = (
+            (turno.motivo_cancelacion or "")
+            + " · OJO: después de esto entró el pago de la seña. Revisá si"
+            " corresponde devolverlo o reprogramar."
+        )[:300]
+
     turno.sena_estado = "pagada"
     turno.mp_payment_id = str(pago.get("id", payment_id))
     if turno.estado == EstadoTurno.PENDIENTE:
@@ -175,7 +205,12 @@ def horarios(
     cientos de consultas SQL — repetirlo en bucle bastaba para voltear la base
     sin necesidad de ninguna credencial.
     """
-    return svc.huecos(db, slug, servicio_id, recurso_id, desde or dt.date.today(), dias)
+    # hoy_de_pared y no date.today(): a las 21:30 de Argentina el servidor
+    # (UTC) ya está en el día siguiente, y la vidriera arrancaba mostrando
+    # mañana sin que nadie se lo pidiera.
+    return svc.huecos(
+        db, slug, servicio_id, recurso_id, desde or hoy_de_pared(), dias
+    )
 
 
 @router.post("/{slug}/reservar", response_model=ReservaPublicaOut)

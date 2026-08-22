@@ -17,7 +17,7 @@ function H2({ id, children }: { id: string; children: React.ReactNode }) {
     <h2
       id={id}
       className="mt-10 scroll-mt-24 text-xl font-bold tracking-tight"
-      style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+      style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
     >
       {children}
     </h2>
@@ -43,7 +43,7 @@ export default function PrivacidadPage() {
           <Link href="/" className="flex items-center gap-2">
             <span
               className="text-lg font-bold"
-              style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+              style={{ fontFamily: "var(--fuente-marca)", color: TINTA }}
             >
               Turnos<span style={{ color: TEAL }}>360</span>
             </span>
@@ -57,7 +57,7 @@ export default function PrivacidadPage() {
       <article className="mx-auto max-w-3xl px-5 pb-24 pt-12">
         <h1
           className="text-3xl font-bold tracking-tight md:text-4xl"
-          style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+          style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
         >
           Política de privacidad
         </h1>
@@ -80,7 +80,7 @@ export default function PrivacidadPage() {
           <h2
             id="reservas"
             className="scroll-mt-24 text-lg font-bold"
-            style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+            style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
           >
             ¿Reservaste un turno en un negocio que usa Turnos360?
           </h2>

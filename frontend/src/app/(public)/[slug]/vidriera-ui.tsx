@@ -190,7 +190,7 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
   return (
     <h2
       className="mt-3 text-2xl font-bold leading-tight tracking-tight md:text-3xl"
-      style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+      style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
     >
       {children}
     </h2>
@@ -274,7 +274,7 @@ function Monograma({ v, acento, tam }: { v: Vidriera; acento: string; tam: strin
       className={`${tam} flex items-center justify-center rounded-2xl text-white`}
       style={{
         background: `linear-gradient(135deg, ${acento}, ${hexA(acento, 0.72)})`,
-        fontFamily: "Syne, sans-serif",
+        fontFamily: "var(--fuente-titulos)",
       }}
     >
       <span className="text-[1.6em] font-bold">{v.nombre.charAt(0).toUpperCase()}</span>
@@ -317,7 +317,7 @@ export function TopBar({ v, acento, onReservar }: { v: Vidriera; acento: string;
           <span
             className="truncate text-base font-bold transition-colors"
             style={{
-              fontFamily: "Syne, sans-serif",
+              fontFamily: "var(--fuente-titulos)",
               color: sobreFoto ? "#ffffff" : TINTA,
               textShadow: sobreFoto ? "0 1px 12px rgba(0,0,0,0.45)" : undefined,
             }}
@@ -433,7 +433,7 @@ export function Hero({ v, acento, onReservar }: { v: Vidriera; acento: string; o
           variants={item}
           className="mt-6 text-[2.6rem] font-extrabold leading-[1.05] tracking-tight md:text-6xl"
           style={{
-            fontFamily: "Syne, sans-serif",
+            fontFamily: "var(--fuente-titulos)",
             color: tituloColor,
             textShadow: portada ? "0 2px 24px rgba(0,0,0,0.45)" : undefined,
           }}
@@ -639,7 +639,7 @@ export function Equipo({ v, acento }: { v: Vidriera; acento: string }) {
                       className="flex h-full w-full items-center justify-center text-4xl font-bold text-white"
                       style={{
                         background: `linear-gradient(150deg, ${hexA(acento, 0.9)}, ${hexA(acento, 0.55)})`,
-                        fontFamily: "Syne, sans-serif",
+                        fontFamily: "var(--fuente-titulos)",
                       }}
                     >
                       {r.nombre.charAt(0).toUpperCase()}
@@ -1099,7 +1099,7 @@ export function FooterVidriera() {
       >
         <Sparkles className="h-3.5 w-3.5" />
         Reservas online con{" "}
-        <span className="font-bold" style={{ fontFamily: "Syne, sans-serif", color: TINTA }}>
+        <span className="font-bold" style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}>
           Turnos360
         </span>
       </a>

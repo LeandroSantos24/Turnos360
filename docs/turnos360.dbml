@@ -776,6 +776,7 @@ Table turno {
   mp_payment_id varchar(60)
   recordatorio_enviado boolean [not null]
   recordatorio_2h_enviado boolean [not null]
+  creado_at timestamp with time zone [not null]
   motivo_cancelacion varchar(300)
   notas text
   creado_por integer [ref: > usuario.id]

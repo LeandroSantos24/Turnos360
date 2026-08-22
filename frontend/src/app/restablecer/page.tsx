@@ -112,7 +112,7 @@ export default function RestablecerPage() {
       <div className="w-full max-w-sm rounded-2xl border bg-white p-8 shadow-sm">
         <h1
           className="text-2xl font-bold tracking-tight text-[#0a0f1e]"
-          style={{ fontFamily: "Syne, sans-serif" }}
+          style={{ fontFamily: "var(--fuente-marca)" }}
         >
           Turnos<span className="text-[#00b894]">360</span>
         </h1>

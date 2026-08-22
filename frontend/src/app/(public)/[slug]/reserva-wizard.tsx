@@ -432,7 +432,7 @@ export function ReservaWizard({
               <div className="min-w-0 flex-1">
                 <h3
                   className="truncate text-lg font-bold"
-                  style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+                  style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
                 >
                   {TITULOS[paso]}
                 </h3>
@@ -963,7 +963,7 @@ export function ReservaWizard({
                   </motion.svg>
                   <h4
                     className="mt-4 text-xl font-bold"
-                    style={{ fontFamily: "Syne, sans-serif", color: TINTA }}
+                    style={{ fontFamily: "var(--fuente-titulos)", color: TINTA }}
                   >
                     ¡Listo, {nombre.trim().split(" ")[0]}!
                   </h4>

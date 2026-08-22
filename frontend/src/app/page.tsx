@@ -13,7 +13,13 @@ import {
   DIAS_PRUEBA,
 } from "@/lib/precios";
 
-const font = { sora: "'Sora', sans-serif", dm: "'DM Sans', sans-serif" };
+// Apuntan a las variables de globals.css. `marca` es la única que sigue
+// siendo una fuente de display, y se usa solo en el logotipo.
+const font = {
+  titulo: "var(--fuente-titulos)",
+  texto: "var(--fuente)",
+  marca: "var(--fuente-marca)",
+};
 
 const pains = [
   { num: "01", title: "Los ausentes", body: "El que reserva y no viene te quema una hora que podías facturar. Es el dolor número uno del rubro." },
@@ -229,12 +235,12 @@ export default function Page() {
         }
       `}</style>
 
-    <div style={{ fontFamily: font.dm, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
+    <div style={{ fontFamily: font.texto, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
       {/* NAV */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/img/logo.png" alt="Turnos360" style={{ width: 38, height: 38, objectFit: "contain" }} />
-          <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
+          <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <a href="#funciones" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Funciones</a>
@@ -261,7 +267,7 @@ export default function Page() {
       <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)", padding: "clamp(48px,8vw,96px) clamp(16px,5vw,64px) clamp(40px,6vw,72px)", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ flex: "1 1 420px", minWidth: 300 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho para barberías, peluquerías y salones de Argentina</div>
-          <h1 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
+          <h1 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
           <p style={{ fontSize: "clamp(16px,2vw,19px)", lineHeight: 1.6, color: "#5d6578", margin: "0 0 28px", maxWidth: 520, textWrap: "pretty" as any }}>Con Turnos360 tus clientes reservan solos, pagan la seña con Mercado Pago y reciben recordatorios automáticos. Vos atendés; el sistema agenda, cobra y te muestra los números.</p>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
             <a href={WA_LINK} target="_blank" style={{ display: "flex", alignItems: "center", gap: 10, background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>
@@ -332,7 +338,7 @@ export default function Page() {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(24px,4vw,56px)", marginBottom: 40 }}>
             <div style={{ flex: "1 1 380px", minWidth: 280 }}>
-              <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 640 }}>Si manejás el negocio con libreta y WhatsApp, esto te suena.</h2>
+              <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 640 }}>Si manejás el negocio con libreta y WhatsApp, esto te suena.</h2>
               <p style={{ color: "#5d6578", fontSize: 17, margin: 0, maxWidth: 560 }}>Cuatro cosas que le pasan a casi todos los dueños del rubro.</p>
             </div>
             <img src="/img/duena-notebook.jpg" alt="Dueña revisando sus números en Turnos360" style={{ flex: "1 1 320px", minWidth: 280, maxWidth: 440, width: "100%", borderRadius: 20, objectFit: "cover", aspectRatio: "3 / 2", boxShadow: "0 20px 48px rgba(28,34,44,0.14)" }} />
@@ -340,7 +346,7 @@ export default function Page() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {pains.map((p) => (
               <div key={p.num} style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 18, padding: 24 }}>
-                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 26, color: "#12b886", marginBottom: 12 }}>{p.num}</div>
+                <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 26, color: "#12b886", marginBottom: 12 }}>{p.num}</div>
                 <div style={{ fontWeight: 700, fontSize: 16.5, marginBottom: 8 }}>{p.title}</div>
                 <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{p.body}</div>
               </div>
@@ -352,12 +358,12 @@ export default function Page() {
       {/* FUNCIONALIDADES */}
       <section id="funciones" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "inline-flex", background: "#fff7ec", color: "#b45309", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 16 }}>Lo que la agenda común no hace</div>
-        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 620 }}>Anotar turnos lo hace cualquiera. Esto es lo que te diferencia.</h2>
+        <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 620 }}>Anotar turnos lo hace cualquiera. Esto es lo que te diferencia.</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 0 40px", maxWidth: 600 }}>Turnos360 te dice cuánto ganaste, quién te lo generó y qué clientes dejaron de venir.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {features.map((f) => (
             <div key={f.title} style={{ border: "1px solid #e9ecf1", borderRadius: 18, padding: 26, background: "#fff" }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: "#eef9f4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, marginBottom: 16, color: "#0e8371", fontWeight: 700, fontFamily: font.sora }}>{f.glyph}</div>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: "#eef9f4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, marginBottom: 16, color: "#0e8371", fontWeight: 700, fontFamily: font.titulo }}>{f.glyph}</div>
               <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{f.title}</div>
               <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{f.body}</div>
             </div>
@@ -368,12 +374,12 @@ export default function Page() {
       {/* PANEL / TABS */}
       <section style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Todo el negocio en un solo lugar</h2>
+          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Todo el negocio en un solo lugar</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 8px", maxWidth: 560 }}>Agenda, clientes, caja y estadísticas desde el celular o la compu. Estas son pantallas reales del sistema.</p>
           <img src="/img/notebook-mockup.png" alt="Turnos360 en una notebook" style={{ width: "100%", maxWidth: 720, mixBlendMode: "multiply", display: "block", margin: "0 auto 8px" }} />
           <div style={{ display: "inline-flex", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 999, padding: 5, gap: 4, marginBottom: 28, flexWrap: "wrap", justifyContent: "center" }}>
             {shots.map((s, i) => (
-              <button key={s.label} onClick={() => setTab(i)} style={{ border: "none", cursor: "pointer", fontFamily: font.dm, fontSize: 14.5, fontWeight: 700, padding: "9px 22px", borderRadius: 999, background: i === tab ? "#12b886" : "transparent", color: i === tab ? "#fff" : "#5d6578" }}>{s.label}</button>
+              <button key={s.label} onClick={() => setTab(i)} style={{ border: "none", cursor: "pointer", fontFamily: font.texto, fontSize: 14.5, fontWeight: 700, padding: "9px 22px", borderRadius: 999, background: i === tab ? "#12b886" : "transparent", color: i === tab ? "#fff" : "#5d6578" }}>{s.label}</button>
             ))}
           </div>
           <div
@@ -444,7 +450,7 @@ export default function Page() {
       <section style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,72px)" }}>
           <div style={{ flex: "1 1 360px", minWidth: 280 }}>
-            <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 16px" }}>Tu página de reservas, donde quieras</h2>
+            <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 16px" }}>Tu página de reservas, donde quieras</h2>
             <p style={{ color: "#5d6578", fontSize: 17, lineHeight: 1.6, margin: "0 0 24px", maxWidth: 480, textWrap: "pretty" as any }}>Cada negocio tiene su propia página con su logo, sus servicios y sus horarios. Ponela en la bio de Instagram, en el estado de WhatsApp o imprimí el QR y pegalo en el espejo del local. El cliente reserva solo, incluso a las 2 de la mañana.</p>
             <a href={WA_LINK} target="_blank" style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#1c222c", color: "#fff", fontWeight: 700, fontSize: 16, padding: "14px 26px", borderRadius: 999, textDecoration: "none" }}>Quiero mi página</a>
           </div>
@@ -498,13 +504,13 @@ export default function Page() {
       {/* COMO FUNCIONA */}
       <section id="como-funciona" style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Nosotros te lo dejamos andando</h2>
+          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Nosotros te lo dejamos andando</h2>
           <p style={{ color: "#8b93a7", fontSize: 17, margin: "0 0 44px", maxWidth: 560 }}>No hay que crear cuentas ni configurar nada solo. El alta la hacemos con vos, paso a paso.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
             {steps.map((s) => (
               <div key={s.num} style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: 28, background: "rgba(255,255,255,0.04)" }}>
-                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 14, color: "#8bc540", letterSpacing: "0.12em", marginBottom: 14 }}>PASO {s.num}</div>
-                <div style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 21, color: "#fff", marginBottom: 10 }}>{s.title}</div>
+                <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 14, color: "#8bc540", letterSpacing: "0.12em", marginBottom: 14 }}>PASO {s.num}</div>
+                <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 21, color: "#fff", marginBottom: 10 }}>{s.title}</div>
                 <div style={{ color: "#b8bfcc", fontSize: 15, lineHeight: 1.6 }}>{s.body}</div>
               </div>
             ))}
@@ -518,7 +524,7 @@ export default function Page() {
 
       {/* RUBROS */}
       <section id="rubros" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
-        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Hecho para tu rubro</h2>
+        <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Hecho para tu rubro</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 36px", maxWidth: 520 }}>Servicios con duración, profesional y precio. Si trabajás con turnos, Turnos360 es para vos.</p>
         {/* Cinta continua en vez de grilla.
 
@@ -555,7 +561,7 @@ export default function Page() {
       {/* PRECIOS */}
       <section id="precios" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
+          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 40px", maxWidth: 520 }}>Sin niveles, sin funciones bloqueadas, sin sorpresas. Todo lo que viste en esta página está adentro.</p>
           <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "2px solid #12b886", borderRadius: 24, padding: "clamp(28px,4vw,40px)", boxShadow: "0 24px 60px rgba(18,184,134,0.14)", textAlign: "left" }}>
             <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>{DIAS_PRUEBA} días de prueba gratis</div>
@@ -565,7 +571,7 @@ export default function Page() {
                   {PRECIO_NORMAL_TEXTO}
                 </span>
               )}
-              <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>{PRECIO_MENSUAL_TEXTO}</span>
+              <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>{PRECIO_MENSUAL_TEXTO}</span>
               <span style={{ color: "#5d6578", fontSize: 17, fontWeight: 500 }}>/ mes</span>
             </div>
             {PROMO_ACTIVA && (
@@ -598,12 +604,12 @@ export default function Page() {
 
       {/* FAQ */}
       <section id="faq" style={{ padding: "0 clamp(16px,5vw,64px) clamp(56px,8vw,96px)", maxWidth: 820, margin: "0 auto" }}>
-        <h2 style={{ fontFamily: font.sora, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 8px", textAlign: "center" }}>Preguntas frecuentes</h2>
+        <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 8px", textAlign: "center" }}>Preguntas frecuentes</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 0 32px", textAlign: "center" }}>Lo que todos preguntan antes de arrancar.</p>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {faqs.map((q, i) => (
             <div key={q.q} style={{ borderBottom: "1px solid #e9ecf1" }}>
-              <button onClick={() => setFaq(faq === i ? -1 : i)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "18px 4px", fontFamily: font.dm, fontSize: 16.5, fontWeight: 700, color: "#1c222c" }}>
+              <button onClick={() => setFaq(faq === i ? -1 : i)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "18px 4px", fontFamily: font.texto, fontSize: 16.5, fontWeight: 700, color: "#1c222c" }}>
                 {q.q}
                 <span style={{ color: "#12b886", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>{faq === i ? "−" : "+"}</span>
               </button>
@@ -617,7 +623,7 @@ export default function Page() {
       <footer style={{ borderTop: "1px solid #eef1f5", padding: "28px clamp(16px,5vw,64px)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/img/logo.png" alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
-          <span style={{ fontFamily: font.sora, fontWeight: 700, fontSize: 16 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
+          <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 16 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>

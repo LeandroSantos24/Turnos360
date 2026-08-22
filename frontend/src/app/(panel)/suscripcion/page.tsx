@@ -20,7 +20,7 @@ import { CreditCard, Copy, Check, AlertTriangle, ExternalLink } from "lucide-rea
 import { leerMiSuscripcion, type MiSuscripcion } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
 
-const SYNE = { fontFamily: "Syne, sans-serif" } as const;
+const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
 function pesos(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";

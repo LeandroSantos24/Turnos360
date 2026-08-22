@@ -56,7 +56,7 @@ function fechaCorta(iso: string | null): string {
 
 /** Estilo reusable para los números grandes en Syne, parejos. */
 const NUM_STYLE: React.CSSProperties = {
-  fontFamily: "Syne, sans-serif",
+  fontFamily: "var(--fuente-titulos)",
   fontVariantNumeric: "lining-nums tabular-nums",
 };
 
@@ -181,7 +181,7 @@ export default function FichaClientePage() {
       <div className="mb-6 flex items-start gap-4">
         <div
           className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white"
-          style={{ backgroundColor: color, fontFamily: "Syne, sans-serif" }}
+          style={{ backgroundColor: color, fontFamily: "var(--fuente-titulos)" }}
         >
           {inicialDe(nombreCompleto)}
         </div>

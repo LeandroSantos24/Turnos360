@@ -96,6 +96,13 @@ class Turno(TenantMixin, Base):
     recordatorio_2h_enviado: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    # Cuándo se creó. Lo escribe Postgres con now(): es un INSTANTE REAL
+    # en UTC, NO la hora de pared con la que trabaja fecha_inicio. Son dos
+    # convenciones distintas en la misma tabla y mezclarlas da tres horas
+    # de error. Se compara contra datetime.now(timezone.utc).
+    creado_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     motivo_cancelacion: Mapped[str | None] = mapped_column(String(300))
     notas: Mapped[str | None] = mapped_column(Text)
     creado_por: Mapped[int | None] = mapped_column(

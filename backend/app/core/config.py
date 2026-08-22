@@ -6,6 +6,38 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Valor de relleno: sirve en desarrollo, pero está PROHIBIDO en producción.
 PLACEHOLDER_SECRET = "cambiar-en-produccion"
 
+# ── Interruptores con valores cerrados ────────────────────────────────────
+# Tres variables de texto libre que gobiernan cosas que, si se escriben mal,
+# se rompen EN SILENCIO. No hay error, no hay log: simplemente el sistema hace
+# otra cosa que la que el .env dice.
+#
+#   WA_PROVEEDOR    es el freno de mano de la mensajería. Con "simulado" no
+#                   sale un mensaje a la calle. La comparación era contra el
+#                   literal "simulado", así que WA_PROVEEDOR=Simulado —una S
+#                   mayúscula— caía del lado de Meta y los mensajes SALÍAN.
+#                   Un typo prendía el sistema en vez de apagarlo.
+#
+#   MP_FIRMA_MODO   es la verificación de firma de los webhooks de Mercado
+#                   Pago. MP_FIRMA_MODO=enforced (con d) no es "off" así que
+#                   validaba, pero tampoco es "enforce" así que no bloqueaba:
+#                   quedaba en modo log creyendo que estaba enforzando.
+#
+#   ENV             decide si corren los fail-fast de producción (SECRET_KEY,
+#                   FERNET_KEY) y el guard que impide sembrar la base. ENV=prd
+#                   los apaga a todos sin decir nada.
+#
+# Ahora un valor que no existe hace que el backend NO LEVANTE y diga cuál es.
+# Es incómodo a propósito: un contenedor que no arranca se ve enseguida; una
+# firma que no se valida no se ve nunca.
+WA_PROVEEDORES = ("simulado", "meta")
+MP_FIRMA_MODOS = ("off", "log", "enforce")
+ENTORNOS = (
+    "dev", "development", "local",
+    "test", "testing",
+    "staging",
+    "prod", "produccion", "production",
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -82,6 +114,13 @@ class Settings(BaseSettings):
     # 'enforce' rechaza lo que no venga firmado. Se sube un escalón por
     # vez, mirando los logs. Ver routers/publico.py.
     mp_firma_modo: str = "off"          # off | log | enforce
+    # Minutos que una reserva con seña espera el pago antes de soltar el
+    # horario. Una reserva con seña OCUPA la agenda desde el segundo cero:
+    # sin esto, el cliente que cierra Mercado Pago sin pagar deja el
+    # horario tomado para siempre. 30 minutos es holgado para Checkout Pro
+    # (transferencia, tarjeta, ir a buscar la clave) sin dejar el hueco
+    # muerto media tarde. 0 apaga la expiración.
+    sena_minutos_para_pagar: int = 30
     mp_webhook_secret: str = ""
     wa_webhook_verify_token: str = ""
     wa_app_secret: str = ""
@@ -175,6 +214,34 @@ class Settings(BaseSettings):
     def cors_origins_lista(self) -> list[str]:
         """Convierte el string de orígenes en la lista que espera el middleware."""
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _validar_interruptores(self):
+        """Normaliza y valida los tres interruptores de texto libre.
+
+        Corre SIEMPRE, no solo en producción: un WA_PROVEEDOR mal escrito en
+        la máquina de desarrollo manda mensajes de verdad a teléfonos de
+        verdad, que es exactamente lo que el modo simulado existe para evitar.
+
+        Los espacios y las mayúsculas se perdonan (`WA_PROVEEDOR=Simulado ` es
+        una intención clarísima); lo que no existe, se rechaza.
+        """
+        for campo, validos, ayuda in (
+            ("env", ENTORNOS, "ENV"),
+            ("wa_proveedor", WA_PROVEEDORES, "WA_PROVEEDOR"),
+            ("mp_firma_modo", MP_FIRMA_MODOS, "MP_FIRMA_MODO"),
+        ):
+            valor = (getattr(self, campo) or "").strip().lower()
+            if valor not in validos:
+                raise ValueError(
+                    f"{ayuda}={getattr(self, campo)!r} no es un valor válido. "
+                    f"Los que existen son: {', '.join(validos)}. "
+                    "Corregilo en el .env — el backend no levanta con esto mal "
+                    "escrito a propósito: antes se ignoraba en silencio y el "
+                    "sistema hacía otra cosa que la que el archivo decía."
+                )
+            object.__setattr__(self, campo, valor)
+        return self
 
     @model_validator(mode="after")
     def _exigir_secretos_en_produccion(self):

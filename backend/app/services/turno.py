@@ -18,6 +18,7 @@ from app.models.items import ItemTurno
 from app.models.finanzas import Pago
 from app.models.enums import EstadoTurno
 from app.schemas.turno import TurnoCambiarEstado, TurnoCrear, TurnoMover
+from app.core.candados import bloquear_agenda
 from app.services import disponibilidad as disp
 from app.services import membresia as svc_membresia
 
@@ -232,6 +233,15 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
     # 2. El sistema calcula la fecha de fin (no la manda el cliente)
     fecha_fin = datos.fecha_inicio + dt.timedelta(minutes=servicio.duracion_min)
 
+    # 2.5. CANDADO. Entre preguntar «¿está libre?» y hacer el INSERT no
+    # había nada: dos personas confirmando con milisegundos de diferencia
+    # se quedaban las dos con la misma silla, y las dos recibían «tu turno
+    # quedó reservado». Ver app/core/candados.py.
+    #
+    # Va incluso para los sobreturnos: cuestan poco y así el orden es
+    # siempre el mismo, sin depender de por qué rama entró la reserva.
+    bloquear_agenda(db, empresa_id, datos.recurso_id)
+
     # 3. Validar disponibilidad con el motor (salvo que sea sobreturno).
     # Le pasamos el grupo_agenda del servicio: solo bloquea con turnos del
     # mismo carril (corte vs tintura vs barba conviven a la misma hora).
@@ -308,6 +318,11 @@ def mover(
     serv_turno = db.get(Servicio, turno.servicio_id) if turno.servicio_id else None
     grupo_turno = serv_turno.grupo_agenda if serv_turno else None
 
+    # Mismo candado que al crear: mover un turno a un hueco es exactamente
+    # la misma carrera. Se traba el recurso DESTINO, que es donde puede
+    # haber colisión.
+    bloquear_agenda(db, empresa_id, nuevo_recurso_id)
+
     # validar el nuevo hueco, excluyendo este mismo turno
     if not turno.es_sobreturno:
         libre = disp.esta_disponible(
@@ -320,6 +335,14 @@ def mover(
                 status.HTTP_409_CONFLICT,
                 "El nuevo horario no está disponible",
             )
+
+    # Si el turno se movió de fecha, vuelve a tener derecho a su
+    # recordatorio. Los flags no se reseteaban nunca: al turno que MÁS chance
+    # tiene de olvidarse —justo el que le cambiaron el horario— era al único
+    # que no le llegaba el aviso.
+    if datos.fecha_inicio != turno.fecha_inicio:
+        turno.recordatorio_enviado = False
+        turno.recordatorio_2h_enviado = False
 
     turno.fecha_inicio = datos.fecha_inicio
     turno.fecha_fin = nueva_fin
