@@ -74,6 +74,35 @@ PRESET_NUTRICION = {
     "datos_sensibles": True,
 }
 
+PRESET_UNAS = {
+    "terminologia": {"turno": "turno", "recurso": "manicura", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [
+        {"clave": "preferencias", "etiqueta": "Preferencias / alergias", "tipo": "texto"},
+    ],
+    "datos_sensibles": False,
+}
+
+PRESET_ESTETICA = {
+    "terminologia": {"turno": "turno", "recurso": "profesional", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [
+        {"clave": "tipo_piel", "etiqueta": "Tipo de piel", "tipo": "texto"},
+        {"clave": "alergias", "etiqueta": "Alergias", "tipo": "texto"},
+    ],
+    "datos_sensibles": False,
+}
+
+PRESET_SPA = {
+    "terminologia": {"turno": "sesión", "recurso": "profesional", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [],
+    "datos_sensibles": False,
+}
+
 CATEGORIAS = {
     TipoMovimiento.INGRESO: ["Turnos", "Venta de productos", "Membresías", "Gift cards", "Paquetes"],
     TipoMovimiento.EGRESO: [

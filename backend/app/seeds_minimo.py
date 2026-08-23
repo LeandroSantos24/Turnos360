@@ -22,12 +22,22 @@ from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.db.session import SessionLocal
 from app.models import Rubro, SuperAdmin
-from app.seeds import PRESET_BARBERIA, PRESET_MEDICO, PRESET_NUTRICION
+from app.seeds import (
+    PRESET_BARBERIA,
+    PRESET_ESTETICA,
+    PRESET_MEDICO,
+    PRESET_NUTRICION,
+    PRESET_SPA,
+    PRESET_UNAS,
+)
 
 RUBROS = [
     ("barberia", "Barbería / Peluquería", PRESET_BARBERIA),
     ("medico", "Consultorio médico", PRESET_MEDICO),
     ("nutricion", "Nutrición", PRESET_NUTRICION),
+    ("unas", "Centro de uñas / Manicura", PRESET_UNAS),
+    ("estetica", "Centro de estética", PRESET_ESTETICA),
+    ("spa", "Spa & Masajes", PRESET_SPA),
 ]
 
 EMAIL_DEV = "admin@turnos360.com"
@@ -106,7 +116,10 @@ def run(rotar_clave: bool = False) -> None:
             print(f"  Super-admin: {email} / {CLAVE_DEV}  (clave de DESARROLLO)")
         else:
             print(f"  Super-admin: {email}  (con la clave de SUPERADMIN_PASS)")
-        print("  Rubros disponibles: barbería, médico, nutrición")
+        print(
+            "  Rubros disponibles: barbería, médico, nutrición, uñas, "
+            "estética, spa"
+        )
         print("  Entrá al panel /admin para crear tus empresas y usuarios.")
     finally:
         db.close()

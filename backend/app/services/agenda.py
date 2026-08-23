@@ -9,6 +9,7 @@ Este service es la base sobre la que E2-final monta el cálculo de disponibilida
 
 import datetime as dt
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -51,6 +52,26 @@ def agregar_horario(
     """Agrega una franja al recurso. None si el recurso no es de esta empresa."""
     if _recurso_de_empresa(db, empresa_id, recurso_id) is None:
         return None
+    # Una franja idéntica ya cargada no aporta nada y ensucia la
+    # disponibilidad: la pantalla dejaba apilar la misma franja infinitas
+    # veces. Se rechaza el duplicado EXACTO (mismo día, mismas horas, misma
+    # vigencia); dos franjas distintas del mismo día (9-13 y 16-20, un turno
+    # partido) siguen valiendo.
+    if db.scalar(
+        select(HorarioRecurso.id).where(
+            HorarioRecurso.empresa_id == empresa_id,
+            HorarioRecurso.recurso_id == recurso_id,
+            HorarioRecurso.dia_semana == datos.dia_semana,
+            HorarioRecurso.hora_desde == datos.hora_desde,
+            HorarioRecurso.hora_hasta == datos.hora_hasta,
+            HorarioRecurso.vigencia_desde == datos.vigencia_desde,
+            HorarioRecurso.vigencia_hasta == datos.vigencia_hasta,
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esa franja ya está cargada para este recurso.",
+        )
     horario = HorarioRecurso(
         empresa_id=empresa_id, recurso_id=recurso_id, **datos.model_dump()
     )

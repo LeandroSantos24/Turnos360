@@ -113,19 +113,24 @@ services:
     # X-Forwarded-For que manda Nginx, así slowapi limita por IP REAL.
     # Sin esto, todos los visitantes comparten la IP de Nginx y el límite
     # de login se vuelve global (un atacante bloquea a todos tus clientes).
-    # "*" es seguro acá porque el backend no publica puertos: lo único que
-    # puede llegarle es Nginx.
+    #
+    # El valor es la red interna de Docker (172.16.0.0/12) y NO "*": con "*"
+    # uvicorn confía en el PRIMER valor de X-Forwarded-For, que lo pone el
+    # cliente (Nginx agrega al final, no reemplaza), y el atacante elegiría la
+    # clave del rate limit —— fuerza bruta ilimitada contra /admin/login.
+    # Acotado a la red de Docker, uvicorn recorre la cadena en reversa y se
+    # queda con la IP real del visitante.
+    #
+    # OJO — estos comentarios van ACÁ ARRIBA, NO adentro del command. En un
+    # bloque plegado (command: >) una línea que empieza con # NO es un
+    # comentario: se pliega dentro del string y uvicorn recibe basura
+    # ("invalid command line string"). Y el valor va SIN comillas: en el
+    # bloque plegado no hay shell que las saque y quedan pegadas al valor.
     command: >
       uvicorn app.main:app
       --host 0.0.0.0 --port 8000
       --workers ${UVICORN_WORKERS:-2}
-      # OJO con el valor de --forwarded-allow-ips: con "*" uvicorn confía
-      # en el PRIMER valor de X-Forwarded-For, que lo pone el cliente
-      # (Nginx agrega al final, no reemplaza). Eso deja elegir la clave del
-      # rate limit al atacante: fuerza bruta ilimitada contra /admin/login.
-      # Acotado a la red interna de Docker, uvicorn recorre la cadena en
-      # reversa y se queda con la IP real del visitante.
-      --proxy-headers --forwarded-allow-ips="172.16.0.0/12"
+      --proxy-headers --forwarded-allow-ips=172.16.0.0/12
       --no-access-log
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status==200 else 1)\""]

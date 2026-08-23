@@ -158,6 +158,19 @@ def crear_empresa(db: Session, datos) -> Empresa:
     db.refresh(empresa)
     empresa.rubro_nombre = rubro.nombre
     empresa.cantidad_usuarios = 1
+    # EmpresaAdminOut espera prueba_hasta y suscripcion_vence como TEXTO y
+    # trae estado_suscripcion. El objeto ORM las tiene como date (o sin
+    # setear): sin esta conversión Pydantic se cae al serializar y devuelve
+    # 500 —— con la empresa YA creada, así que el reintento choca con «ya
+    # existe» y el dueño cree que falló. Mismo cierre que listar_empresas.
+    from app.services.suscripcion import estado_suscripcion
+
+    est = estado_suscripcion(empresa)
+    empresa.estado_suscripcion = est["estado"]
+    empresa.suscripcion_vence = est["vence"]
+    empresa.prueba_hasta = (
+        str(empresa.prueba_hasta) if empresa.prueba_hasta else None
+    )
     return empresa
 
 
