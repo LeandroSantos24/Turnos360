@@ -14,11 +14,9 @@ dependencies = [
     "redis>=5.2",
     "celery>=5.4",
     "cryptography>=44.0",
-    "faker>=33.0",
     "pyjwt>=2.10",
     "pydantic[email]>=2.10",
     "python-multipart>=0.0.18",
-    "pytest>=8.3",
     "httpx>=0.28",
     "slowapi>=0.1.9",
 ]
@@ -29,7 +27,10 @@ dependencies = [
 # pone rojo solo el día que sale una versión. Para subirlo: cambiar el
 # rango, correr `ruff check` local, arreglar lo que aparezca, y recién ahí
 # commitear los dos juntos.
-dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.9,<0.10"]
+# faker solo lo usa app/seeds.py (datos de demo). En la imagen de producción
+# pesaba 26 MB para nada: los presets de rubro que sí necesita el servidor
+# viven ahora en app/presets.py, sin dependencias.
+dev = ["pytest>=8.3", "httpx>=0.28", "faker>=33.0", "ruff>=0.9,<0.10"]
 
 [build-system]
 requires = ["setuptools>=68"]

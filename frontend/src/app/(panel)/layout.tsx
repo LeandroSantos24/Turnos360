@@ -72,7 +72,12 @@ const NAV: NavItem[] = [
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
   { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards" },
   { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
-  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "negocio", soloDueno: true },
+  // WhatsApp queda FUERA del menú para el lanzamiento: el circuito está
+  // entero en el código pero no hay proveedor real conectado (WA_PROVEEDOR=
+  // simulado), así que la pantalla no le sirve todavía a ningún dueño.
+  // Para encenderlo más adelante —por empresa— alcanza con poner
+  // "whatsapp": true en los módulos del preset de esa empresa.
+  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "negocio", soloDueno: true, moduloRequerido: "whatsapp" },
   { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true },
   { href: "/cuenta", label: "Mi cuenta", icon: UserCircle, grupo: "config" },
   { href: "/suscripcion", label: "Mi suscripción", icon: Receipt, grupo: "config", soloDueno: true },

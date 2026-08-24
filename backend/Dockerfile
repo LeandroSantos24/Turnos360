@@ -15,7 +15,10 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY app ./app
-RUN pip install --no-cache-dir .
+# La imagen de DEV instala también el extra "dev": pytest, ruff y faker.
+# faker lo necesita `make seed` (datos de demo) y ya no viaja a la imagen
+# de producción, que instala solo "." (ver Dockerfile.prod).
+RUN pip install --no-cache-dir ".[dev]"
 
 COPY . .
 

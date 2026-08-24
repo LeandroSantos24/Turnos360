@@ -22,7 +22,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.db.session import SessionLocal
 from app.models import Rubro, SuperAdmin
-from app.seeds import (
+from app.presets import (
     PRESET_BARBERIA,
     PRESET_ESTETICA,
     PRESET_MEDICO,

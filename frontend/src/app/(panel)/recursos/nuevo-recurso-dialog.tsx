@@ -1,9 +1,17 @@
 "use client";
 
-/** Diálogo para crear un recurso nuevo (persona, box o equipo). */
+/**
+ * Diálogo para crear un recurso nuevo.
+ *
+ * Todo recurso nuevo nace como PERSONA. Los tipos "box" y "equipo" siguen
+ * existiendo en la base (y se pueden ver y editar en los recursos viejos que
+ * ya los tengan), pero se sacaron del alta: no se agendan, no aparecen en la
+ * página de reservas y no se les puede asignar un turno. Ofrecerlos en el
+ * alta era invitar al dueño a cargar algo que después no le sirve.
+ */
 
 import { useState } from "react";
-import { crearRecurso, TipoRecurso } from "@/lib/recursos-api";
+import { crearRecurso } from "@/lib/recursos-api";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -19,13 +27,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SelectorUsuarioVinculado } from "./selector-usuario-vinculado";
 
 export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
@@ -33,20 +34,11 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
   const [guardando, setGuardando] = useState(false);
 
   const [nombre, setNombre] = useState("");
-  const [tipo, setTipo] = useState<TipoRecurso>("persona");
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
 
   function limpiar() {
     setNombre("");
-    setTipo("persona");
     setUsuarioId(null);
-  }
-
-  function cambiarTipo(v: string) {
-    const t = v as TipoRecurso;
-    setTipo(t);
-    // un box o equipo no tiene login: limpiamos el vínculo
-    if (t !== "persona") setUsuarioId(null);
   }
 
   async function guardar(e: React.FormEvent) {
@@ -55,8 +47,8 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
     try {
       await crearRecurso({
         nombre,
-        tipo,
-        usuario_id: tipo === "persona" ? usuarioId : null,
+        tipo: "persona",
+        usuario_id: usuarioId,
       });
       toast.success("Recurso creado");
       limpiar();
@@ -78,7 +70,7 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
         <DialogHeader>
           <DialogTitle>Nuevo recurso</DialogTitle>
           <DialogDescription>
-            Una persona (barbero, médico), un box o un equipo.
+            La persona que atiende: barbero, médico, manicura, profesional.
           </DialogDescription>
         </DialogHeader>
 
@@ -89,36 +81,12 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
               id="nombre"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Juan, Box 1, Sillón 3…"
+              placeholder="Juan, Ana, Dr. Pérez…"
               required
               autoFocus
             />
           </div>
-          <div className="space-y-2">
-            <Label>Tipo *</Label>
-            <Select value={tipo} onValueChange={cambiarTipo}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="persona">Persona</SelectItem>
-                <SelectItem value="box">Box</SelectItem>
-                <SelectItem value="equipo">Equipo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {tipo !== "persona" && (
-            <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-              Los recursos de tipo Box y Equipo todavía no se agendan: no
-              aparecen en la agenda ni en tu página de reservas, y no se les
-              puede asignar un turno. Por ahora sirven solo como inventario.
-              Si lo que querés es que se pueda reservar, cargalo como Persona.
-            </p>
-          )}
-          {tipo === "persona" && (
-            <SelectorUsuarioVinculado value={usuarioId} onChange={setUsuarioId} />
-          )}
+          <SelectorUsuarioVinculado value={usuarioId} onChange={setUsuarioId} />
 
           <DialogFooter>
             <Button type="submit" disabled={guardando}>

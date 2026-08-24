@@ -30,6 +30,11 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Techo de memoria: sin esto, un contenedor que se va de mambo (una
+    # consulta pesada, una fuga) se lleva puesto el servidor entero y caen
+    # los otros seis. Los valores son para un VPS chico; si el server tiene
+    # más RAM se pueden subir, pero NO conviene sacarlos.
+    mem_limit: 768m
     logging: *logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -47,21 +52,31 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    mem_limit: 128m
     logging: *logs
     # SIN ports. Además con contraseña: si algún día alguien entra a la red
     # interna, tampoco puede encolar tareas de Celery a mano.
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "no"]
+    # maxmemory con noeviction: Redis es el broker de Celery. Con la política
+    # por defecto, bajo presión de memoria descartaría tareas encoladas
+    # (un recordatorio que nunca sale) sin que nadie se entere.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "no",
+              "--maxmemory", "96mb", "--maxmemory-policy", "noeviction"]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  # backend, worker y beat corren EXACTAMENTE el mismo código. Con el mismo
+  # `image:` los tres, Docker construye una sola vez y los otros dos reusan
+  # el tag ya armado en vez de disparar tres builds.
   backend:
+    image: turnos360-backend:prod
     build:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    mem_limit: 640m
     logging: *logs
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -145,13 +160,17 @@ services:
         condition: service_healthy
 
   worker:
+    image: turnos360-backend:prod
     build:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    mem_limit: 384m
     logging: *logs
     environment: *backend_env
-    command: celery -A app.celery_app worker --loglevel=warning --concurrency=2
+    # concurrency=1 alcanza: lo único que corre acá son envíos de email y el
+    # barrido de señas vencidas. Cada proceso extra es ~80 MB de RAM.
+    command: celery -A app.celery_app worker --loglevel=warning --concurrency=${CELERY_CONCURRENCY:-1}
     depends_on:
       db:
         condition: service_healthy
@@ -159,10 +178,12 @@ services:
         condition: service_healthy
 
   beat:
+    image: turnos360-backend:prod
     build:
       context: ../backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    mem_limit: 128m
     logging: *logs
     environment: *backend_env
     # --schedule fuera del código: el archivo de estado del beat es runtime,
@@ -190,6 +211,7 @@ services:
         # y no carga la imagen — justo el canal principal de difusión.
         NEXT_PUBLIC_SITE_URL: ${PUBLIC_BASE_URL}
     restart: unless-stopped
+    mem_limit: 512m
     logging: *logs
     environment:
       # Esta sí es de runtime: la usa el sitemap, que corre server-side
@@ -201,6 +223,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    mem_limit: 64m
     logging: *logs
     # El ÚNICO servicio que publica puertos al servidor.
     ports:

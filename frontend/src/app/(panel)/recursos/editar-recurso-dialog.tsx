@@ -43,6 +43,7 @@ export function EditarRecursoDialog({
   const [guardando, setGuardando] = useState(false);
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState<TipoRecurso>("persona");
+  const esTipoViejo = recurso != null && recurso.tipo !== "persona";
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -97,27 +98,36 @@ export function EditarRecursoDialog({
               autoFocus
             />
           </div>
-          <div className="space-y-2">
-            <Label>Tipo *</Label>
-            <Select value={tipo} onValueChange={cambiarTipo}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="persona">Persona</SelectItem>
-                <SelectItem value="box">Box</SelectItem>
-                <SelectItem value="equipo">Equipo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* El selector de tipo aparece SOLO si este recurso ya es un box o un
+              equipo (cargado antes de que se sacaran del alta). Para todos los
+              demás no se muestra: es una decisión que el dueño no tiene que
+              tomar, y cambiar una persona a box la saca de la agenda. Desde
+              acá se puede pasar un box viejo a persona, que es lo único útil
+              en esa dirección. */}
+          {esTipoViejo && (
+            <>
+              <div className="space-y-2">
+                <Label>Tipo *</Label>
+                <Select value={tipo} onValueChange={cambiarTipo}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="persona">Persona</SelectItem>
+                    <SelectItem value="box">Box</SelectItem>
+                    <SelectItem value="equipo">Equipo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {tipo !== "persona" && (
-            <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-              Los recursos de tipo Box y Equipo todavía no se agendan: no
-              aparecen en la agenda ni en tu página de reservas, y no se les
-              puede asignar un turno. Por ahora sirven solo como inventario.
-              Si lo que querés es que se pueda reservar, cargalo como Persona.
-            </p>
+              {tipo !== "persona" && (
+                <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+                  Box y Equipo no se agendan: no aparecen en la agenda ni en tu
+                  página de reservas, y no se les puede asignar un turno. Si
+                  querés que se pueda reservar, pasalo a Persona.
+                </p>
+              )}
+            </>
           )}
           {tipo === "persona" && (
             <SelectorUsuarioVinculado

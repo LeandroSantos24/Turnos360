@@ -29,3 +29,7 @@ celerybeat-schedule
 
 # Copias de seguridad de los fixes
 .backups/
+
+# Artefactos de `pip install` local (setuptools)
+backend/build/
+*.egg-info/

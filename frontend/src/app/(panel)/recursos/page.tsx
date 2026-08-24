@@ -1,7 +1,16 @@
 "use client";
 
 /**
- * Pantalla de Recursos (/recursos). Buscador + orden + editar/borrar.
+ * Pantalla de Recursos (/recursos).
+ *
+ * Arriba la lista (buscador + orden + editar/borrar); abajo, el horario de
+ * atención del recurso que esté seleccionado. Antes había que salir a otra
+ * pantalla por un menú de tres puntos para tocar los horarios, volver, y
+ * repetir para el siguiente: cargar la semana de tres barberos eran nueve
+ * navegaciones. Acá se elige uno, se carga la semana, se elige el otro.
+ *
+ * La página suelta /recursos/[id]/horarios sigue existiendo para los links
+ * directos, y usa el mismo componente <HorarioSemanal>.
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -10,9 +19,9 @@ import { ApiError } from "@/lib/api";
 import { NuevoRecursoDialog } from "./nuevo-recurso-dialog";
 import { EditarRecursoDialog } from "./editar-recurso-dialog";
 import { SoloDueno } from "@/components/si-rol";
+import { HorarioSemanal } from "./horario-semanal";
 import { toast } from "sonner";
-import { Clock, MoreVertical, Pencil, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { CalendarClock, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -54,6 +63,11 @@ export default function RecursosPage() {
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
 
+  // Recurso cuyo horario se muestra abajo. Se guarda el id y no el objeto
+  // entero para que al recargar la lista (crear, editar, borrar) el panel
+  // siga apuntando al mismo recurso, ya actualizado.
+  const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null);
+
   const [editando, setEditando] = useState<Recurso | null>(null);
   const [aBorrar, setABorrar] = useState<Recurso | null>(null);
 
@@ -84,6 +98,19 @@ export default function RecursosPage() {
       });
   }, [recursos, buscar, orden]);
 
+  const seleccionado = useMemo(
+    () => recursos.find((r) => r.id === seleccionadoId) ?? null,
+    [recursos, seleccionadoId],
+  );
+
+  // La columna "Tipo" solo aparece si queda algún box o equipo de los de
+  // antes. Con todos los recursos en "persona" era una columna que repetía
+  // la misma palabra en cada fila.
+  const hayTiposViejos = useMemo(
+    () => recursos.some((r) => r.tipo !== "persona"),
+    [recursos],
+  );
+
   function alternarOrden() {
     setOrden((o) => (o === "asc" ? "desc" : "asc"));
   }
@@ -93,6 +120,7 @@ export default function RecursosPage() {
     try {
       await borrarRecurso(aBorrar.id);
       toast.success(`"${aBorrar.nombre}" eliminado`);
+      if (seleccionadoId === aBorrar.id) setSeleccionadoId(null);
       setABorrar(null);
       cargar();
     } catch (err) {
@@ -155,14 +183,20 @@ export default function RecursosPage() {
                 >
                   Nombre {orden === "asc" ? "↑" : "↓"}
                 </TableHead>
-                <TableHead>Tipo</TableHead>
+                {hayTiposViejos && <TableHead>Tipo</TableHead>}
                 <TableHead>Especialidades</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibles.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  onClick={() => setSeleccionadoId(r.id)}
+                  className={`cursor-pointer ${
+                    r.id === seleccionadoId ? "bg-muted/60 hover:bg-muted/60" : ""
+                  }`}
+                >
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-2">
                       {r.color && (
@@ -174,13 +208,15 @@ export default function RecursosPage() {
                       {r.nombre}
                     </span>
                   </TableCell>
-                  <TableCell>{TIPO_LABEL[r.tipo] ?? r.tipo}</TableCell>
+                  {hayTiposViejos && (
+                    <TableCell>{TIPO_LABEL[r.tipo] ?? r.tipo}</TableCell>
+                  )}
                   <TableCell className="text-muted-foreground">
                     {r.especialidades.length > 0
                       ? r.especialidades.map((e) => e.nombre).join(", ")
                       : "—"}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <SoloDueno>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -189,12 +225,6 @@ export default function RecursosPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/recursos/${r.id}/horarios`}>
-                              <Clock size={14} className="mr-2" />
-                              Horarios
-                            </Link>
-                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setEditando(r)}>
                             <Pencil size={14} className="mr-2" />
                             Editar
@@ -215,6 +245,40 @@ export default function RecursosPage() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {/* ── Horario del recurso elegido ─────────────────────────────── */}
+      {!cargando && !error && visibles.length > 0 && (
+        <SoloDueno>
+          <div className="mt-8">
+            {seleccionado ? (
+              <>
+                <div className="mb-4 flex items-baseline gap-2">
+                  <h2 className="text-lg font-semibold">
+                    Horario de {seleccionado.nombre}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSeleccionadoId(null)}
+                    className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+                  >
+                    cerrar
+                  </button>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Agregá una o varias franjas por día (por ejemplo 9–13 y 16–20
+                  si cierra al mediodía). Un día sin franjas queda cerrado.
+                </p>
+                <HorarioSemanal recursoId={seleccionado.id} />
+              </>
+            ) : (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-8 text-sm text-muted-foreground">
+                <CalendarClock size={16} />
+                Elegí un recurso de la lista para ver y editar su horario.
+              </div>
+            )}
+          </div>
+        </SoloDueno>
       )}
 
       <EditarRecursoDialog

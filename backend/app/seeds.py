@@ -11,7 +11,15 @@ import os
 import random
 import secrets
 
-from faker import Faker
+try:
+    from faker import Faker
+except ModuleNotFoundError as e:  # pragma: no cover - solo pasa en la imagen de prod
+    raise SystemExit(
+        "Este seed genera datos de DEMO y necesita faker, que no se instala en la "
+        "imagen de producción a propósito.\n"
+        "En un servidor real el seed que va es:  python -m app.seeds_minimo\n"
+        "Para datos de demo, usá la imagen de desarrollo (pip install '.[dev]')."
+    ) from e
 
 from app.core.config import settings
 from app.core.crypto import encriptar_credenciales, hash_clave
@@ -44,64 +52,17 @@ Faker.seed(360)
 
 CANALES = ["instagram", "tiktok", "referido", "google", "paso_por_la_puerta"]
 
-PRESET_BARBERIA = {
-    "terminologia": {"turno": "turno", "recurso": "barbero", "cliente": "cliente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
-    "campos_cliente": [
-        {"clave": "preferencias_corte", "etiqueta": "Preferencias de corte", "tipo": "texto"},
-        {"clave": "productos", "etiqueta": "Productos utilizados", "tipo": "texto"},
-    ],
-    "datos_sensibles": False,
-}
-
-PRESET_MEDICO = {
-    "terminologia": {"turno": "turno", "recurso": "médico", "cliente": "paciente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": False, "ficha_clinica": True, "ordenes_trabajo": False},
-    "campos_cliente": [
-        {"clave": "obra_social", "etiqueta": "Obra social", "tipo": "texto"},
-        {"clave": "nro_afiliado", "etiqueta": "N.º de afiliado", "tipo": "texto"},
-    ],
-    "datos_sensibles": True,
-}
-
-PRESET_NUTRICION = {
-    "terminologia": {"turno": "consulta", "recurso": "profesional", "cliente": "paciente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": False, "ficha_clinica": True, "ordenes_trabajo": False},
-    "campos_cliente": [],
-    "datos_sensibles": True,
-}
-
-PRESET_UNAS = {
-    "terminologia": {"turno": "turno", "recurso": "manicura", "cliente": "cliente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
-    "campos_cliente": [
-        {"clave": "preferencias", "etiqueta": "Preferencias / alergias", "tipo": "texto"},
-    ],
-    "datos_sensibles": False,
-}
-
-PRESET_ESTETICA = {
-    "terminologia": {"turno": "turno", "recurso": "profesional", "cliente": "cliente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
-    "campos_cliente": [
-        {"clave": "tipo_piel", "etiqueta": "Tipo de piel", "tipo": "texto"},
-        {"clave": "alergias", "etiqueta": "Alergias", "tipo": "texto"},
-    ],
-    "datos_sensibles": False,
-}
-
-PRESET_SPA = {
-    "terminologia": {"turno": "sesión", "recurso": "profesional", "cliente": "cliente"},
-    "tipo_turno_default": "simple",
-    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
-    "campos_cliente": [],
-    "datos_sensibles": False,
-}
+# Los presets viven en app/presets.py (los usa también seeds_minimo, que corre
+# en producción). Se re-exportan acá para no romper a quien los importe desde
+# `app.seeds`, como venía siendo.
+from app.presets import (  # noqa: E402
+    PRESET_BARBERIA as PRESET_BARBERIA,  # noqa: F401  (re-export)
+    PRESET_ESTETICA as PRESET_ESTETICA,  # noqa: F401  (re-export)
+    PRESET_MEDICO as PRESET_MEDICO,  # noqa: F401  (re-export)
+    PRESET_NUTRICION as PRESET_NUTRICION,  # noqa: F401  (re-export)
+    PRESET_SPA as PRESET_SPA,  # noqa: F401  (re-export)
+    PRESET_UNAS as PRESET_UNAS,  # noqa: F401  (re-export)
+)
 
 CATEGORIAS = {
     TipoMovimiento.INGRESO: ["Turnos", "Venta de productos", "Membresías", "Gift cards", "Paquetes"],
