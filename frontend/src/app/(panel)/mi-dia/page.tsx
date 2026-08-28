@@ -24,6 +24,7 @@ import { miRecurso } from "@/lib/recursos-api";
 import { colorEstadoHex, labelEstado, horaDe } from "@/lib/turno-visual";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
 import { Button } from "@/components/ui/button";
 
 function ordenarPorHora(turnos: Turno[]): Turno[] {
@@ -35,6 +36,7 @@ function ordenarPorHora(turnos: Turno[]): Turno[] {
 }
 
 export default function MiDiaPage() {
+  const confirmar = useConfirmar();
   // null = todavía cargando; true/false = ya sabemos si está vinculado
   const [vinculado, setVinculado] = useState<boolean | null>(null);
   const [recursoNombre, setRecursoNombre] = useState<string | null>(null);
@@ -71,6 +73,18 @@ export default function MiDiaPage() {
   }, [cargar]);
 
   async function cambiar(t: Turno, estado: "en_curso" | "finalizado") {
+    // Finalizar acá iba directo, mientras que la MISMA acción desde la agenda
+    // sí preguntaba. Dos pantallas, dos comportamientos, era una inconsistencia
+    // que se paga con un turno cerrado antes de tiempo.
+    if (
+      estado === "finalizado" &&
+      !(await confirmar({
+        titulo: "¿Finalizar el turno?",
+        descripcion: `${t.cliente_nombre ?? "El turno"} queda cerrado y sale de los turnos activos del día.`,
+        textoAccion: "Sí, finalizar",
+      }))
+    )
+      return;
     try {
       await cambiarEstadoTurno(t.id, estado);
       toast.success(estado === "en_curso" ? "Turno iniciado" : "Turno finalizado");

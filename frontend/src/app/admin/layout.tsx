@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 
 import { getAdminToken, clearAdminToken } from "@/lib/admin-api";
+import { ConfirmarProvider } from "@/components/confirmar";
 
 export default function AdminLayout({
   children,
@@ -38,6 +39,7 @@ export default function AdminLayout({
   if (pathname === "/admin/login") return <>{children}</>;
 
   return (
+    <ConfirmarProvider>
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
@@ -87,5 +89,6 @@ export default function AdminLayout({
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
     </div>
+    </ConfirmarProvider>
   );
 }

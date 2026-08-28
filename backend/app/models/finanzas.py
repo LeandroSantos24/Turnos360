@@ -112,6 +112,15 @@ class Pago(TenantMixin, Base):
             unique=True,
             postgresql_where=text("origen = 'sena'"),
         ),
+        # Estadísticas filtra SIEMPRE por anulado=false. Declarado acá y no
+        # solo en la migración para que el autogenerate no lo vea como un
+        # índice de más y proponga borrarlo en la próxima migración.
+        Index(
+            "ix_pago_empresa_vigente",
+            "empresa_id",
+            "fecha",
+            postgresql_where=text("anulado = false"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -132,6 +141,15 @@ class Pago(TenantMixin, Base):
     comision_aplicada: Mapped[float | None] = mapped_column(Numeric(12, 2))
     movimiento_id: Mapped[int | None] = mapped_column(ForeignKey("movimiento_financiero.id"))
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Anulación (misma idea que en MovimientoFinanciero: no se borra, se
+    # marca). Estadísticas lee de esta tabla, así que sin esta columna una
+    # venta revertida seguía facturando aunque su movimiento estuviera
+    # anulado: los dos números del mismo día no coincidían.
+    anulado: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por_id: Mapped[int | None] = mapped_column(Integer)
+    motivo_anulacion: Mapped[str | None] = mapped_column(String(200))
 
 
 class DeudaCliente(TenantMixin, Base):

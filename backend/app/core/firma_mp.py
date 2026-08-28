@@ -85,13 +85,20 @@ def manifiesto(data_id: str | None, request_id: str | None, ts: str | None) -> s
     return "".join(partes)
 
 
-def verificar(request: Request, data_id: str | None) -> bool | None:
+def verificar(
+    request: Request, data_id: str | None, secreto: str | None = None
+) -> bool | None:
     """True/False si se pudo verificar; None si no hay con qué (no configurado).
 
     None NO es un fallo: es "no tengo el secreto, no puedo opinar". El
     llamador decide qué hacer con eso según el modo.
+
+    `secreto` existe porque hay DOS webhooks de Mercado Pago con DOS cuentas
+    distintas: el de las señas (cuenta de cada negocio, MP_WEBHOOK_SECRET) y el
+    de las cuotas del SaaS (cuenta de Turnos360, MP_SAAS_WEBHOOK_SECRET). El
+    algoritmo es el mismo; lo que cambia es con qué clave se firma.
     """
-    secreto = (settings.mp_webhook_secret or "").strip()
+    secreto = (secreto if secreto is not None else settings.mp_webhook_secret or "").strip()
     if not secreto:
         return None
 
@@ -107,7 +114,9 @@ def verificar(request: Request, data_id: str | None) -> bool | None:
     return hmac.compare_digest(esperada, v1)
 
 
-def acepta(request: Request, data_id: str | None) -> bool:
+def acepta(
+    request: Request, data_id: str | None, secreto: str | None = None
+) -> bool:
     """¿Se sigue procesando esta notificación?
 
     Devuelve False solo en `enforce` y solo con firma inválida. En `log` deja
@@ -117,7 +126,7 @@ def acepta(request: Request, data_id: str | None) -> bool:
     if modo == "off":
         return True
 
-    resultado = verificar(request, data_id)
+    resultado = verificar(request, data_id, secreto)
 
     if resultado is None:
         log.warning(

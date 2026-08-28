@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
 
 import {
   listarUsuarios,
@@ -38,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MovimientosSuscripcion } from "./movimientos-suscripcion";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
@@ -53,6 +55,7 @@ function labelRol(rol: string): string {
 }
 
 export default function AdminUsuariosPage() {
+  const confirmar = useConfirmar();
   const params = useParams();
   const empresaId = Number(params.id);
 
@@ -122,6 +125,17 @@ export default function AdminUsuariosPage() {
   }
 
   async function toggleActivo(u: UsuarioAdmin) {
+    if (
+      !(await confirmar({
+        titulo: u.activo ? `¿Desactivar a ${u.nombre}?` : `¿Reactivar a ${u.nombre}?`,
+        descripcion: u.activo
+          ? `${u.email} deja de poder entrar al sistema.`
+          : `${u.email} vuelve a poder entrar al sistema.`,
+        textoAccion: u.activo ? "Sí, desactivar" : "Sí, reactivar",
+        destructivo: u.activo,
+      }))
+    )
+      return;
     try {
       await actualizarUsuario(u.id, !u.activo);
       cargar();
@@ -254,6 +268,10 @@ export default function AdminUsuariosPage() {
           ))}
         </div>
       )}
+
+      <div className="pt-4">
+        <MovimientosSuscripcion empresaId={empresaId} nombre={nombreEmpresa} />
+      </div>
     </div>
   );
 }

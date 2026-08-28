@@ -6,8 +6,8 @@
  * confirmación inline (primer click pregunta, segundo confirma).
  */
 
-import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
+import { useConfirmar } from "@/components/confirmar";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -103,41 +103,55 @@ export function hoyISO(): string {
   return `${h.getFullYear()}-${mm}-${dd}`;
 }
 
-/** Borrar con confirmación inline: 1er click pregunta, 2do confirma (3s para arrepentirse). */
+/**
+ * Borrar un registro de la ficha del cliente (evolución, medición, adjunto).
+ *
+ * Antes esto confirmaba "inline": primer click ponía "¿Seguro?" y el segundo
+ * borraba, con 3 s de ventana. El problema es que un DOBLE CLICK entra como
+ * dos clicks seguidos y borraba el registro al instante, sin que nadie llegue
+ * a leer la advertencia. Y lo que hay detrás de este botón —historia clínica,
+ * mediciones, adjuntos— es lo menos recuperable de todo el sistema: no hay
+ * papelera ni baja lógica.
+ *
+ * Ahora usa el mismo diálogo modal que el resto de las acciones críticas, que
+ * además obliga a mover el mouse a otro botón antes de confirmar.
+ */
 export function BotonBorrar({
-  onConfirm, deshabilitado = false,
+  onConfirm,
+  deshabilitado = false,
+  que = "este registro",
 }: {
   onConfirm: () => void;
   deshabilitado?: boolean;
+  /** Qué se borra, para nombrarlo en el diálogo: "esta medición", "el adjunto…". */
+  que?: string;
 }) {
-  const [confirmando, setConfirmando] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmar = useConfirmar();
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-
-  function click() {
-    if (!confirmando) {
-      setConfirmando(true);
-      timer.current = setTimeout(() => setConfirmando(false), 3000);
+  async function click() {
+    if (
+      !(await confirmar({
+        titulo: `¿Borrar ${que}?`,
+        descripcion:
+          "Se elimina de la ficha del cliente y no se puede recuperar.",
+        textoAccion: "Sí, borrar",
+        destructivo: true,
+      }))
+    )
       return;
-    }
-    if (timer.current) clearTimeout(timer.current);
-    setConfirmando(false);
     onConfirm();
   }
 
   return (
     <Button
       type="button"
-      variant={confirmando ? "destructive" : "ghost"}
+      variant="ghost"
       size="sm"
       disabled={deshabilitado}
       onClick={click}
     >
       <Trash2 className="mr-1 h-3.5 w-3.5" />
-      {confirmando ? "¿Seguro?" : "Borrar"}
+      Borrar
     </Button>
   );
 }

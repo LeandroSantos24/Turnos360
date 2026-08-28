@@ -2,7 +2,7 @@
 
 import datetime as dt
 
-from sqlalchemy import case as sa_case, func, select
+from sqlalchemy import and_ as sa_and, case as sa_case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Recurso
@@ -25,10 +25,15 @@ def facturacion(
     Si recurso_id viene, TODO el panel se filtra a ese profesional: sus pagos,
     sus servicios, sus horarios y su ausentismo.
     """
+    # Los pagos anulados (una gift card emitida por error, una venta
+    # revertida) NO facturan. Va en `cond`, que comparten facturación,
+    # comisiones, cantidad, por método, por día y por origen: agregarlo acá
+    # arregla las seis de una.
     cond = [
         Pago.empresa_id == empresa_id,
         Pago.fecha >= desde,
         Pago.fecha < hasta,
+        Pago.anulado.is_(False),
     ]
     # Los pagos no tienen recurso directo: se filtran por el turno del recurso.
     if recurso_id is not None:
@@ -59,6 +64,7 @@ def facturacion(
         Pago.empresa_id == empresa_id,
         Pago.fecha >= ant_desde,
         Pago.fecha < desde,
+        Pago.anulado.is_(False),
     ]
     if recurso_id is not None:
         cond_ant.append(
@@ -154,7 +160,11 @@ def facturacion(
         )
         .select_from(Turno)
         .join(Servicio, Turno.servicio_id == Servicio.id)
-        .join(Pago, Pago.turno_id == Turno.id, isouter=True)
+        .join(
+            Pago,
+            sa_and(Pago.turno_id == Turno.id, Pago.anulado.is_(False)),
+            isouter=True,
+        )
         .where(
             *cond_turno,
             Turno.estado == EstadoTurno.FINALIZADO,

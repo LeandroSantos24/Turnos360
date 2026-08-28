@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CalendarPlus, DollarSign, Search, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
+import { AvisosDePago } from "./avisos-de-pago";
 
 import {
   EmpresaCobranza,
@@ -62,6 +64,7 @@ const FILTROS: { valor: SemaforoColor | ""; label: string }[] = [
 ];
 
 export default function CobranzaPage() {
+  const confirmar = useConfirmar();
   const [empresas, setEmpresas] = useState<EmpresaCobranza[]>([]);
   const [resumen, setResumen] = useState<ResumenCobranza | null>(null);
   const [color, setColor] = useState<SemaforoColor | "">("");
@@ -92,6 +95,18 @@ export default function CobranzaPage() {
   }, [cargar, buscar]);
 
   async function prorroga(e: EmpresaCobranza, dias: number) {
+    // Es ACUMULATIVA: el backend hace vence = base + dias. Tres clicks son
+    // treinta días regalados, y no hay "quitar prórroga" en el panel.
+    if (
+      !(await confirmar({
+        titulo: `¿Darle ${dias} días de gracia a ${e.nombre}?`,
+        descripcion:
+          "Se le mueve el vencimiento sin registrar ningún pago. Es acumulativa: " +
+          "si la clickeás dos veces, son el doble de días. Desde el panel no se puede quitar.",
+        textoAccion: `Sí, +${dias} días`,
+      }))
+    )
+      return;
     try {
       await darProrroga(e.id, dias);
       toast.success(`${e.nombre}: +${dias} días de gracia`);
@@ -111,6 +126,15 @@ export default function CobranzaPage() {
           A quién cobrarle, cuánto entró y qué está por vencer.
         </p>
       </div>
+
+      {/* Lo primero: quién dice que ya pagó y hay que confirmar en el banco. */}
+      <AvisosDePago
+        onCobrar={(empresaId) => {
+          const emp = empresas.find((e) => e.id === empresaId);
+          if (emp) setCobrando(emp);
+          else toast.error("Buscá el negocio en la lista para registrar el cobro");
+        }}
+      />
 
       {/* Balance rápido */}
       {resumen && (

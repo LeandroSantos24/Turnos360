@@ -45,6 +45,7 @@ import { obtenerConfigEmpresa, ConfigEmpresa } from "@/lib/empresa-api";
 import { ConfigRubroProvider } from "@/lib/config-rubro";
 import { esDueno, type Rol } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ConfirmarProvider } from "@/components/confirmar";
 
 type NavItem = {
   href: string;
@@ -174,6 +175,7 @@ export default function PanelLayout({
 
   return (
     <ConfigRubroProvider value={config}>
+    <ConfirmarProvider>
     <div className="flex h-screen h-[100dvh] overflow-hidden">
       {/* Sidebar navy */}
       <aside
@@ -362,6 +364,7 @@ export default function PanelLayout({
         )}
       </main>
     </div>
+    </ConfirmarProvider>
     </ConfigRubroProvider>
   );
 }

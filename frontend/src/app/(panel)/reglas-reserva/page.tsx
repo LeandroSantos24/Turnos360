@@ -33,6 +33,11 @@ const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 /** Opciones de anticipación mínima, en minutos. */
 const ANTICIPACIONES = [
   { valor: 0, label: "Sin mínimo" },
+  // 5 y 10 minutos: un local con mucho paso (barbería sin cita previa) quiere
+  // que el cliente que está a la vuelta pueda reservar igual. Con 30 minutos
+  // de mínimo esa reserva no entra y el turno se pierde.
+  { valor: 5, label: "5 minutos" },
+  { valor: 10, label: "10 minutos" },
   { valor: 30, label: "30 minutos" },
   { valor: 60, label: "1 hora" },
   { valor: 120, label: "2 horas" },

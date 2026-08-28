@@ -110,6 +110,7 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
 
     from app.core.config import settings
     from app.models.saas import PagoSuscripcion
+    from app.services import mp_suscripcion as mp_sus
 
     empresa = db.get(Empresa, empresa_id)
     if empresa is None:
@@ -160,6 +161,11 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
             "cuit": settings.cobro_cuit or None,
             "banco": settings.cobro_banco or None,
             "mp_link": settings.cobro_mp_link or None,
+            # ¿Se puede pagar la cuota con Checkout de Mercado Pago? Depende
+            # de que haya token de la cuenta de Turnos360. Sin eso el frontend
+            # no muestra el botón: ofrecer un pago que después nadie acredita
+            # es peor que no ofrecerlo.
+            "mp_checkout": mp_sus.esta_activo(),
             "whatsapp": settings.cobro_whatsapp or None,
         },
     }

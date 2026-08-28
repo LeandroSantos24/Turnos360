@@ -45,6 +45,20 @@ class Turno(TenantMixin, Base):
             "fecha_inicio",
             postgresql_where=text("recordatorio_2h_enviado = false"),
         ),
+        # El barrido de señas impagas (tasks/agenda.py) busca por creado_at
+        # entre las señas pendientes, que son un puñado.
+        #
+        # Este índice EXISTÍA en la base desde d3f7a1c9e408 pero no estaba
+        # declarado acá. Consecuencia: `alembic revision --autogenerate` lo veía
+        # como un índice de más y proponía BORRARLO en cada migración nueva.
+        # Bastaba con aceptar un autogenerate sin leerlo para quedarse sin él en
+        # producción y no enterarse hasta que el barrido empiece a escanear la
+        # tabla de turnos entera cada cinco minutos.
+        Index(
+            "ix_turno_sena_pendiente",
+            "creado_at",
+            postgresql_where=text("sena_estado = 'pendiente'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -32,6 +32,7 @@ Enum estado_gift_card {
   "activa"
   "canjeada"
   "vencida"
+  "anulada"
 }
 
 Enum estado_membresia {
@@ -113,6 +114,46 @@ Table adjunto {
 
   Indexes {
     empresa_id [name: 'ix_adjunto_empresa_id']
+  }
+}
+
+Table ajuste_suscripcion {
+  id integer [pk]
+  empresa_id integer [ref: > empresa.id, not null]
+  tipo varchar(20) [not null]
+  vence_antes date
+  vence_despues date
+  dias integer
+  detalle text
+  pago_id integer [ref: > pago_suscripcion.id]
+  hecho_por varchar(160)
+  creado_en timestamp with time zone [not null]
+  revertido boolean [not null]
+  revertido_en timestamp with time zone
+  revertido_por varchar(160)
+
+  Indexes {
+    (empresa_id, creado_en) [name: 'ix_ajuste_suscripcion_empresa']
+    empresa_id [name: 'ix_ajuste_suscripcion_empresa_id']
+  }
+}
+
+Table aviso_pago {
+  id integer [pk]
+  empresa_id integer [ref: > empresa.id, not null]
+  metodo varchar(40) [not null]
+  monto numeric(12, 2)
+  referencia text
+  avisado_por varchar(160)
+  creado_en timestamp with time zone [not null]
+  resuelto boolean [not null]
+  resuelto_en timestamp with time zone
+  resuelto_por varchar(160)
+  pago_id integer [ref: > pago_suscripcion.id]
+
+  Indexes {
+    empresa_id [name: 'ix_aviso_pago_empresa_id']
+    creado_en [name: 'ix_aviso_pago_pendiente']
   }
 }
 
@@ -611,6 +652,10 @@ Table pago {
   comision_aplicada numeric(12, 2)
   movimiento_id integer [ref: > movimiento_financiero.id]
   fecha timestamp with time zone [not null]
+  anulado boolean [not null]
+  anulado_en timestamp with time zone
+  anulado_por_id integer
+  motivo_anulacion varchar(200)
   empresa_id integer [ref: > empresa.id, not null]
 
   Indexes {
@@ -618,6 +663,7 @@ Table pago {
     (empresa_id, fecha) [name: 'ix_pago_empresa_fecha']
     empresa_id [name: 'ix_pago_empresa_id']
     (empresa_id, origen) [name: 'ix_pago_empresa_origen']
+    (empresa_id, fecha) [name: 'ix_pago_empresa_vigente']
     movimiento_id [name: 'ix_pago_movimiento']
     turno_id [name: 'ix_pago_turno']
     turno_id [name: 'uq_pago_sena_turno', unique]
@@ -635,11 +681,16 @@ Table pago_suscripcion {
   notas text
   registrado_por varchar(160)
   creado_en timestamp with time zone [not null]
+  mp_payment_id varchar(40)
+  anulado boolean [not null]
+  anulado_en timestamp with time zone
+  anulado_por varchar(160)
 
   Indexes {
     (empresa_id, fecha) [name: 'ix_pago_suscripcion_empresa_fecha']
     empresa_id [name: 'ix_pago_suscripcion_empresa_id']
     fecha [name: 'ix_pago_suscripcion_fecha']
+    mp_payment_id [name: 'uq_pago_suscripcion_mp', unique]
   }
 }
 
@@ -791,6 +842,7 @@ Table turno {
     (empresa_id, recurso_id, fecha_inicio) [name: 'ix_turno_empresa_recurso_inicio']
     fecha_inicio [name: 'ix_turno_recordatorio_2h_pendiente']
     fecha_inicio [name: 'ix_turno_recordatorio_pendiente']
+    creado_at [name: 'ix_turno_sena_pendiente']
   }
 }
 

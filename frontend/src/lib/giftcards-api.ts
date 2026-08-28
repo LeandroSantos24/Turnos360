@@ -9,7 +9,7 @@ export interface GiftCard {
   mensaje: string | null;
   monto: number;
   concepto: string | null;
-  estado: "activa" | "canjeada" | "vencida";
+  estado: "activa" | "canjeada" | "vencida" | "anulada";
   vence: string | null;
   canjeada_en: string | null;
   canjeada_por: string | null;

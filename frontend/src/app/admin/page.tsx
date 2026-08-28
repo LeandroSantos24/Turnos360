@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Plus, Users, ExternalLink, Copy, Check, Crown } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
 
 import {
   listarEmpresas,
@@ -59,6 +60,7 @@ function slugify(s: string, final = false): string {
 }
 
 export default function AdminEmpresasPage() {
+  const confirmar = useConfirmar();
   const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
   const [rubros, setRubros] = useState<RubroAdmin[]>([]);
   const [errorRubros, setErrorRubros] = useState<string | null>(null);
@@ -164,6 +166,20 @@ export default function AdminEmpresasPage() {
   }
 
   async function togglePausa(emp: EmpresaAdmin) {
+    // Pausar deja al negocio entero afuera: no entra al panel y su página
+    // pública de reservas deja de tomar turnos. Un switch es el control más
+    // fácil de tocar sin querer.
+    if (
+      !(await confirmar({
+        titulo: emp.activa ? `¿Pausar ${emp.nombre}?` : `¿Reactivar ${emp.nombre}?`,
+        descripcion: emp.activa
+          ? "Sus usuarios no van a poder entrar al panel y su página pública deja de tomar reservas."
+          : "Vuelve a tener acceso al panel y su página pública vuelve a tomar reservas.",
+        textoAccion: emp.activa ? "Sí, pausar" : "Sí, reactivar",
+        destructivo: emp.activa,
+      }))
+    )
+      return;
     try {
       await pausarEmpresa(emp.id, !emp.activa);
       cargar();
@@ -173,6 +189,18 @@ export default function AdminEmpresasPage() {
   }
 
   async function renovar30(emp: EmpresaAdmin) {
+    // Esto REGALA un mes de suscripción paga desde un botón chico al lado de
+    // "Ver página", sin registrar ningún pago y sin dejar rastro visible.
+    if (
+      !(await confirmar({
+        titulo: `¿Renovar 30 días a ${emp.nombre}?`,
+        descripcion:
+          "Le mueve el vencimiento un mes hacia adelante SIN registrar un pago. " +
+          "Si lo que querés es anotar una cuota cobrada, hacelo desde Cobranza.",
+        textoAccion: "Sí, renovar 30 días",
+      }))
+    )
+      return;
     try {
       await setearSuscripcion(emp.id, { renovar_30: true });
       toast.success(`Suscripción de ${emp.nombre} renovada por 30 días`);

@@ -48,10 +48,21 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
       ENV: dev
-      SECRET_KEY: ${SECRET_KEY}
+      # Con `${SECRET_KEY}` a secas, levantar el stack sin --env-file deja
+      # la clave VACÍA, y el backend arranca igual: recién revienta con un
+      # 500 al firmar el primer token ("HMAC key must not be empty"), que
+      # no se parece en nada a la causa. Con un default de desarrollo, el
+      # olvido no rompe nada. En producción no hay default: el compose de
+      # prod exige la variable y ENV=prod hace fail-fast.
+      SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
       # URLs base (en deploy: el dominio real)
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      # Los lee `python -m app.seeds_minimo` (crear/rotar el super-admin).
+      # Sin reenviarlas, adentro del contenedor están vacías siempre y la
+      # clave termina siendo la de desarrollo sin que nadie lo decida.
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
+      SUPERADMIN_PASS: ${SUPERADMIN_PASS:-}
       # Email saliente (Gmail: contraseña de APLICACIÓN, no la de la cuenta)
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
@@ -87,7 +98,13 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
       ENV: dev
-      SECRET_KEY: ${SECRET_KEY}
+      # Con `${SECRET_KEY}` a secas, levantar el stack sin --env-file deja
+      # la clave VACÍA, y el backend arranca igual: recién revienta con un
+      # 500 al firmar el primer token ("HMAC key must not be empty"), que
+      # no se parece en nada a la causa. Con un default de desarrollo, el
+      # olvido no rompe nada. En producción no hay default: el compose de
+      # prod exige la variable y ENV=prod hace fail-fast.
+      SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
       SMTP_USER: ${SMTP_USER:-}
@@ -118,7 +135,13 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-turnos360}:${POSTGRES_PASSWORD:-turnos360}@db:5432/${POSTGRES_DB:-turnos360}
       REDIS_URL: redis://redis:6379/0
       ENV: dev
-      SECRET_KEY: ${SECRET_KEY}
+      # Con `${SECRET_KEY}` a secas, levantar el stack sin --env-file deja
+      # la clave VACÍA, y el backend arranca igual: recién revienta con un
+      # 500 al firmar el primer token ("HMAC key must not be empty"), que
+      # no se parece en nada a la causa. Con un default de desarrollo, el
+      # olvido no rompe nada. En producción no hay default: el compose de
+      # prod exige la variable y ENV=prod hace fail-fast.
+      SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
       SMTP_USER: ${SMTP_USER:-}

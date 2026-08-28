@@ -114,6 +114,8 @@ export interface DatosCobro {
   banco: string | null;
   mp_link: string | null;
   whatsapp: string | null;
+  /** ¿El servidor tiene la cuenta de Mercado Pago de Turnos360 configurada? */
+  mp_checkout: boolean;
 }
 
 export interface MiSuscripcion {
@@ -138,6 +140,27 @@ export interface MiSuscripcion {
 
 export function leerMiSuscripcion(): Promise<MiSuscripcion> {
   return api.get<MiSuscripcion>("/empresa/mi-suscripcion");
+}
+
+/** Arranca el pago de la cuota con Checkout de Mercado Pago. Devuelve la URL. */
+export function pagarSuscripcionMP(): Promise<{ url: string }> {
+  return api.post<{ url: string }>("/empresa/suscripcion/pagar-mp", {});
+}
+
+/** "Ya te transferí". Queda pendiente de que lo confirmemos contra el banco. */
+export function avisarPagoSuscripcion(datos: {
+  monto?: number | null;
+  referencia?: string | null;
+}): Promise<{ detalle: string }> {
+  return api.post<{ detalle: string }>("/empresa/suscripcion/aviso-pago", datos);
+}
+
+export function leerAvisoPago(): Promise<{
+  pendiente: boolean;
+  creado_en?: string | null;
+  monto?: number | null;
+}> {
+  return api.get("/empresa/suscripcion/aviso-pago");
 }
 
 // ============================================================

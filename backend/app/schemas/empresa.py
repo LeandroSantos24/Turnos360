@@ -179,6 +179,9 @@ class DatosCobro(BaseModel):
     # WhatsApp al que el negocio manda el comprobante. Sin esto, "mandanos el
     # comprobante" es una instrucción sin destino.
     whatsapp: str | None = None
+    # ¿Está disponible el pago con Checkout de Mercado Pago? False mientras no
+    # haya token de la cuenta de Turnos360 cargado en el servidor.
+    mp_checkout: bool = False
 
 
 class MiSuscripcionOut(SuscripcionOut):
@@ -273,3 +276,23 @@ class SeguimientoConfig(BaseModel):
                 "La etiqueta de conversión son letras, números, guiones y guión bajo (algo como AbC-D_efG-h12_34-567). La sacás de Google Ads → Objetivos → tu conversión → Configurar con la etiqueta."
             )
         return limpio
+
+
+class AvisoPagoIn(BaseModel):
+    """El dueño avisa que ya pagó la cuota (transferencia)."""
+
+    monto: float | None = Field(default=None, ge=0, le=100_000_000)
+    # Número de operación, banco, lo que quiera aclarar. Es lo que Leandro va a
+    # tener a la vista cuando lo busque en el resumen del banco.
+    referencia: str | None = Field(default=None, max_length=300)
+
+
+class AvisoPagoOut(BaseModel):
+    id: int
+    metodo: str
+    monto: float | None = None
+    referencia: str | None = None
+    creado_en: str | None = None
+    resuelto: bool = False
+    empresa_id: int | None = None
+    empresa_nombre: str | None = None

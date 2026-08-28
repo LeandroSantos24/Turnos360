@@ -209,7 +209,12 @@ def setear_suscripcion(
 ):
     """Setea el plan y/o el vencimiento de la suscripción (solo super-admin)."""
     return svc.setear_suscripcion(
-        db, empresa_id, datos.plan, datos.suscripcion_vence, datos.renovar_30
+        db,
+        empresa_id,
+        datos.plan,
+        datos.suscripcion_vence,
+        datos.renovar_30,
+        hecho_por=admin.email,
     )
 
 
@@ -269,7 +274,14 @@ def registrar_pago(
         registrado_por=admin.email,
         renovar=datos.renovar,
     )
+    # Si el negocio había avisado "ya te transferí", ese aviso queda atendido:
+    # es exactamente lo que Leandro estaba yendo a confirmar.
+    aviso = cobranza.aviso_pendiente(db, empresa_id)
     db.commit()
+    if aviso is not None:
+        cobranza.resolver_aviso(
+            db, aviso.id, pago_id=pago.id, resuelto_por=admin.email
+        )
     return {
         "id": pago.id,
         "fecha": str(pago.fecha),
@@ -287,9 +299,41 @@ def dar_prorroga(
 ):
     """Suma días de gracia al vencimiento (o extiende una prueba)."""
     empresa = _empresa_o_404(db, empresa_id)
-    cobranza.prorrogar(db, empresa, datos.dias)
+    cobranza.prorrogar(db, empresa, datos.dias, hecho_por=admin.email)
     db.commit()
     return _fila_de(db, empresa_id)
+
+
+@router.get("/cobranza/avisos")
+def avisos_de_pago(admin: SuperAdminActual, db: DB, pendientes: bool = True) -> list[dict]:
+    """Los negocios que dijeron "ya te transferí" y todavía no se confirmaron.
+
+    Es la bandeja de entrada de la cobranza: lo que hay que buscar en el banco.
+    """
+    return cobranza.listar_avisos(db, solo_pendientes=pendientes)
+
+
+@router.post("/cobranza/avisos/{aviso_id}/descartar")
+def descartar_aviso(aviso_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    """Saca el aviso de la bandeja SIN registrar una cuota (no apareció el pago)."""
+    cobranza.resolver_aviso(db, aviso_id, pago_id=None, resuelto_por=admin.email)
+    return {"ok": True}
+
+
+@router.get("/empresas/{empresa_id}/ajustes")
+def historial_ajustes(empresa_id: int, admin: SuperAdminActual, db: DB) -> list[dict]:
+    """Todo lo que se le hizo al vencimiento de esta empresa, y quién lo hizo."""
+    _empresa_o_404(db, empresa_id)
+    return cobranza.listar_ajustes(db, empresa_id)
+
+
+@router.post("/empresas/{empresa_id}/ajustes/{ajuste_id}/revertir")
+def revertir_ajuste(
+    empresa_id: int, ajuste_id: int, admin: SuperAdminActual, db: DB
+) -> dict:
+    """Deshace un movimiento del vencimiento (el arreglo del click equivocado)."""
+    _empresa_o_404(db, empresa_id)
+    return cobranza.revertir_ajuste(db, empresa_id, ajuste_id, hecho_por=admin.email)
 
 
 @router.put("/empresas/{empresa_id}/ficha", response_model=EmpresaCobranzaOut)

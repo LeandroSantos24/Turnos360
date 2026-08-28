@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
-from app.schemas.empresa import MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
+from app.schemas.empresa import AvisoPagoIn, MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
 from app.services import mercadopago as mp
+from app.services import mp_suscripcion as mp_sus
 
 router = APIRouter(prefix="/empresa", tags=["empresa"])
 
@@ -174,6 +175,91 @@ def leer_mi_suscripcion(empresa_id: EmpresaActual, db: DB) -> MiSuscripcionOut:
     from app.services.suscripcion import mi_suscripcion
 
     return MiSuscripcionOut(**mi_suscripcion(db, empresa_id))
+
+
+@router.post("/suscripcion/pagar-mp", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/minute")
+def pagar_suscripcion_mp(request: Request, empresa_id: EmpresaActual, db: DB) -> dict:
+    """Arranca el pago de la cuota con Checkout de Mercado Pago.
+
+    Devuelve la URL a la que hay que mandar al dueño. El pago se acredita solo
+    cuando Mercado Pago avisa por el webhook y nosotros verificamos el pago
+    contra su API: acá no se toca el vencimiento.
+    """
+    from app.models.organizacion import Empresa
+
+    if not mp_sus.esta_activo():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "El pago con Mercado Pago todavía no está habilitado. "
+            "Podés pagar por transferencia con los datos de esta pantalla.",
+        )
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+
+    url = mp_sus.crear_preferencia(empresa)
+    if not url:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "No se pudo generar el link de pago. Probá de nuevo en un rato o "
+            "pagá por transferencia.",
+        )
+    return {"url": url}
+
+
+@router.post("/suscripcion/aviso-pago", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/minute")
+def avisar_pago(
+    request: Request,
+    datos: AvisoPagoIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> dict:
+    """El dueño avisa que transfirió. Queda pendiente de confirmación.
+
+    NO mueve el vencimiento: una transferencia tarda en verse en la cuenta y
+    dar por cobrado lo que alguien dice que pagó convierte la cobranza en un
+    número de buena fe. Lo confirma Leandro contra el banco.
+    """
+    from app.models.organizacion import Empresa
+    from app.services import cobranza
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+
+    cobranza.registrar_aviso(
+        db,
+        empresa,
+        metodo="transferencia",
+        monto=datos.monto,
+        referencia=datos.referencia,
+        avisado_por=usuario.email,
+    )
+    return {
+        "detalle": (
+            "¡Gracias! Tu pago quedó en proceso. Lo confirmamos dentro de las "
+            "próximas 24 horas hábiles y vas a ver el vencimiento actualizado "
+            "en esta misma pantalla."
+        )
+    }
+
+
+@router.get("/suscripcion/aviso-pago", dependencies=[Depends(gate_dueno)])
+def leer_aviso_pago(empresa_id: EmpresaActual, db: DB) -> dict:
+    """¿Hay un aviso de pago esperando confirmación? Para no repetir el cartel."""
+    from app.services import cobranza
+
+    aviso = cobranza.aviso_pendiente(db, empresa_id)
+    if aviso is None:
+        return {"pendiente": False}
+    return {
+        "pendiente": True,
+        "creado_en": aviso.creado_en.isoformat() if aviso.creado_en else None,
+        "monto": float(aviso.monto) if aviso.monto is not None else None,
+    }
 
 
 @router.get("/suscripcion", response_model=SuscripcionOut)

@@ -4,7 +4,7 @@
  * Gift cards (/gift-cards). Tres partes:
  * - Generar: el formulario que crea una tarjeta nueva (código único auto).
  * - Validar / canjear: el escáner por código.
- * - Listado: todas las tarjetas con su estado, para reimprimir o borrar.
+ * - Listado: todas las tarjetas con su estado, para reimprimir o anular.
  *
  * Gateada por el módulo gift_cards del preset (barbería lo tiene; nutrición no).
  */
@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Gift, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
 
 import {
   listarGiftCards,
@@ -53,9 +54,13 @@ const ESTADO_CHIP: Record<string, { txt: string; cls: string }> = {
   activa: { txt: "Activa", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
   canjeada: { txt: "Canjeada", cls: "bg-muted text-muted-foreground" },
   vencida: { txt: "Vencida", cls: "bg-orange-400/15 text-orange-600 dark:text-orange-400" },
+  // La tarjeta anulada NO desaparece de la lista: la venta movió plata y
+  // tiene que quedar el rastro de que existió y de que se dio de baja.
+  anulada: { txt: "Anulada", cls: "bg-destructive/10 text-destructive" },
 };
 
 export default function GiftCardsPage() {
+  const confirmar = useConfirmar();
   const [cards, setCards] = useState<GiftCard[]>([]);
   const [cargando, setCargando] = useState(true);
   const [creando, setCreando] = useState(false);
@@ -104,6 +109,22 @@ export default function GiftCardsPage() {
       toast.error("Poné un monto válido");
       return;
     }
+    // Generar una gift card no es guardar un formulario: emite un instrumento
+    // con valor y, si elegiste método de pago, mete un ingreso en la caja del
+    // día. Se pide confirmación con el número adelante para que nadie emita
+    // $50.000 de un click distraído.
+    if (
+      !(await confirmar({
+        titulo: "¿Generar la gift card?",
+        descripcion:
+          `Vas a emitir una gift card por ${m.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}` +
+          (metodoId
+            ? ", y la venta va a entrar como ingreso en la caja de hoy."
+            : ". No entra a la caja porque no elegiste método de pago."),
+        textoAccion: "Sí, generar",
+      }))
+    )
+      return;
     setGuardando(true);
     try {
       const gc = await crearGiftCard({
@@ -127,14 +148,18 @@ export default function GiftCardsPage() {
     }
   }
 
-  async function borrar(id: number) {
+  async function anular(id: number) {
     setABorrar(null);
     try {
       await borrarGiftCard(id);
-      setCards((prev) => prev.filter((c) => c.id !== id));
-      toast.success("Gift card eliminada");
+      // La fila NO se saca de la lista: pasa a "Anulada". Sacarla escondería
+      // que esa venta existió, que es justo lo que hay que poder auditar.
+      setCards((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, estado: "anulada" as const } : c)),
+      );
+      toast.success("Gift card anulada · la venta salió de la caja y de la facturación");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "No se pudo eliminar");
+      toast.error(e instanceof ApiError ? e.message : "No se pudo anular");
     }
   }
 
@@ -259,7 +284,7 @@ export default function GiftCardsPage() {
                           <Button variant="ghost" size="sm" onClick={() => setVer(c)}>
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
-                          {c.estado !== "canjeada" && (
+                          {c.estado !== "canjeada" && c.estado !== "anulada" && (
                             <Button variant="ghost" size="sm" onClick={() => setABorrar(c)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -279,21 +304,22 @@ export default function GiftCardsPage() {
       <AlertDialog open={aBorrar !== null} onOpenChange={(o) => !o && setABorrar(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta gift card?</AlertDialogTitle>
+            <AlertDialogTitle>¿Anular esta gift card?</AlertDialogTitle>
             <AlertDialogDescription>
-              Vas a eliminar <b>{aBorrar?.codigo}</b>
-              {aBorrar ? ` (${`$${Number(aBorrar.monto).toLocaleString("es-AR")}`})` : ""}.
-              Si ya la entregaste, el código dejará de ser válido. Esta acción no
-              se puede deshacer.
+              <b>{aBorrar?.codigo}</b>
+              {aBorrar ? ` (${`$${Number(aBorrar.monto).toLocaleString("es-AR")}`})` : ""}{" "}
+              queda sin efecto: el código deja de ser válido y la venta sale de la
+              caja y de la facturación. La tarjeta sigue en la lista como
+              «Anulada», para que quede el rastro. No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => aBorrar && borrar(aBorrar.id)}
+              onClick={() => aBorrar && anular(aBorrar.id)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Eliminar
+              Anular
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

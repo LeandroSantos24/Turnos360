@@ -18,7 +18,16 @@ from decimal import Decimal
 from sqlalchemy import func, or_ as sa_or, select
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, PagoSuscripcion, Recurso, Usuario
+from fastapi import HTTPException, status
+
+from app.models import (
+    AjusteSuscripcion,
+    AvisoPago,
+    Empresa,
+    PagoSuscripcion,
+    Recurso,
+    Usuario,
+)
 from app.services.suscripcion import DIAS_PRORROGA
 
 # Días de anticipación con los que una empresa entra en amarillo.
@@ -315,10 +324,23 @@ def registrar_pago(
 
     db.add(pago)
     db.flush()
+
+    registrar_ajuste(
+        db,
+        empresa,
+        tipo="pago",
+        vence_antes=desde,
+        vence_despues=empresa.suscripcion_vence,
+        detalle=f"Cuota de ${float(monto):,.0f} por {metodo}".replace(",", "."),
+        pago_id=pago.id,
+        hecho_por=registrado_por,
+    )
     return pago
 
 
-def prorrogar(db: Session, empresa: Empresa, dias: int) -> dt.date:
+def prorrogar(
+    db: Session, empresa: Empresa, dias: int, hecho_por: str | None = None
+) -> dt.date:
     """Extiende el vencimiento N días (gracia manual o extensión de prueba).
 
     Si la empresa no tenía fecha, se cuenta desde hoy. Si ya venció, también:
@@ -326,11 +348,22 @@ def prorrogar(db: Session, empresa: Empresa, dias: int) -> dt.date:
     desde hoy, no desde una fecha vieja.
     """
     hoy = dt.date.today()
-    base = empresa.suscripcion_vence
+    antes = empresa.suscripcion_vence
+    base = antes
     if base is None or base < hoy:
         base = hoy
     empresa.suscripcion_vence = base + dt.timedelta(days=dias)
     db.flush()
+    registrar_ajuste(
+        db,
+        empresa,
+        tipo="prorroga",
+        vence_antes=antes,
+        vence_despues=empresa.suscripcion_vence,
+        dias=dias,
+        detalle=f"{dias} días de gracia, sin cobrar",
+        hecho_por=hecho_por,
+    )
     return empresa.suscripcion_vence
 
 
@@ -350,6 +383,227 @@ def historial_pagos(db: Session, empresa_id: int, limite: int = 24) -> list[dict
             "periodo_desde": str(p.periodo_desde) if p.periodo_desde else None,
             "periodo_hasta": str(p.periodo_hasta) if p.periodo_hasta else None,
             "notas": p.notas,
+            # Se muestra anulado en vez de esconderse: una cuota que se anotó
+            # y después se dio de baja es justo lo que hay que poder ver.
+            "anulado": bool(p.anulado),
+            "anulado_por": p.anulado_por,
         }
         for p in filas
     ]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Historial de ajustes: qué le pasó al vencimiento y cómo volver atrás
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def registrar_ajuste(
+    db: Session,
+    empresa: Empresa,
+    *,
+    tipo: str,
+    vence_antes: dt.date | None,
+    vence_despues: dt.date | None,
+    dias: int | None = None,
+    detalle: str | None = None,
+    pago_id: int | None = None,
+    hecho_por: str | None = None,
+) -> AjusteSuscripcion:
+    """Anota que el vencimiento se movió, y desde qué fecha.
+
+    Guardar `vence_antes` es lo que hace posible revertir: volver atrás pasa a
+    ser restaurar un dato guardado y no recalcular una fecha que quizá vino de
+    una prórroga acumulada sobre otra prórroga.
+    """
+    aj = AjusteSuscripcion(
+        empresa_id=empresa.id,
+        tipo=tipo,
+        vence_antes=vence_antes,
+        vence_despues=vence_despues,
+        dias=dias,
+        detalle=(detalle or "")[:500] or None,
+        pago_id=pago_id,
+        hecho_por=(hecho_por or "")[:160] or None,
+    )
+    db.add(aj)
+    db.flush()
+    return aj
+
+
+def listar_ajustes(db: Session, empresa_id: int, limite: int = 40) -> list[dict]:
+    filas = db.scalars(
+        select(AjusteSuscripcion)
+        .where(AjusteSuscripcion.empresa_id == empresa_id)
+        .order_by(AjusteSuscripcion.creado_en.desc(), AjusteSuscripcion.id.desc())
+        .limit(limite)
+    ).all()
+    return [
+        {
+            "id": a.id,
+            "tipo": a.tipo,
+            "vence_antes": str(a.vence_antes) if a.vence_antes else None,
+            "vence_despues": str(a.vence_despues) if a.vence_despues else None,
+            "dias": a.dias,
+            "detalle": a.detalle,
+            "hecho_por": a.hecho_por,
+            "creado_en": a.creado_en.isoformat() if a.creado_en else None,
+            "revertido": bool(a.revertido),
+            "revertido_por": a.revertido_por,
+            # Una reversión no se revierte: sería un ping-pong sin sentido.
+            # Para volver a mover la fecha están el cobro y la prórroga.
+            "reversible": (not a.revertido) and a.tipo != "reversion",
+        }
+        for a in filas
+    ]
+
+
+def revertir_ajuste(
+    db: Session, empresa_id: int, ajuste_id: int, hecho_por: str | None
+) -> dict:
+    """Deshace un movimiento del vencimiento: lo devuelve a `vence_antes`.
+
+    Es el arreglo para el click equivocado: "renovar 30 días" y "+10 días" son
+    botones chicos, al lado de otros, y hasta ahora no había forma de volver
+    atrás ni de saber cuál era la fecha anterior.
+
+    Revertir NO borra: marca el ajuste original como revertido y anota un
+    ajuste nuevo de tipo "reversion". Así el historial cuenta lo que pasó de
+    verdad —se dio y se sacó— en vez de fingir que nunca ocurrió.
+
+    Si el ajuste vino de un pago, ese pago se anula también: si no, quedaría
+    una cuota cobrada que no cubre ningún período.
+    """
+    aj = db.get(AjusteSuscripcion, ajuste_id)
+    if aj is None or aj.empresa_id != empresa_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese movimiento no existe.")
+    if aj.revertido:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Ese movimiento ya fue revertido."
+        )
+    if aj.tipo == "reversion":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se revierte una reversión. Si querés mover el vencimiento de "
+            "nuevo, registrá un pago o dale una prórroga.",
+        )
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    desde = empresa.suscripcion_vence
+    empresa.suscripcion_vence = aj.vence_antes
+
+    aj.revertido = True
+    aj.revertido_en = ahora
+    aj.revertido_por = (hecho_por or "")[:160] or None
+
+    if aj.pago_id is not None:
+        pago = db.get(PagoSuscripcion, aj.pago_id)
+        if pago is not None and not pago.anulado:
+            pago.anulado = True
+            pago.anulado_en = ahora
+            pago.anulado_por = aj.revertido_por
+
+    registrar_ajuste(
+        db,
+        empresa,
+        tipo="reversion",
+        vence_antes=desde,
+        vence_despues=empresa.suscripcion_vence,
+        detalle=f"Se deshizo el movimiento #{aj.id} ({aj.tipo})",
+        hecho_por=hecho_por,
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "vence": str(empresa.suscripcion_vence) if empresa.suscripcion_vence else None,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Avisos de pago: "ya te transferí"
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def registrar_aviso(
+    db: Session,
+    empresa: Empresa,
+    *,
+    metodo: str = "transferencia",
+    monto: float | None = None,
+    referencia: str | None = None,
+    avisado_por: str | None = None,
+) -> AvisoPago:
+    """El dueño avisa que pagó. Todavía no es plata: es un aviso.
+
+    Si ya hay un aviso pendiente de esta empresa se devuelve ese mismo, sin
+    crear otro. Un dueño ansioso que aprieta el botón cuatro veces no tiene que
+    generarle cuatro pendientes a nadie.
+    """
+    abierto = db.scalar(
+        select(AvisoPago).where(
+            AvisoPago.empresa_id == empresa.id,
+            AvisoPago.resuelto.is_(False),
+        )
+    )
+    if abierto is not None:
+        return abierto
+
+    aviso = AvisoPago(
+        empresa_id=empresa.id,
+        metodo=metodo,
+        monto=monto,
+        referencia=(referencia or "").strip()[:300] or None,
+        avisado_por=(avisado_por or "")[:160] or None,
+    )
+    db.add(aviso)
+    db.commit()
+    db.refresh(aviso)
+    return aviso
+
+
+def aviso_pendiente(db: Session, empresa_id: int) -> AvisoPago | None:
+    return db.scalar(
+        select(AvisoPago).where(
+            AvisoPago.empresa_id == empresa_id, AvisoPago.resuelto.is_(False)
+        )
+    )
+
+
+def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
+    """La bandeja de entrada de Leandro: quién dice que pagó y no está confirmado."""
+    q = select(AvisoPago, Empresa.nombre).join(Empresa, AvisoPago.empresa_id == Empresa.id)
+    if solo_pendientes:
+        q = q.where(AvisoPago.resuelto.is_(False))
+    filas = db.execute(q.order_by(AvisoPago.creado_en.desc()).limit(100)).all()
+    return [
+        {
+            "id": a.id,
+            "empresa_id": a.empresa_id,
+            "empresa_nombre": nombre,
+            "metodo": a.metodo,
+            "monto": float(a.monto) if a.monto is not None else None,
+            "referencia": a.referencia,
+            "creado_en": a.creado_en.isoformat() if a.creado_en else None,
+            "resuelto": bool(a.resuelto),
+        }
+        for a, nombre in filas
+    ]
+
+
+def resolver_aviso(
+    db: Session, aviso_id: int, *, pago_id: int | None, resuelto_por: str | None
+) -> None:
+    """Marca el aviso como atendido (se confirmó el pago, o se descartó)."""
+    aviso = db.get(AvisoPago, aviso_id)
+    if aviso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese aviso no existe.")
+    if aviso.resuelto:
+        return
+    aviso.resuelto = True
+    aviso.resuelto_en = dt.datetime.now(dt.timezone.utc)
+    aviso.resuelto_por = (resuelto_por or "")[:160] or None
+    aviso.pago_id = pago_id
+    db.commit()

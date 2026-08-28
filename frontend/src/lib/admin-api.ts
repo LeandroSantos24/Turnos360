@@ -241,6 +241,56 @@ export function registrarPago(
   });
 }
 
+/** Un movimiento del vencimiento de la suscripción (quién, cuándo, de qué fecha a cuál). */
+export interface AjusteSuscripcion {
+  id: number;
+  tipo: "pago" | "renovacion" | "prorroga" | "manual" | "reversion";
+  vence_antes: string | null;
+  vence_despues: string | null;
+  dias: number | null;
+  detalle: string | null;
+  hecho_por: string | null;
+  creado_en: string | null;
+  revertido: boolean;
+  revertido_por: string | null;
+  reversible: boolean;
+}
+
+/** Un negocio que dijo "ya te transferí" y todavía no se confirmó. */
+export interface AvisoPago {
+  id: number;
+  empresa_id: number;
+  empresa_nombre: string;
+  metodo: string;
+  monto: number | null;
+  referencia: string | null;
+  creado_en: string | null;
+  resuelto: boolean;
+}
+
+export function listarAvisosPago(): Promise<AvisoPago[]> {
+  return adminRequest<AvisoPago[]>("/admin/cobranza/avisos");
+}
+
+export function descartarAvisoPago(avisoId: number): Promise<{ ok: boolean }> {
+  return adminRequest(`/admin/cobranza/avisos/${avisoId}/descartar`, {
+    method: "POST",
+  });
+}
+
+export function historialAjustes(empresaId: number): Promise<AjusteSuscripcion[]> {
+  return adminRequest<AjusteSuscripcion[]>(`/admin/empresas/${empresaId}/ajustes`);
+}
+
+export function revertirAjuste(
+  empresaId: number,
+  ajusteId: number,
+): Promise<{ ok: boolean; vence: string | null }> {
+  return adminRequest(`/admin/empresas/${empresaId}/ajustes/${ajusteId}/revertir`, {
+    method: "POST",
+  });
+}
+
 export function darProrroga(empresaId: number, dias: number): Promise<EmpresaCobranza> {
   return adminRequest<EmpresaCobranza>(`/admin/empresas/${empresaId}/prorroga`, {
     method: "POST",

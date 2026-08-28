@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.api.deps import DB
 import logging
 
+from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.reloj import hoy_de_pared
 from app.schemas.cupon import CuponValidarIn, CuponValidarOut
@@ -28,11 +29,60 @@ from app.models.enums import EstadoTurno
 from app.services import finanzas as svc_fin
 from app.core import firma_mp
 from app.services import mercadopago as mp
+from app.services import mp_suscripcion as mp_sus
 from app.services import publico as svc
 
 log = logging.getLogger("turnos360.mp")
 
 router = APIRouter(prefix="/publico", tags=["publico"])
+
+
+@router.post("/mp/webhook-suscripcion")
+@limiter.limit("120/minute")
+async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
+    """Notificaciones de Mercado Pago de las CUOTAS del SaaS.
+
+    Este webhook es de la cuenta de Turnos360, no de la de un negocio, y por
+    eso no lleva slug: la cuenta es una sola para todos. La empresa a la que
+    corresponde el pago sale del external_reference ("sus:<empresa_id>"), que
+    puso la propia preferencia al crearse.
+
+    Igual que el de las señas: a Mercado Pago SIEMPRE se le contesta 200, o
+    reintenta la misma notificación para siempre.
+    """
+    if not mp_sus.esta_activo():
+        # Sin token configurado no hay nada que acreditar, y sobre todo no hay
+        # con qué verificar el pago contra la API. Se responde ok igual para
+        # no dejar a MP reintentando contra una instalación que no lo usa.
+        return {"ok": True}
+
+    params = request.query_params
+    tipo = params.get("type") or params.get("topic") or ""
+    payment_id = params.get("data.id") or params.get("id")
+    if not payment_id:
+        try:
+            body = await request.json()
+            tipo = body.get("type", tipo)
+            payment_id = (body.get("data") or {}).get("id")
+        except Exception:
+            payment_id = None
+    if "payment" not in tipo or not payment_id:
+        return {"ok": True}
+
+    # Mismo blindaje que el webhook de señas: un id que no sea numérico muere
+    # acá, sin tocar la red ni la base. Si no, cada id inventado distinto se
+    # saltea la idempotencia y dispara una llamada saliente a la API de MP.
+    payment_id = str(payment_id)
+    if not payment_id.isdigit() or len(payment_id) > 24:
+        return {"ok": True}
+
+    # Ojo: el secreto es el de LA CUENTA DE TURNOS360, distinto del de las
+    # señas. El modo de rollout (off/log/enforce) sí se comparte.
+    if not firma_mp.acepta(request, payment_id, settings.mp_saas_webhook_secret):
+        return {"ok": True}
+
+    await to_thread.run_sync(mp_sus.acreditar, db, payment_id)
+    return {"ok": True}
 
 
 @router.post("/mp/webhook/{slug}")

@@ -68,20 +68,51 @@ def listar_empresas(db: Session) -> list[Empresa]:
 
 
 def setear_suscripcion(
-    db: Session, empresa_id: int, plan, vence, renovar_30: bool
+    db: Session,
+    empresa_id: int,
+    plan,
+    vence,
+    renovar_30: bool,
+    hecho_por: str | None = None,
 ) -> Empresa:
     """Setea plan y/o vencimiento. renovar_30 = vence hoy + 30 días (atajo)."""
     import datetime as _dt
 
+    from app.services import cobranza
+
     empresa = _empresa_o_404(db, empresa_id)
     if plan is not None:
         empresa.plan = plan
+
+    # Mover el vencimiento a mano queda anotado. Antes no dejaba ningún rastro:
+    # "Renovar 30 días" regalaba un mes con un click y no había cómo saber
+    # después que había pasado, ni cuál era la fecha anterior.
+    antes = empresa.suscripcion_vence
     if renovar_30:
         empresa.suscripcion_vence = _dt.date.today() + _dt.timedelta(days=30)
         if empresa.plan == "gratuito":
             empresa.plan = "pro"
+        cobranza.registrar_ajuste(
+            db,
+            empresa,
+            tipo="renovacion",
+            vence_antes=antes,
+            vence_despues=empresa.suscripcion_vence,
+            dias=30,
+            detalle="Renovación manual de 30 días, sin registrar pago",
+            hecho_por=hecho_por,
+        )
     elif vence is not None:
         empresa.suscripcion_vence = vence
+        cobranza.registrar_ajuste(
+            db,
+            empresa,
+            tipo="manual",
+            vence_antes=antes,
+            vence_despues=vence,
+            detalle="Vencimiento cambiado a mano",
+            hecho_por=hecho_por,
+        )
     db.commit()
     db.refresh(empresa)
     # recalcular para la respuesta

@@ -83,6 +83,9 @@ class EstadoGiftCard(str, enum.Enum):
     ACTIVA = "activa"
     CANJEADA = "canjeada"
     VENCIDA = "vencida"
+    # Emitida por error y dada de baja. No se borra la fila: la venta movió
+    # plata (caja y facturación) y hay que poder auditar que existió.
+    ANULADA = "anulada"
 
 
 class EstadoMembresia(str, enum.Enum):

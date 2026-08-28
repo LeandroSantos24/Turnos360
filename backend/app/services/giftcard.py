@@ -16,7 +16,8 @@ from fastapi import HTTPException, status
 
 from app.models import GiftCard
 from app.models.enums import EstadoGiftCard, TipoMovimiento
-from app.models.finanzas import MetodoPago, MovimientoFinanciero, Pago
+from app.models.enums import EstadoCaja
+from app.models.finanzas import Caja, MetodoPago, MovimientoFinanciero, Pago
 from app.schemas.giftcard import GiftCardCrear
 
 
@@ -160,6 +161,8 @@ def verificar(db: Session, empresa_id: int, codigo: str) -> dict:
     gc = _buscar(db, empresa_id, codigo)
     if gc is None:
         return {"valida": False, "motivo": "no existe", "gift_card": None}
+    if gc.estado == EstadoGiftCard.ANULADA:
+        return {"valida": False, "motivo": "anulada", "gift_card": gc}
     if gc.estado == EstadoGiftCard.CANJEADA:
         return {"valida": False, "motivo": "ya canjeada", "gift_card": gc}
     if gc.estado == EstadoGiftCard.VENCIDA or gc.esta_vencida:
@@ -172,6 +175,8 @@ def canjear(db: Session, empresa_id: int, codigo: str, usuario: str | None) -> d
     gc = _buscar(db, empresa_id, codigo)
     if gc is None:
         return {"valida": False, "motivo": "no existe", "gift_card": None}
+    if gc.estado == EstadoGiftCard.ANULADA:
+        return {"valida": False, "motivo": "anulada", "gift_card": gc}
     if gc.estado == EstadoGiftCard.CANJEADA:
         return {"valida": False, "motivo": "ya canjeada", "gift_card": gc}
     if gc.estado == EstadoGiftCard.VENCIDA or gc.esta_vencida:
@@ -189,7 +194,29 @@ def canjear(db: Session, empresa_id: int, codigo: str, usuario: str | None) -> d
     return {"valida": True, "motivo": None, "gift_card": gc}
 
 
-def eliminar(db: Session, empresa_id: int, gift_id: int) -> bool:
+def anular(db: Session, empresa_id: int, gift_id: int, usuario_id: int) -> bool:
+    """Da de baja una gift card emitida por error y REVIERTE su venta.
+
+    Antes esto era un `db.delete(gc)` pelado, y ahí estaba el problema: vender
+    una gift card escribe en tres tablas (la tarjeta, el movimiento de caja y
+    el pago que alimenta Estadísticas) y el borrado tocaba una sola. Una
+    tarjeta de $50.000 creada por error se podía borrar de la lista, pero los
+    $50.000 seguían facturados para siempre y no había forma de sacarlos desde
+    la aplicación.
+
+    Ahora se anula en las tres puntas y en la misma transacción. No se borra
+    la fila: la plata se movió y tiene que quedar rastro, igual que con
+    cualquier movimiento de caja.
+
+    Dos casos que se rechazan, y por qué:
+
+    · Ya CANJEADA. El servicio se prestó y el cliente usó la tarjeta. Anular
+      la venta ahí borraría el ingreso de algo que sí pasó.
+    · La caja de ese día ya está CERRADA. El arqueo quedó firmado con una
+      diferencia contada a mano; cambiarle los números después convierte un
+      cierre auditado en uno que no cuadra con nada. Mismo criterio que
+      `finanzas.anular_movimiento`.
+    """
     gc = db.scalar(
         select(GiftCard).where(
             GiftCard.id == gift_id, GiftCard.empresa_id == empresa_id
@@ -197,6 +224,51 @@ def eliminar(db: Session, empresa_id: int, gift_id: int) -> bool:
     )
     if gc is None:
         return False
-    db.delete(gc)
+
+    if gc.estado == EstadoGiftCard.ANULADA:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Esa gift card ya está anulada.")
+    if gc.estado == EstadoGiftCard.CANJEADA:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esa gift card ya fue canjeada: el servicio se prestó y la venta no "
+            "se puede revertir. Si hubo un error, cargá un egreso en la caja.",
+        )
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    motivo = f"Gift card {gc.codigo} anulada"
+
+    if gc.movimiento_id is not None:
+        mov = db.get(MovimientoFinanciero, gc.movimiento_id)
+        if mov is not None and mov.empresa_id == empresa_id:
+            if mov.caja_id is not None:
+                caja = db.get(Caja, mov.caja_id)
+                if caja is not None and caja.estado == EstadoCaja.CERRADA:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "La caja del día en que se vendió esta gift card ya está "
+                        "cerrada. Cargá un egreso de ajuste en la caja actual en "
+                        "vez de tocar un arqueo firmado.",
+                    )
+            if not mov.anulado:
+                mov.anulado = True
+                mov.anulado_en = ahora
+                mov.anulado_por_id = usuario_id
+                mov.motivo_anulacion = motivo
+
+        # El pago no apunta a la gift card: apunta al mismo movimiento. Es el
+        # único camino que hay entre una cosa y la otra.
+        pago = db.scalar(
+            select(Pago).where(
+                Pago.movimiento_id == gc.movimiento_id,
+                Pago.empresa_id == empresa_id,
+            )
+        )
+        if pago is not None and not pago.anulado:
+            pago.anulado = True
+            pago.anulado_en = ahora
+            pago.anulado_por_id = usuario_id
+            pago.motivo_anulacion = motivo
+
+    gc.estado = EstadoGiftCard.ANULADA
     db.commit()
     return True

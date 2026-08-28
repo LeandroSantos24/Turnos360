@@ -571,7 +571,11 @@ def anular_movimiento(
             Pago.movimiento_id == mov.id, Pago.empresa_id == empresa_id
         )
     )
-    if pago is not None:
+    # Solo se frena si el pago es el cobro de un TURNO. La condición anterior
+    # era "existe un pago", y eso dejaba sin salida a las ventas de gift card:
+    # su movimiento siempre tiene un pago asociado y no tienen ningún turno que
+    # reabrir, así que no había manera de revertirlas desde la aplicación.
+    if pago is not None and pago.turno_id is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Este movimiento es el cobro de un turno. Para revertirlo, reabrí "
@@ -587,10 +591,21 @@ def anular_movimiento(
                 "ajuste en la caja actual en vez de tocar un arqueo firmado.",
             )
 
+    ahora = dt.datetime.now(dt.timezone.utc)
     mov.anulado = True
-    mov.anulado_en = dt.datetime.now(dt.timezone.utc)
+    mov.anulado_en = ahora
     mov.anulado_por_id = usuario_id
     mov.motivo_anulacion = (motivo or "").strip()[:200] or None
+
+    # Si el movimiento tenía un pago (venta de gift card o de abono), el pago
+    # se anula con él. Si no, la caja bajaría pero Estadísticas seguiría
+    # facturando el mismo importe: dos números distintos para el mismo día.
+    if pago is not None and not pago.anulado:
+        pago.anulado = True
+        pago.anulado_en = ahora
+        pago.anulado_por_id = usuario_id
+        pago.motivo_anulacion = mov.motivo_anulacion
+
     db.commit()
     db.refresh(mov)
     return mov

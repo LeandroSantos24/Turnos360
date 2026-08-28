@@ -71,6 +71,14 @@ def canjear(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(gate_gestion)],
 )
-def eliminar(gift_id: int, empresa_id: EmpresaActual, db: DB) -> None:
-    if not svc.eliminar(db, empresa_id, gift_id):
+def anular(
+    gift_id: int, empresa_id: EmpresaActual, usuario: UsuarioActual, db: DB
+) -> None:
+    """Da de baja la gift card y revierte su venta (caja + facturación).
+
+    Sigue siendo DELETE porque es la baja de la tarjeta desde el punto de vista
+    de quien la usa; lo que cambia es que adentro se ANULA en vez de borrarse,
+    para que la plata no quede facturada.
+    """
+    if not svc.anular(db, empresa_id, gift_id, usuario.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Gift card no encontrada")

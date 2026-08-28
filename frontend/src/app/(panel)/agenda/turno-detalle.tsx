@@ -60,7 +60,12 @@ interface TurnoDetalleProps {
 }
 
 // Estados que requieren confirmación antes de aplicarse (no se deshacen fácil).
-const ESTADOS_PELIGROSOS: EstadoTurno[] = ["finalizado", "cancelado"];
+//
+// "ausente" faltaba, y es el PEOR de los tres: en el backend es un estado
+// terminal de verdad (services/turno.py, EstadoTurno.AUSENTE: set()), así que
+// cualquier intento de salir de ahí devuelve 409. Un click de más dejaba el
+// turno de un cliente real muerto para siempre, sin preguntar nada.
+const ESTADOS_PELIGROSOS: EstadoTurno[] = ["finalizado", "cancelado", "ausente"];
 
 export function TurnoDetalle({
   turno,

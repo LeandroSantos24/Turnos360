@@ -15,9 +15,16 @@ import { useCallback, useEffect, useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
-import { CreditCard, Copy, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import { CreditCard, Copy, Check, AlertTriangle, Clock, ExternalLink } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
-import { leerMiSuscripcion, type MiSuscripcion } from "@/lib/empresa-api";
+import {
+  avisarPagoSuscripcion,
+  leerAvisoPago,
+  leerMiSuscripcion,
+  pagarSuscripcionMP,
+  type MiSuscripcion,
+} from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
@@ -84,17 +91,61 @@ function FilaCopiable({ etiqueta, valor }: { etiqueta: string; valor: string }) 
 export default function SuscripcionPage() {
   const [datos, setDatos] = useState<MiSuscripcion | null>(null);
   const [cargando, setCargando] = useState(true);
+  // Abre el bloque "Cómo pagar" desde el botón de arriba. Arranca cerrado para
+  // que la pantalla siga siendo, ante todo, "cuándo vence".
+  const [pagando, setPagando] = useState(false);
+  const [avisoPendiente, setAvisoPendiente] = useState(false);
+  const [yendoAMP, setYendoAMP] = useState(false);
+  const [avisando, setAvisando] = useState(false);
+  const [referencia, setReferencia] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      setDatos(await leerMiSuscripcion());
+      const [sus, aviso] = await Promise.all([
+        leerMiSuscripcion(),
+        leerAvisoPago().catch(() => ({ pendiente: false })),
+      ]);
+      setDatos(sus);
+      setAvisoPendiente(Boolean(aviso.pendiente));
     } catch {
       toast.error("No se pudo cargar tu suscripción");
     } finally {
       setCargando(false);
     }
   }, []);
+
+  async function irAMercadoPago() {
+    setYendoAMP(true);
+    try {
+      const { url } = await pagarSuscripcionMP();
+      // Checkout Pro se abre en la misma pestaña: el dueño vuelve solo por las
+      // back_urls, y así no se pierde entre ventanas en el celular.
+      window.location.href = url;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo abrir Mercado Pago",
+      );
+      setYendoAMP(false);
+    }
+  }
+
+  async function avisarQueTransferi() {
+    setAvisando(true);
+    try {
+      const r = await avisarPagoSuscripcion({
+        monto: datos?.precio_mensual ?? datos?.precio_lista ?? null,
+        referencia: referencia.trim() || null,
+      });
+      toast.success(r.detalle);
+      setAvisoPendiente(true);
+      setReferencia("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo registrar el aviso");
+    } finally {
+      setAvisando(false);
+    }
+  }
 
   useEffect(() => {
     cargar();
@@ -108,9 +159,12 @@ export default function SuscripcionPage() {
   }
 
   const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
+  const precioAPagar = datos.precio_mensual ?? datos.precio_lista;
   const c = datos.cobro;
   const hayTransferencia = Boolean(c.cbu || c.alias);
-  const hayCobro = hayTransferencia || Boolean(c.mp_link);
+  // c.mp_checkout es el Checkout de verdad (genera el pago y lo acredita solo).
+  // c.mp_link es el link permanente de siempre, que sigue sirviendo de respaldo.
+  const hayCobro = hayTransferencia || Boolean(c.mp_link) || c.mp_checkout;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
@@ -198,14 +252,67 @@ export default function SuscripcionPage() {
             Todavía no tenés una cuota cargada. Escribinos y la definimos.
           </p>
         )}
+
+        {hayCobro && (
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Button
+              size="lg"
+              onClick={() => {
+                setPagando(true);
+                document
+                  .getElementById("como-pagar")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              {datos.estado === "prueba" ? "Activar mi plan Pro" : "Renovar mi plan"}
+            </Button>
+            {precioAPagar !== null && (
+              <span className="text-sm text-muted-foreground">
+                {pesos(precioAPagar)} por mes
+              </span>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Cómo pagar */}
-      {hayCobro && (
-        <section className="rounded-2xl border bg-card p-5 md:p-6">
+      {hayCobro && (pagando || avisoPendiente || datos.estado !== "prueba") && (
+        <section id="como-pagar" className="rounded-2xl border bg-card p-5 md:p-6">
           <h2 className="text-base font-bold" style={SYNE}>
             Cómo pagar
           </h2>
+
+          {avisoPendiente && (
+            <div className="mt-4 flex gap-3 rounded-xl border border-sky-500/40 bg-sky-500/10 p-3.5">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+              <div className="text-sm">
+                <p className="font-medium">Tu pago está en proceso</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Nos avisaste que transferiste. Lo confirmamos dentro de las
+                  próximas 24 horas hábiles y vas a ver el vencimiento
+                  actualizado en esta misma pantalla. Mientras tanto tu cuenta
+                  sigue funcionando normalmente.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {c.mp_checkout && (
+            <div className="mt-4">
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={yendoAMP}
+                onClick={irAMercadoPago}
+              >
+                {yendoAMP ? "Abriendo Mercado Pago…" : "Pagar con Mercado Pago"}
+              </Button>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Se acredita solo: apenas Mercado Pago nos confirma el pago, tu
+                vencimiento se corre 30 días sin que tengas que avisar nada.
+              </p>
+            </div>
+          )}
 
           {c.mp_link && (
             <a
@@ -279,6 +386,33 @@ export default function SuscripcionPage() {
                     Mandar el comprobante
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
+                )}
+
+                {!avisoPendiente && (
+                  <div className="mt-4 border-t pt-3.5">
+                    <p className="text-sm font-medium">¿Ya transferiste?</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Avisanos y lo confirmamos contra el banco. Si tenés el
+                      número de operación a mano, ponelo: lo encontramos más
+                      rápido.
+                    </p>
+                    <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        placeholder="N.º de operación (opcional)"
+                        value={referencia}
+                        onChange={(e) => setReferencia(e.target.value)}
+                        maxLength={300}
+                      />
+                      <Button
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={avisando}
+                        onClick={avisarQueTransferi}
+                      >
+                        {avisando ? "Avisando…" : "Ya transferí"}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

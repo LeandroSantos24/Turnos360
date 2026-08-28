@@ -149,6 +149,25 @@ class Settings(BaseSettings):
     # Formato wa.me: 5492613456599
     cobro_whatsapp: str = ""
 
+    # --- Cobro de la suscripción por Mercado Pago (cuenta de Turnos360) -----
+    #
+    # OJO, son DOS Mercado Pago distintos y no hay que mezclarlos:
+    #   · empresa.mp_credenciales → el MP de CADA NEGOCIO, para cobrarle la
+    #     seña a SU cliente. Vive cifrado en la base, uno por empresa.
+    #   · esto → el MP de TURNOS360, para cobrarle la cuota mensual a cada
+    #     negocio. Es uno solo y va por entorno.
+    #
+    # VACÍO = APAGADO, y es el default a propósito. Sin token, el botón de
+    # pagar con Mercado Pago no aparece en "Mi suscripción" y el webhook de
+    # suscripciones contesta que no está configurado. El circuito entero queda
+    # inerte hasta que haya un dominio con HTTPS donde Mercado Pago pueda
+    # notificar: sin IP pública los avisos no llegan y un cobro que nadie
+    # acredita es peor que no ofrecer el botón.
+    mp_saas_access_token: str = ""
+    # Clave secreta del webhook de ESA cuenta (Mercado Pago → Tus integraciones
+    # → Webhooks). Es distinta de MP_WEBHOOK_SECRET, que es la de las señas.
+    mp_saas_webhook_secret: str = ""
+
     # --- Precio de lista del SaaS -------------------------------------------
     # Cuota mensual con la que nace toda empresa nueva y que muestra la landing.
     # Vive acá y no repartido por el código: cambiar el precio tiene que ser

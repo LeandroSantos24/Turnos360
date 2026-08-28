@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmar } from "@/components/confirmar";
 
 import {
   agregarHorario,
@@ -58,6 +59,7 @@ for (let h = 0; h < 24; h++) {
 }
 
 export function HorarioSemanal({ recursoId }: { recursoId: number }) {
+  const confirmar = useConfirmar();
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +116,20 @@ export function HorarioSemanal({ recursoId }: { recursoId: number }) {
   }
 
   async function quitar(h: Horario) {
+    const delDia = horarios.filter((x) => x.dia_semana === h.dia_semana).length;
+    if (
+      !(await confirmar({
+        titulo: "¿Quitar esta franja?",
+        descripcion:
+          `${DIAS[h.dia_semana]} de ${horaCorta(h.hora_desde)} a ${horaCorta(h.hora_hasta)}.` +
+          (delDia === 1
+            ? " Es la única del día: el día queda CERRADO y deja de tomar reservas."
+            : ""),
+        textoAccion: "Sí, quitar",
+        destructivo: true,
+      }))
+    )
+      return;
     try {
       await eliminarHorario(recursoId, h.id);
       toast.success("Franja eliminada");

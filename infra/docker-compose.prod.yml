@@ -88,6 +88,19 @@ services:
       # Opcional. Con esto puesto, los errores llegan a Sentry en vez de
       # quedarse en un log que nadie mira.
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Mercado Pago (señas de cada negocio). Estas TRES faltaban en el
+      # bloque: aunque las cargaras en .env.prod siguiendo .env.prod.example
+      # y DEPLOY_UM.md, no llegaban al contenedor. El backend arrancaba con
+      # MP_FIRMA_MODO=off y secreto vacío, así que la verificación de firma
+      # del webhook NUNCA se activaba — el rollout off → log → enforce que
+      # está documentado era, en la práctica, imposible de ejecutar.
+      MP_FIRMA_MODO: ${MP_FIRMA_MODO:-off}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # Cobro de la CUOTA del SaaS por Mercado Pago (tu cuenta, no la del
+      # negocio). Vacío = apagado: sin token el botón no aparece.
+      MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
+      MP_SAAS_WEBHOOK_SECRET: ${MP_SAAS_WEBHOOK_SECRET:-}
+      SENA_MINUTOS_PARA_PAGAR: ${SENA_MINUTOS_PARA_PAGAR:-30}
       SECRET_KEY: ${SECRET_KEY}
       FERNET_KEY: ${FERNET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
