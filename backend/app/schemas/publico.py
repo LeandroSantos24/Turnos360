@@ -8,7 +8,7 @@ import datetime as dt
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class ServicioPublico(BaseModel):
@@ -111,3 +111,45 @@ class ReservaPublicaOut(BaseModel):
     # Seña (si el negocio la tiene activa): URL de Checkout Pro y monto.
     pago_url: str | None = None
     sena_monto: float | None = None
+
+class RegistroIn(BaseModel):
+    """Alta de un negocio desde la landing, sin intervención humana."""
+
+    nombre_negocio: str = Field(min_length=2, max_length=120)
+    slug: str = Field(min_length=2, max_length=80)
+    rubro_codigo: str = Field(min_length=1, max_length=40)
+    nombre: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    clave: str = Field(min_length=8, max_length=100)
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _normalizar_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+    @field_validator("slug", mode="after")
+    @classmethod
+    def _normalizar_slug(cls, v: str) -> str:
+        """Mismo normalizador y misma lista negra que el alta del super-admin.
+
+        Se reutiliza a propósito: si la reserva de slugs viviera en dos lados,
+        el día que se agregue una ruta nueva alguien va a actualizar uno solo.
+        """
+        from app.schemas.admin import EmpresaCrear
+
+        return EmpresaCrear._normalizar_slug(v)
+
+
+class RegistroOut(BaseModel):
+    """Lo que necesita el frontend para dejarlo adentro sin volver a loguear."""
+
+    access_token: str
+    refresh_token: str
+    empresa_slug: str
+    empresa_nombre: str
+    email_verificado: bool = False
+
+
+class RubroPublicoOut(BaseModel):
+    codigo: str
+    nombre: str

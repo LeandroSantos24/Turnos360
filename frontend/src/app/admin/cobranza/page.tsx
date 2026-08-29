@@ -27,12 +27,13 @@ import {
   SemaforoColor,
   darProrroga,
   guardarFicha,
+  setearSuscripcion,
   historialPagos,
   listarCobranza,
   registrarPago,
   resumenCobranza,
 } from "@/lib/admin-api";
-import { PRECIO_MENSUAL } from "@/lib/precios";
+import { PLANES, PRECIO_MENSUAL } from "@/lib/precios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -531,8 +532,13 @@ function DialogFicha({
         ? String(empresa.precio_mensual)
         : String(PRECIO_MENSUAL),
     limite_recursos: empresa.limite_recursos != null ? String(empresa.limite_recursos) : "",
+    limite_sucursales:
+      empresa.limite_sucursales != null ? String(empresa.limite_sucursales) : "",
     notas_admin: empresa.notas_admin ?? "",
   });
+  // El plan va aparte porque no es parte de la ficha comercial: se guarda por
+  // el endpoint de suscripción, que es el que valida contra la grilla.
+  const [plan, setPlan] = useState<string>(empresa.plan ?? "gratuito");
   const [guardando, setGuardando] = useState(false);
 
   async function guardar() {
@@ -547,7 +553,11 @@ function DialogFicha({
         notas_admin: f.notas_admin || null,
         precio_mensual: f.precio_mensual ? Number(f.precio_mensual) : null,
         limite_recursos: f.limite_recursos ? Number(f.limite_recursos) : null,
+        limite_sucursales: f.limite_sucursales ? Number(f.limite_sucursales) : null,
       });
+      if (plan !== empresa.plan) {
+        await setearSuscripcion(empresa.id, { plan });
+      }
       toast.success("Ficha actualizada");
       onListo();
     } catch (e) {
@@ -589,8 +599,29 @@ function DialogFicha({
             {campo("contacto_telefono", "Teléfono", "2615550001")}
             {campo("contacto_email", "Email", "lucas@negocio.com", "email")}
             {campo("precio_mensual", "Cuota mensual", String(PRECIO_MENSUAL), "number")}
-            {campo("limite_recursos", "Tope de profesionales", "vacío = sin límite", "number")}
+            {campo("limite_recursos", "Tope de profesionales", "vacío = usa el plan", "number")}
+            {campo("limite_sucursales", "Tope de locales", "vacío = usa el plan", "number")}
           </div>
+
+          <label className="space-y-1.5 text-sm">
+            <span className="text-muted-foreground">Plan contratado</span>
+            <select
+              value={plan}
+              onChange={(e) => setPlan(e.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            >
+              {PLANES.map((p) => (
+                <option key={p.codigo} value={p.codigo}>
+                  {p.etiqueta} — {p.resumen}
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs text-muted-foreground">
+              Define los topes de profesionales y locales. Los dos campos de
+              arriba los pisan si los completás: sirven para hacerle un cupo
+              especial a un cliente sin inventar un plan nuevo.
+            </span>
+          </label>
           <label className="space-y-1.5 text-sm">
             <span className="text-muted-foreground">Notas internas</span>
             <textarea

@@ -41,6 +41,10 @@ class UsuarioMe(BaseModel):
     email: EmailStr
     rol: str
     empresa_id: int
+    # Lo necesita el panel para mostrar el aviso de "confirmá tu email": sin
+    # eso, la página pública del negocio no aparece y el dueño no tiene forma
+    # de saber por qué.
+    email_verificado: bool = True
 
     model_config = {"from_attributes": True}
 

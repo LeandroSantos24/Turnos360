@@ -120,3 +120,41 @@ export function validarCupon(
     servicio_id: servicioId,
   });
 }
+
+// ============================================================
+// Registro público (alta de un negocio desde la landing)
+// ============================================================
+
+export interface RubroPublico {
+  codigo: string;
+  nombre: string;
+}
+
+export interface DatosRegistro {
+  nombre_negocio: string;
+  slug: string;
+  rubro_codigo: string;
+  nombre: string;
+  email: string;
+  clave: string;
+}
+
+export interface RegistroResultado {
+  access_token: string;
+  refresh_token: string;
+  empresa_slug: string;
+  empresa_nombre: string;
+  email_verificado: boolean;
+}
+
+export function listarRubrosPublicos(): Promise<RubroPublico[]> {
+  return api.get<RubroPublico[]>("/publico/rubros");
+}
+
+export function registrarNegocio(datos: DatosRegistro): Promise<RegistroResultado> {
+  return api.post<RegistroResultado>("/publico/registro", datos);
+}
+
+export function verificarEmail(token: string): Promise<{ ok: boolean; detalle: string }> {
+  return api.post(`/publico/verificar-email?token=${encodeURIComponent(token)}`, {});
+}

@@ -179,6 +179,7 @@ export interface EmpresaCobranza {
   cantidad_usuarios: number;
   cantidad_recursos: number;
   limite_recursos: number | null;
+  limite_sucursales: number | null;
   capacidad_excedida: boolean;
   ultimo_pago: string | null;
   semaforo_color: SemaforoColor;
@@ -309,6 +310,7 @@ export function guardarFicha(
     notas_admin: string | null;
     precio_mensual: number | null;
     limite_recursos: number | null;
+    limite_sucursales: number | null;
   }>,
 ): Promise<EmpresaCobranza> {
   return adminRequest<EmpresaCobranza>(`/admin/empresas/${empresaId}/ficha`, {

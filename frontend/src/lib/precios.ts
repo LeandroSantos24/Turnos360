@@ -54,3 +54,39 @@ export const PRECIO_NORMAL_TEXTO = enPesos(PRECIO_NORMAL);
  * no sabía cuál creer.
  */
 export const DIAS_PRUEBA = 14;
+
+
+/**
+ * La grilla de planes, espejo de backend/app/core/planes.py.
+ *
+ * Está duplicada a propósito y no viene por API: el panel de super-admin
+ * necesita poder ARMAR el selector antes de tener una empresa cargada. Si
+ * cambian los precios, se tocan los dos lados — el backend es el que manda,
+ * este es solo para pintar.
+ */
+export const PLANES = [
+  {
+    codigo: "gratuito",
+    etiqueta: "Prueba",
+    precio: 0,
+    resumen: "3 profesionales · 1 local",
+  },
+  {
+    codigo: "basico",
+    etiqueta: "Básico",
+    precio: 14990,
+    resumen: "3 profesionales · 1 local",
+  },
+  {
+    codigo: "pro",
+    etiqueta: "Pro",
+    precio: 24990,
+    resumen: "10 profesionales · 1 local",
+  },
+  {
+    codigo: "multi",
+    etiqueta: "Multi",
+    precio: 35990,
+    resumen: "Profesionales ilimitados · hasta 5 locales",
+  },
+];

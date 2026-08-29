@@ -20,6 +20,11 @@ export interface UsuarioMe {
   email: string;
   rol: string;
   empresa_id: number;
+  /**
+   * false solo para quien se registró solo y todavía no confirmó su email.
+   * Mientras esté en false, la página pública de su negocio no se muestra.
+   */
+  email_verificado: boolean;
 }
 
 /** Inicia sesión: manda email + clave, guarda los tokens si todo va bien. */

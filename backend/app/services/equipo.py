@@ -34,10 +34,11 @@ import hashlib
 import secrets
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.crypto import hash_clave
 from app.models import Recurso, Usuario
 from app.models.enums import RolUsuario
 from app.services import auditoria
@@ -172,4 +173,114 @@ def generar_link_restablecer(
         "url": f"{settings.public_base_url}/restablecer?token={token}",
         "usuario": objetivo.nombre,
         "vence_en_minutos": MINUTOS_VALIDEZ,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Alta y edición de empleados por el propio dueño
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Antes TODO pasaba por el super-admin: para sumar una recepcionista, o para
+# corregirle una letra al nombre, el dueño tenía que escribirle a Leandro. El
+# panel solo dejaba ver el equipo y generar un link de contraseña.
+
+
+def _email_libre(db: Session, email: str, excepto_id: int | None = None) -> None:
+    """El email es único en TODO el sistema, no por empresa.
+
+    Es a propósito: el login no pide el negocio, así que dos personas con el
+    mismo email en empresas distintas no podrían distinguirse al entrar.
+    """
+    q = select(Usuario.id).where(func.lower(Usuario.email) == email.lower())
+    if excepto_id is not None:
+        q = q.where(Usuario.id != excepto_id)
+    if db.scalar(q) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya hay una cuenta con ese email. Usá otro.",
+        )
+
+
+def _miembro_de(db: Session, empresa_id: int, usuario_id: int) -> Usuario:
+    u = db.get(Usuario, usuario_id)
+    if u is None or u.empresa_id != empresa_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese usuario no existe.")
+    return u
+
+
+def crear_miembro(db: Session, empresa_id: int, datos) -> dict:
+    """Da de alta un empleado. El rol ya viene acotado por el schema."""
+    _email_libre(db, datos.email)
+    u = Usuario(
+        empresa_id=empresa_id,
+        nombre=datos.nombre.strip(),
+        email=datos.email,
+        hash_clave=hash_clave(datos.clave),
+        rol=datos.rol,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    return _fila(db, empresa_id, u)
+
+
+def editar_miembro(
+    db: Session, empresa_id: int, usuario_id: int, datos, quien_pide: Usuario
+) -> dict:
+    """Edita un empleado. Con dos candados que no son opcionales.
+
+    1. El dueño no se puede desactivar ni cambiar de rol a sí mismo. Un click
+       distraído en su propio switch lo dejaría afuera de su propio negocio,
+       sin nadie adentro que pueda volver a activarlo: habría que arreglarlo
+       contra la base.
+    2. No se puede tocar a otro dueño ni a un admin. El schema ya impide
+       ASIGNAR esos roles; esto impide EDITAR a quien ya los tiene, que es el
+       otro lado de la misma puerta.
+    """
+    u = _miembro_de(db, empresa_id, usuario_id)
+
+    if u.id == quien_pide.id and (
+        datos.activo is False or (datos.rol is not None and datos.rol != u.rol)
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No podés desactivarte ni cambiarte el rol a vos mismo: quedarías "
+            "afuera de tu propio panel y nadie podría volver a activarte.",
+        )
+
+    if u.rol in (RolUsuario.DUENO, RolUsuario.ADMIN) and u.id != quien_pide.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Esa cuenta es de otro dueño o administrador. Para cambiarla, "
+            "escribinos.",
+        )
+
+    cambios = datos.model_dump(exclude_unset=True)
+    if "email" in cambios and cambios["email"]:
+        _email_libre(db, cambios["email"], excepto_id=u.id)
+
+    for campo, valor in cambios.items():
+        if valor is not None:
+            setattr(u, campo, valor.strip() if isinstance(valor, str) else valor)
+
+    db.commit()
+    db.refresh(u)
+    return _fila(db, empresa_id, u)
+
+
+def _fila(db: Session, empresa_id: int, u: Usuario) -> dict:
+    """La misma forma que devuelve listar_equipo, para una sola persona."""
+    recurso = db.scalar(
+        select(Recurso.nombre).where(
+            Recurso.empresa_id == empresa_id, Recurso.usuario_id == u.id
+        )
+    )
+    return {
+        "id": u.id,
+        "nombre": u.nombre,
+        "email": u.email,
+        "rol": u.rol,
+        "activo": u.activo,
+        "email_recuperable": _email_sirve_para_recuperar(u.email),
+        "recurso": recurso,
     }

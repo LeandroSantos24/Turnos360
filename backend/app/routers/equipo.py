@@ -5,11 +5,16 @@ personal y la capacidad de generar un link para cambiarles la contraseña:
 no es algo que tenga que ver recepción ni un profesional.
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
-from app.schemas.equipo import LinkRestablecerOut, MiembroEquipoOut
+from app.schemas.equipo import (
+    LinkRestablecerOut,
+    MiembroCrear,
+    MiembroEditar,
+    MiembroEquipoOut,
+)
 from app.services import equipo as svc
 
 router = APIRouter(prefix="/equipo", tags=["equipo"], dependencies=[Depends(gate_dueno)])
@@ -19,6 +24,38 @@ router = APIRouter(prefix="/equipo", tags=["equipo"], dependencies=[Depends(gate
 def listar_equipo(empresa_id: EmpresaActual, db: DB) -> list[MiembroEquipoOut]:
     """Los usuarios del negocio, con su rol y si pueden recuperar su clave solos."""
     return svc.listar_equipo(db, empresa_id)
+
+
+@router.post(
+    "/usuarios",
+    response_model=MiembroEquipoOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def crear_miembro(
+    datos: MiembroCrear, empresa_id: EmpresaActual, db: DB
+) -> MiembroEquipoOut:
+    """Da de alta un empleado.
+
+    Hasta ahora esto solo lo podía hacer el super-admin: para sumar una
+    recepcionista había que escribirnos. El rol viene acotado por el schema a
+    recepción o profesional.
+    """
+    return svc.crear_miembro(db, empresa_id, datos)
+
+
+@router.patch("/usuarios/{usuario_id}", response_model=MiembroEquipoOut)
+def editar_miembro(
+    usuario_id: int,
+    datos: MiembroEditar,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+) -> MiembroEquipoOut:
+    """Cambia nombre, email, rol o activación de un empleado.
+
+    Corregirle el nombre a alguien era, hasta ahora, un pedido por WhatsApp.
+    """
+    return svc.editar_miembro(db, empresa_id, usuario_id, datos, quien_pide=usuario)
 
 
 @router.post(

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from fastapi import HTTPException, status
 
+from app.core import planes
 from app.models import (
     AjusteSuscripcion,
     AvisoPago,
@@ -313,6 +314,14 @@ def registrar_pago(
         notas=notas,
         registrado_por=registrado_por,
     )
+
+    # Quien paga deja de estar en prueba. Antes el plan y el cobro vivían
+    # desacoplados: una empresa podía pagar por Mercado Pago durante un año y
+    # seguir figurando en "gratuito", con los límites de la prueba. El único
+    # lugar del backend que escribía "pro" era un efecto lateral del botón
+    # "Renovar 30 días", que además saltaba el plan de entrada.
+    if renovar and planes.plan_de(empresa.plan) is planes.Plan.GRATUITO:
+        empresa.plan = planes.PLAN_DE_ENTRADA.value
 
     if renovar:
         limite_continuidad = fecha - dt.timedelta(days=DIAS_PRORROGA)

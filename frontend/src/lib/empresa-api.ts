@@ -136,6 +136,23 @@ export interface MiSuscripcion {
   precio_lista: number | null;
   pagos: PagoSuscripcion[];
   cobro: DatosCobro;
+  /** Qué incluye el plan actual y cuánto se está usando. */
+  plan_etiqueta: string | null;
+  plan_resumen: string | null;
+  profesionales_usados: number;
+  /** null = sin tope (plan Multi). */
+  profesionales_tope: number | null;
+  grilla: PlanDeLaGrilla[];
+}
+
+export interface PlanDeLaGrilla {
+  codigo: string;
+  etiqueta: string;
+  precio: number;
+  /** null = ilimitados. */
+  profesionales: number | null;
+  sucursales: number;
+  resumen: string;
 }
 
 export function leerMiSuscripcion(): Promise<MiSuscripcion> {

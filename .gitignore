@@ -33,3 +33,6 @@ celerybeat-schedule
 # Artefactos de `pip install` local (setuptools)
 backend/build/
 *.egg-info/
+
+# Parches que se descargan para aplicar cambios (no son parte del proyecto)
+*.patch

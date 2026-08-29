@@ -6,6 +6,7 @@ import unicodedata
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime as dt
 
+from app.core.planes import Plan
 from app.models.enums import RolUsuario
 
 
@@ -29,13 +30,55 @@ class RubroOut(BaseModel):
 
 class DuenoCrear(BaseModel):
     nombre: str = Field(min_length=2)
-    email: str
+    # EmailStr y normalizado, igual que UsuarioCrear. Acá había quedado un
+    # `str` pelado: se podía dar de alta una empresa cuyo dueño tuviera email
+    # "pepe", y esa persona NO podía recuperar su contraseña nunca porque el
+    # link de reseteo no tenía a dónde llegar. Y sin el .lower(), "Pepe@Gmail"
+    # entraba al índice único de emails sin normalizar, con riesgo de colisión
+    # inconsistente. La corrección se le había hecho a UsuarioCrear y a este
+    # se le pasó por alto — justo el que crea al usuario más importante.
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _normalizar_email(cls, v: str) -> str:
+        return v.strip().lower()
+
     clave: str = Field(min_length=8, max_length=100)
+
+
+# Slugs que NO se pueden usar como identificador de un negocio.
+#
+# La vidriera pública se sirve en /{slug}, que en Next convive con las rutas
+# estáticas del propio sistema. Y Next resuelve la estática ANTES que la
+# dinámica: una empresa con slug "login" quedaría con su página pública
+# permanentemente inalcanzable, sin ningún error que lo avise. Peor todavía,
+# no hay endpoint para editar el slug después: se arregla tocando la base.
+#
+# Se listan las rutas que existen hoy más las obvias que van a existir. Es
+# barato reservar de más y carísimo reservar de menos.
+SLUGS_RESERVADOS = frozenset({
+    # Rutas reales del frontend
+    "login", "admin", "restablecer", "terminos", "privacidad",
+    "olvide-password", "imprimir", "registro", "signup", "crear-cuenta",
+    "agenda", "clientes", "caja", "recursos", "servicios", "equipo",
+    "inicio", "cuenta", "suscripcion", "campanas", "cupones", "membresias",
+    "gift-cards", "estadisticas", "metodos-pago", "mi-pagina", "mi-dia",
+    "reglas-reserva", "seguimiento", "whatsapp",
+    # Rutas del backend y assets
+    "api", "publico", "health", "ready", "docs", "static", "_next",
+    "favicon.ico", "robots.txt", "sitemap.xml", "icon.png",
+    # Nombres que confundirían a un cliente o servirían para hacerse pasar
+    # por nosotros.
+    "turnos360", "turnos", "turno360", "soporte", "ayuda", "app", "www",
+})
 
 
 class EmpresaCrear(BaseModel):
     nombre: str = Field(min_length=2)
-    slug: str = Field(min_length=2)
+    # max_length además del min: la columna es String(80), y sin esto un slug
+    # de 200 caracteres pasaba Pydantic y explotaba con DataError en el INSERT.
+    slug: str = Field(min_length=2, max_length=80)
 
     @field_validator("slug", mode="after")
     @classmethod
@@ -53,6 +96,11 @@ class EmpresaCrear(BaseModel):
         if len(limpio) < 2:
             raise ValueError(
                 "El identificador tiene que tener al menos 2 letras o números."
+            )
+        if limpio in SLUGS_RESERVADOS:
+            raise ValueError(
+                f'"{limpio}" no se puede usar como identificador: es una '
+                "dirección reservada del sistema. Probá con otra."
             )
         return limpio
     rubro_id: int
@@ -84,7 +132,10 @@ class EmpresaPausar(BaseModel):
 class SuscripcionAdminIn(BaseModel):
     """Setear la suscripción de una empresa desde el super-admin."""
 
-    plan: str | None = None            # gratuito | pro
+    # Plan y no str libre: la columna estuvo meses aceptando cualquier cosa y
+    # ahí es donde se apoyan los límites. Un typo en el plan sería un cupo
+    # equivocado, y el fallback silencioso es al plan más restrictivo.
+    plan: Plan | None = None
     suscripcion_vence: dt.date | None = None
     renovar_30: bool = False           # atajo: vence hoy + 30 días
 
@@ -208,3 +259,5 @@ class FichaComercialIn(BaseModel):
     notas_admin: str | None = Field(default=None, max_length=2000)
     precio_mensual: float | None = Field(default=None, ge=0)
     limite_recursos: int | None = Field(default=None, ge=0, le=999)
+    # Igual que limite_recursos: pisa el tope del plan. Vacío = manda la grilla.
+    limite_sucursales: int | None = Field(default=None, ge=1, le=99)

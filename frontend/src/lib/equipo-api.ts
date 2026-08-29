@@ -35,6 +35,39 @@ export function listarEquipo(): Promise<MiembroEquipo[]> {
   return api.get<MiembroEquipo[]>("/equipo/usuarios");
 }
 
+/**
+ * Roles que el dueño puede asignar desde su panel.
+ *
+ * No están "dueno" ni "admin" a propósito: son los que tocan la facturación.
+ * El backend rechaza igual si alguien los manda a mano — esto es solo lo que
+ * se ofrece en el formulario.
+ */
+export const ROLES_ASIGNABLES = [
+  { valor: "profesional" as const, label: "Profesional", ayuda: "Atiende turnos. Ve su día." },
+  { valor: "recepcion" as const, label: "Recepción", ayuda: "Agenda, clientes y caja." },
+];
+
+export function crearMiembro(datos: {
+  nombre: string;
+  email: string;
+  clave: string;
+  rol: "recepcion" | "profesional";
+}): Promise<MiembroEquipo> {
+  return api.post<MiembroEquipo>("/equipo/usuarios", datos);
+}
+
+export function editarMiembro(
+  usuarioId: number,
+  datos: Partial<{
+    nombre: string;
+    email: string;
+    rol: "recepcion" | "profesional";
+    activo: boolean;
+  }>,
+): Promise<MiembroEquipo> {
+  return api.patch<MiembroEquipo>(`/equipo/usuarios/${usuarioId}`, datos);
+}
+
 /** Genera un link de un solo uso para que ese usuario elija contraseña nueva. */
 export function generarLinkRestablecer(
   usuarioId: number,

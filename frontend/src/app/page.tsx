@@ -45,8 +45,8 @@ const shots = [
 ];
 
 const steps = [
-  { num: "01", title: "Nos contás de tu negocio", body: "Por WhatsApp: tus servicios, precios, horarios y quiénes trabajan con vos. Nada técnico." },
-  { num: "02", title: "Te lo dejamos andando", body: "Cargamos todo, conectamos Mercado Pago y te entregamos tu página de reservas lista, con tu logo y tus colores." },
+  { num: "01", title: "Creás tu cuenta", body: "Elegís tu rubro, el nombre del negocio y la dirección de tu página. Dos minutos y ya estás adentro, con 14 días gratis." },
+  { num: "02", title: "Cargás tus servicios y tu equipo", body: "Con tus precios y tus horarios. Si preferís que lo hagamos nosotros, escribinos y lo dejamos andando con vos." },
   { num: "03", title: "Tus clientes reservan solos", body: "Compartís tu link, el sistema cobra la seña, manda recordatorios y vos ves los números cada noche." },
 ];
 
@@ -249,18 +249,24 @@ export default function Page() {
           <a href="#precios" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Precios</a>
           <a href="#faq" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Preguntas</a>
         </div>
-        {/* Arriba a la derecha va el acceso al panel, no el CTA de venta.
-            Es donde lo busca cualquiera que YA es cliente —la convención de
-            todo SaaS— y hasta ahora había que escribir /login a mano.
-            El CTA comercial no se pierde: sigue en el hero, en la sección de
-            precios y en el bloque de la página de reservas. */}
+        {/* Los dos accesos que espera cualquiera arriba a la derecha: el que
+            YA es cliente entra, y el que recién llega se da de alta. Antes
+            había uno solo ("Ingresar") y el alta era por WhatsApp. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Link
           href="/login"
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1.5px solid #d7dce4", color: "#1c222c", fontWeight: 700, fontSize: 15, padding: "9px 20px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none", background: "#fff" }}
+          style={{ color: "#5d6578", fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textDecoration: "none" }}
         >
-          Ingresar
+          Iniciar sesión
+        </Link>
+        <Link
+          href="/registro"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#1c222c", color: "#fff", fontWeight: 700, fontSize: 15, padding: "10px 22px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none" }}
+        >
+          Comenzar gratis
           <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>→</span>
         </Link>
+        </div>
       </nav>
 
       {/* HERO */}
@@ -504,8 +510,8 @@ export default function Page() {
       {/* COMO FUNCIONA */}
       <section id="como-funciona" style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Nosotros te lo dejamos andando</h2>
-          <p style={{ color: "#8b93a7", fontSize: 17, margin: "0 0 44px", maxWidth: 560 }}>No hay que crear cuentas ni configurar nada solo. El alta la hacemos con vos, paso a paso.</p>
+          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Andando en la misma tarde</h2>
+          <p style={{ color: "#8b93a7", fontSize: 17, margin: "0 0 44px", maxWidth: 560 }}>Te das de alta solo, en dos minutos y sin tarjeta. Y si preferís que lo carguemos nosotros, también: escribinos y lo dejamos listo con vos.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
             {steps.map((s) => (
               <div key={s.num} style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: 28, background: "rgba(255,255,255,0.04)" }}>

@@ -196,6 +196,13 @@ class MiSuscripcionOut(SuscripcionOut):
     precio_lista: float | None = None
     pagos: list[PagoSuscripcionOut] = []
     cobro: DatosCobro = DatosCobro()
+    # Qué incluye el plan y cuánto se usa. El tope deja de aparecer recién
+    # cuando el dueño intenta cargar uno más y le rebota.
+    plan_etiqueta: str | None = None
+    plan_resumen: str | None = None
+    profesionales_usados: int = 0
+    profesionales_tope: int | None = None
+    grilla: list[dict] = []
 
 
 class ReglasReservaConfig(BaseModel):

@@ -78,11 +78,13 @@ def setear_suscripcion(
     """Setea plan y/o vencimiento. renovar_30 = vence hoy + 30 días (atajo)."""
     import datetime as _dt
 
+    from app.core import planes
     from app.services import cobranza
 
     empresa = _empresa_o_404(db, empresa_id)
     if plan is not None:
-        empresa.plan = plan
+        # Llega como enum Plan; en la columna va el string.
+        empresa.plan = getattr(plan, "value", plan)
 
     # Mover el vencimiento a mano queda anotado. Antes no dejaba ningún rastro:
     # "Renovar 30 días" regalaba un mes con un click y no había cómo saber
@@ -90,8 +92,12 @@ def setear_suscripcion(
     antes = empresa.suscripcion_vence
     if renovar_30:
         empresa.suscripcion_vence = _dt.date.today() + _dt.timedelta(days=30)
-        if empresa.plan == "gratuito":
-            empresa.plan = "pro"
+        # Antes esto saltaba directo a "pro", que es el plan del medio: una
+        # renovación de cortesía terminaba regalando el cupo de 10
+        # profesionales. Ahora pasa al plan de ENTRADA, y si querés otro se
+        # elige explícitamente en el mismo formulario.
+        if planes.plan_de(empresa.plan) is planes.Plan.GRATUITO:
+            empresa.plan = planes.PLAN_DE_ENTRADA.value
         cobranza.registrar_ajuste(
             db,
             empresa,

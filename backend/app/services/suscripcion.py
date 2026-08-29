@@ -106,15 +106,30 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
     son apuntes internos de cobranza ("me dijo que paga el martes") y no
     tienen por qué llegarle al cliente.
     """
-    from sqlalchemy import select
+    from sqlalchemy import func, select
 
     from app.core.config import settings
     from app.models.saas import PagoSuscripcion
+    from app.core import planes
     from app.services import mp_suscripcion as mp_sus
 
     empresa = db.get(Empresa, empresa_id)
     if empresa is None:
         return {}
+
+    from app.models.agenda import Recurso
+    from app.models.enums import TipoRecurso
+
+    profesionales_usados = int(
+        db.scalar(
+            select(func.count(Recurso.id)).where(
+                Recurso.empresa_id == empresa_id,
+                Recurso.activo.is_(True),
+                Recurso.tipo == TipoRecurso.PERSONA,
+            )
+        )
+        or 0
+    )
 
     estado = estado_suscripcion(empresa)
 
@@ -141,6 +156,16 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
         # NO reemplaza a precio_mensual en la tarjeta de la cuota: a un piloto
         # bonificado mostrarle el precio de lista como "su" cuota sería mentira.
         "precio_lista": float(settings.precio_vigente),
+        # Qué incluye el plan actual y cuánto se está usando. Es lo que hace
+        # que el tope deje de ser una sorpresa cuando el dueño intenta cargar
+        # un profesional más y le rebota.
+        "plan_etiqueta": planes.limites_de(empresa.plan).etiqueta,
+        "plan_resumen": planes.limites_de(empresa.plan).resumen,
+        "profesionales_usados": profesionales_usados,
+        "profesionales_tope": planes.tope_profesionales(
+            empresa.plan, empresa.limite_recursos
+        ),
+        "grilla": planes.para_mostrar(),
         "dias_prorroga": DIAS_PRORROGA,
         "pagos": [
             {

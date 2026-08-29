@@ -319,6 +319,8 @@ Table empresa {
   notas_admin text
   precio_mensual numeric(12, 2)
   limite_recursos integer
+  limite_sucursales integer
+  de_registro_publico boolean [not null]
   creada_en timestamp with time zone [not null]
 
   Indexes {
@@ -854,6 +856,9 @@ Table usuario {
   hash_clave varchar(300) [not null]
   rol rol_usuario [not null]
   activo boolean [not null]
+  email_verificado boolean [not null]
+  verif_token_hash varchar(128)
+  verif_token_expira timestamp with time zone
   reset_token_hash varchar(128)
   reset_token_expira timestamp with time zone
   token_version integer [not null]

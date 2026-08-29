@@ -275,6 +275,88 @@ export default function SuscripcionPage() {
         )}
       </section>
 
+      {/* Qué incluye tu plan, y cuánto estás usando.
+          Va ANTES de "Cómo pagar" a propósito: el dueño tiene que ver que se
+          está quedando sin lugar antes de chocarse con el error al cargar el
+          profesional número cuatro. */}
+      {datos.plan_etiqueta && (
+        <section className="rounded-2xl border bg-card p-5 md:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-bold" style={SYNE}>
+              Tu plan {datos.plan_etiqueta}
+            </h2>
+            <span className="text-sm text-muted-foreground">
+              {datos.plan_resumen}
+            </span>
+          </div>
+
+          {datos.profesionales_tope !== null && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-sm">
+                <span>Profesionales</span>
+                <span className="tabular-nums font-medium">
+                  {datos.profesionales_usados} de {datos.profesionales_tope}
+                </span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    datos.profesionales_usados >= datos.profesionales_tope
+                      ? "bg-amber-500"
+                      : "bg-primary"
+                  }`}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      (datos.profesionales_usados / datos.profesionales_tope) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+              {datos.profesionales_usados >= datos.profesionales_tope && (
+                <p className="mt-2 text-sm text-amber-700 dark:text-amber-500">
+                  Llegaste al tope de tu plan. Para sumar a alguien más,
+                  cambiá de plan o dá de baja a quien ya no trabaja acá.
+                </p>
+              )}
+            </div>
+          )}
+
+          {datos.grilla.length > 0 && (
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+              {datos.grilla.map((p) => {
+                const esElMio =
+                  p.etiqueta.toLowerCase() ===
+                  (datos.plan_etiqueta ?? "").toLowerCase();
+                return (
+                  <div
+                    key={p.codigo}
+                    className={`rounded-xl border p-3.5 ${
+                      esElMio ? "border-primary bg-primary/5" : ""
+                    }`}
+                  >
+                    <p className="flex items-center gap-1.5 text-sm font-semibold">
+                      {p.etiqueta}
+                      {esElMio && (
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          tu plan
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-lg font-bold tabular-nums">
+                      {pesos(p.precio)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {p.resumen}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Cómo pagar */}
       {hayCobro && (pagando || avisoPendiente || datos.estado !== "prueba") && (
         <section id="como-pagar" className="rounded-2xl border bg-card p-5 md:p-6">
@@ -362,11 +444,12 @@ export default function SuscripcionPage() {
                 <ol className="mt-1.5 space-y-1 pl-4 text-sm text-muted-foreground">
                   <li className="list-decimal">Transferís a los datos de arriba.</li>
                   <li className="list-decimal">
-                    Nos mandás el comprobante por WhatsApp.
+                    Tocás <b>Ya transferí</b> acá abajo. Si querés, además nos
+                    mandás el comprobante por WhatsApp.
                   </li>
                   <li className="list-decimal">
-                    Lo verificamos y registramos el pago: tu vencimiento se
-                    corre 30 días.
+                    Lo confirmamos contra el banco y registramos el pago: tu
+                    vencimiento se corre 30 días.
                   </li>
                 </ol>
                 <p className="mt-2 text-xs text-muted-foreground">

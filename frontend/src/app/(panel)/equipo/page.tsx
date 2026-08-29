@@ -26,18 +26,23 @@ import {
   KeyRound,
   Link2,
   MessageCircle,
+  Pencil,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
 import {
+  editarMiembro,
   generarLinkRestablecer,
   listarEquipo,
   MiembroEquipo,
   ROL_LABEL,
 } from "@/lib/equipo-api";
 import { RequiereDueno } from "@/components/requiere-rol";
+import { useConfirmar } from "@/components/confirmar";
+import { MiembroDialog } from "./miembro-dialog";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +59,41 @@ function ContenidoEquipo() {
   const [generandoPara, setGenerandoPara] = useState<number | null>(null);
   const [link, setLink] = useState<{ url: string; usuario: string } | null>(null);
   const [copiado, setCopiado] = useState(false);
+  // null + abierto = alta. Con miembro = edición.
+  const [editando, setEditando] = useState<MiembroEquipo | null>(null);
+  const [dialogo, setDialogo] = useState(false);
+  const confirmar = useConfirmar();
+
+  function abrirAlta() {
+    setEditando(null);
+    setDialogo(true);
+  }
+
+  function abrirEdicion(m: MiembroEquipo) {
+    setEditando(m);
+    setDialogo(true);
+  }
+
+  async function alternarActivo(m: MiembroEquipo) {
+    if (
+      !(await confirmar({
+        titulo: m.activo ? `¿Dar de baja a ${m.nombre}?` : `¿Reactivar a ${m.nombre}?`,
+        descripcion: m.activo
+          ? "Deja de poder entrar al panel. Sus turnos y su historial quedan intactos, y si vuelve lo reactivás."
+          : "Vuelve a poder entrar al panel con la misma cuenta.",
+        textoAccion: m.activo ? "Sí, dar de baja" : "Sí, reactivar",
+        destructivo: m.activo,
+      }))
+    )
+      return;
+    try {
+      await editarMiembro(m.id, { activo: !m.activo });
+      toast.success(m.activo ? "Dado de baja" : "Reactivado");
+      cargar();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar");
+    }
+  }
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -131,6 +171,10 @@ function ContenidoEquipo() {
             para entrar.
           </p>
         </div>
+        <Button className="ml-auto" onClick={abrirAlta}>
+          <UserPlus className="mr-1.5 h-4 w-4" />
+          Sumar a alguien
+        </Button>
       </div>
 
       {sinEmail > 0 && (
@@ -189,6 +233,17 @@ function ContenidoEquipo() {
                 )}
               </div>
 
+              {m.rol !== "dueno" && (
+                <Button variant="ghost" size="sm" onClick={() => abrirEdicion(m)}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Editar
+                </Button>
+              )}
+              {m.rol !== "dueno" && (
+                <Button variant="ghost" size="sm" onClick={() => alternarActivo(m)}>
+                  {m.activo ? "Dar de baja" : "Reactivar"}
+                </Button>
+              )}
               {m.rol !== "dueno" && m.activo && (
                 <Button
                   variant="outline"
@@ -258,6 +313,13 @@ function ContenidoEquipo() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <MiembroDialog
+        abierto={dialogo}
+        miembro={editando}
+        onCerrar={() => setDialogo(false)}
+        onListo={cargar}
+      />
     </div>
   );
 }

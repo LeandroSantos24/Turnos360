@@ -11,7 +11,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Especialidad, Recurso, Usuario
+from app.core import planes
+from app.models import Especialidad, Empresa, Recurso, Sucursal, Usuario
+from app.models.enums import TipoRecurso
 from app.schemas.recurso import RecursoCrear, RecursoEditar
 
 
@@ -161,9 +163,83 @@ def obtener(db: Session, empresa_id: int, recurso_id: int) -> Recurso | None:
     )
 
 
+def _validar_sucursal(db: Session, empresa_id: int, sucursal_id: int | None) -> None:
+    """La sucursal tiene que ser de ESTA empresa.
+
+    Regla 1 del proyecto: toda consulta filtra por empresa_id. Este campo se
+    escapaba, porque entra por el `model_dump()` del schema sin pasar por
+    ninguna validación: un `POST /recursos {"sucursal_id": 7}` con la sucursal
+    de otro negocio quedaba grabado.
+
+    Hoy es inofensivo —nadie lee la columna— y por eso nunca dio la cara. Deja
+    de serlo el día que multisucursal empiece a filtrar por ella: ahí el
+    recurso aparecería en el local de otra empresa.
+    """
+    if sucursal_id is None:
+        return
+    existe = db.scalar(
+        select(Sucursal.id).where(
+            Sucursal.id == sucursal_id, Sucursal.empresa_id == empresa_id
+        )
+    )
+    if existe is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Esa sucursal no existe en este negocio."
+        )
+
+
+def _validar_cupo(db: Session, empresa_id: int, tipo: TipoRecurso) -> None:
+    """¿Le queda lugar en su plan para un profesional más?
+
+    El tope existía desde hace meses (`empresa.limite_recursos`), se calculaba
+    y se pintaba en ámbar en el panel del super-admin — y NUNCA bloqueaba nada.
+    Era un recordatorio comercial, no un límite: una empresa del plan de tres
+    podía cargar cuarenta.
+
+    Se cuentan solo los ACTIVOS y solo los de tipo persona: un box o un equipo
+    no ocupa un asiento del plan, y desactivar a alguien que se fue tiene que
+    liberar su lugar.
+
+    NO se toca lo que ya existe: esto solo frena el alta. Una empresa que ya
+    tenga más profesionales que su plan sigue funcionando igual; simplemente no
+    puede sumar uno más hasta que cambie de plan o el super-admin le suba el
+    tope a mano.
+    """
+    if tipo != TipoRecurso.PERSONA:
+        return
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        return
+    tope = planes.tope_profesionales(empresa.plan, empresa.limite_recursos)
+    if tope is None:
+        return
+
+    usados = db.scalar(
+        select(func.count(Recurso.id)).where(
+            Recurso.empresa_id == empresa_id,
+            Recurso.activo.is_(True),
+            Recurso.tipo == TipoRecurso.PERSONA,
+        )
+    ) or 0
+    if usados < tope:
+        return
+
+    lim = planes.limites_de(empresa.plan)
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"Tu plan {lim.etiqueta} incluye {tope} "
+        f"{'profesional' if tope == 1 else 'profesionales'} y ya los tenés "
+        "cargados. Para sumar uno más, pasá al plan siguiente desde "
+        "«Mi suscripción» — o desactivá a alguien que ya no trabaje acá.",
+    )
+
+
 def crear(db: Session, empresa_id: int, datos: RecursoCrear) -> Recurso:
     """Crea un recurso y le asigna sus especialidades (validadas por empresa)."""
     _validar_usuario_vinculable(db, empresa_id, datos.usuario_id)
+    _validar_sucursal(db, empresa_id, datos.sucursal_id)
+    _validar_cupo(db, empresa_id, datos.tipo)
     payload = datos.model_dump(exclude={"especialidad_ids"})
     recurso = Recurso(empresa_id=empresa_id, **payload)
     recurso.especialidades = _especialidades_de_empresa(
@@ -190,6 +266,15 @@ def editar(
         _validar_usuario_vinculable(
             db, empresa_id, cambios["usuario_id"], recurso_id_actual=recurso_id
         )
+
+    if "sucursal_id" in cambios:
+        _validar_sucursal(db, empresa_id, cambios["sucursal_id"])
+
+    # Reactivar a alguien ocupa un asiento igual que darlo de alta. Sin esto,
+    # el cupo se esquivaba desactivando y reactivando: se desactiva a uno para
+    # crear al cuarto, y después se lo vuelve a activar.
+    if cambios.get("activo") is True and not recurso.activo:
+        _validar_cupo(db, empresa_id, recurso.tipo)
 
     # Las especialidades se manejan aparte (no es una columna simple)
     if "especialidad_ids" in cambios:

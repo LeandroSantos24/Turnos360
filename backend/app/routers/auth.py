@@ -166,6 +166,41 @@ def me(usuario: UsuarioActual) -> Usuario:
 # Recuperación y cambio de contraseña
 # ============================================================
 
+@router.post("/reenviar-verificacion")
+@limiter.limit("3/hour")
+def reenviar_verificacion(
+    request: Request, usuario: UsuarioActual, db: DB
+) -> dict:
+    """Manda de nuevo el email de verificación, para quien no lo recibió.
+
+    3 por hora: alcanza de sobra para el que lo mandó a spam, y no sirve como
+    forma de usarnos para bombardear una casilla ajena.
+    """
+    from app.services import registro as svc_registro
+
+    token = svc_registro.reenviar(db, usuario)
+    if token is None:
+        return {"ok": True, "detalle": "Tu email ya está verificado."}
+
+    try:
+        from app.tasks.emails import enviar_verificacion_email
+
+        enviar_verificacion_email.delay(usuario.id, token)
+    except Exception:
+        log.exception(
+            "No se pudo encolar el reenvío de verificación (usuario %s)", usuario.id
+        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "No pudimos mandar el email ahora. Probá en un rato.",
+        ) from None
+
+    return {
+        "ok": True,
+        "detalle": f"Te lo mandamos a {usuario.email}. Revisá también el spam.",
+    }
+
+
 @router.post("/olvide-password")
 @limiter.limit("3/minute")
 def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> dict:

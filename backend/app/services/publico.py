@@ -26,12 +26,32 @@ from app.services import turno as turno_svc
 
 
 def resolver_empresa(db: Session, slug: str) -> Empresa:
-    """Empresa activa por slug, o 404. Punto único de entrada del tenant público."""
+    """Empresa activa por slug, o 404. Punto único de entrada del tenant público.
+
+    Acá también vive el candado anti-spam del registro público: un negocio cuyo
+    dueño todavía no verificó su email NO muestra su vidriera. Va en esta
+    función y no en cada endpoint a propósito — es por donde pasan todos, así
+    que no hay forma de olvidarse de ponerlo en el próximo que se agregue.
+
+    Se responde 404 y no 403: para quien mira desde afuera, un negocio sin
+    verificar y uno que no existe son lo mismo. Decir "existe pero está sin
+    verificar" sería confirmarle a alguien que ese slug está tomado.
+    """
     empresa = db.scalar(
         select(Empresa).where(Empresa.slug == slug, Empresa.activa.is_(True))
     )
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Negocio no encontrado")
+
+    # Solo se controla a las que nacieron del registro público. Las que dio de
+    # alta el super-admin no pasan por acá aunque la migración las marcó
+    # verificadas: es un candado de más, barato, por si alguna quedó sin marcar.
+    if empresa.de_registro_publico:
+        from app.services import registro
+
+        if not registro.empresa_verificada(db, empresa.id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Negocio no encontrado")
+
     return empresa
 
 

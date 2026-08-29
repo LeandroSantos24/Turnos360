@@ -8,7 +8,7 @@ Nginx hay que pasar la IP real (X-Forwarded-For) o todos caen en el mismo bucket
 import datetime as dt
 
 from anyio import to_thread
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DB
@@ -18,7 +18,11 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.reloj import hoy_de_pared
 from app.schemas.cupon import CuponValidarIn, CuponValidarOut
+from app.core.seguridad import crear_access_token, crear_refresh_token
 from app.schemas.publico import (
+    RegistroIn,
+    RegistroOut,
+    RubroPublicoOut,
     HuecosDia,
     ReservaPublicaCrear,
     ReservaPublicaOut,
@@ -31,6 +35,7 @@ from app.core import firma_mp
 from app.services import mercadopago as mp
 from app.services import mp_suscripcion as mp_sus
 from app.services import publico as svc
+from app.services import registro as svc_registro
 
 log = logging.getLogger("turnos360.mp")
 
@@ -212,6 +217,77 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
         db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))
     )
     db.commit()
+
+
+@router.get("/rubros", response_model=list[RubroPublicoOut])
+@limiter.limit("30/minute")
+def rubros_publicos(request: Request, db: DB) -> list[RubroPublicoOut]:
+    """Los rubros para elegir en el formulario de registro."""
+    from app.models import Rubro
+
+    filas = db.scalars(select(Rubro).order_by(Rubro.nombre)).all()
+    return [RubroPublicoOut(codigo=r.codigo, nombre=r.nombre) for r in filas]
+
+
+@router.post(
+    "/registro", response_model=RegistroOut, status_code=status.HTTP_201_CREATED
+)
+@limiter.limit("3/hour")
+def registro(request: Request, datos: RegistroIn, db: DB) -> RegistroOut:
+    """Alta de un negocio desde la landing, sin intervención humana.
+
+    Devuelve los tokens ya emitidos: quien se registra entra derecho al panel,
+    sin tener que loguearse de nuevo ni esperar el email. Lo que SÍ espera al
+    email es la vidriera pública, que es el candado anti-spam (ver
+    services/registro.py).
+
+    3 registros por hora y por IP. Un negocio real se da de alta una vez; el
+    que necesita más de tres por hora no es un negocio real.
+    """
+    if not settings.registro_publico_abierto:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "El registro está cerrado por el momento. Escribinos y te damos "
+            "de alta nosotros.",
+        )
+
+    empresa, dueno, token = svc_registro.registrar(db, datos)
+
+    try:
+        from app.tasks.emails import enviar_verificacion_email
+
+        enviar_verificacion_email.delay(dueno.id, token)
+    except Exception:
+        # El alta ya está hecha y el usuario está adentro: no se le puede
+        # devolver un error por esto. Pero tiene que quedar en los logs,
+        # porque sin el email su vidriera no se enciende nunca y va a
+        # escribir preguntando por qué.
+        log.exception(
+            "No se pudo encolar el email de verificación (usuario %s)", dueno.id
+        )
+
+    tv = int(dueno.token_version or 0)
+    return RegistroOut(
+        access_token=crear_access_token(dueno.id, dueno.empresa_id, dueno.rol.value, tv),
+        refresh_token=crear_refresh_token(dueno.id, dueno.empresa_id, dueno.rol.value, tv),
+        empresa_slug=empresa.slug,
+        empresa_nombre=empresa.nombre,
+        email_verificado=False,
+    )
+
+
+@router.post("/verificar-email")
+@limiter.limit("10/minute")
+def verificar_email(request: Request, token: str, db: DB) -> dict:
+    """Confirma el email con el token del link. Sirve una sola vez."""
+    usuario = svc_registro.verificar(db, token)
+    return {
+        "ok": True,
+        "detalle": (
+            f"Listo, {usuario.nombre}. Tu email quedó verificado y tu página "
+            "pública ya está online."
+        ),
+    }
 
 
 @router.get("/slugs", response_model=list[str])

@@ -46,6 +46,7 @@ import { ConfigRubroProvider } from "@/lib/config-rubro";
 import { esDueno, type Rol } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ConfirmarProvider } from "@/components/confirmar";
+import { AvisoVerificacion } from "./aviso-verificacion";
 
 type NavItem = {
   href: string;
@@ -357,6 +358,11 @@ export default function PanelLayout({
 
       {/* Contenido */}
       <main className="min-w-0 flex-1 overflow-y-auto bg-background">
+        {/* Sin este aviso, el dueño comparte su link, no funciona, y no tiene
+            forma de saber que le falta confirmar el email. */}
+        {dueno && usuario.email_verificado === false && (
+          <AvisoVerificacion email={usuario.email} />
+        )}
         {bloquearContenido ? (
           <div className="p-8 text-sm text-muted-foreground">Redirigiendo…</div>
         ) : (

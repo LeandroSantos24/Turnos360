@@ -1199,3 +1199,51 @@ def avisar_acceso_admin(
         mailer.enviar(destino, asunto, html)
     except Exception:
         log.exception("No se pudo enviar el aviso de acceso al panel de admin")
+
+
+@celery_app.task(name="app.tasks.emails.enviar_verificacion_email")
+def enviar_verificacion_email(usuario_id: int, token: str) -> None:
+    """El email que enciende la vidriera pública de un negocio recién registrado.
+
+    Es de PLATAFORMA, no de un negocio: mismo caso que el reset de contraseña,
+    así que no pasa por _mandar() (que escribe en la tabla Mensaje, que es por
+    empresa y para mensajería con clientes finales).
+
+    Si Gmail tarda o rebota, el alta ya está hecha y la persona está adentro
+    del panel. Lo único que espera este email es que su página se haga pública.
+    """
+    with SessionLocal() as db:
+        usuario = db.get(Usuario, usuario_id)
+        if usuario is None or usuario.email_verificado or not usuario.email:
+            return
+
+        url = (
+            f"{settings.public_base_url}/verificar"
+            f"?token={urllib.parse.quote(token)}"
+        )
+        html = _plantilla(
+            "Confirmá tu email",
+            [
+                f"¡Bienvenido{(' ' + esc(usuario.nombre)) if usuario.nombre else ''}! "
+                "Tu cuenta de Turnos360 ya está lista y podés entrar al panel "
+                "cuando quieras.",
+                "Falta un solo paso: confirmar que este email es tuyo.",
+                "<b>Hasta que lo confirmes, tu página pública de reservas no "
+                "se muestra.</b> Es la forma que tenemos de que nadie use "
+                "Turnos360 para publicar cualquier cosa.",
+                "<span style='font-size:13px;color:#8a94a6'>El link vale por "
+                "3 días. Si no fuiste vos, ignorá este mensaje.</span>",
+            ],
+            "Turnos360 · Gestión de turnos para tu negocio",
+            boton=("Confirmar mi email", url),
+            marca="Turnos360",
+        )
+        try:
+            mailer.enviar(
+                usuario.email, "Confirmá tu email · Turnos360", html
+            )
+        except Exception:
+            log.exception(
+                "No se pudo mandar el email de verificación (usuario %s)",
+                usuario_id,
+            )

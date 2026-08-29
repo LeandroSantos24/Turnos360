@@ -153,6 +153,17 @@ class Empresa(Base):
 
     # Tope de profesionales según el plan. None = sin límite.
     limite_recursos: Mapped[int | None] = mapped_column()
+    # Topes que PISAN a los del plan. None = manda la grilla
+    # (app/core/planes.py). Existen para poder hacerle un cupo especial a
+    # un cliente sin inventar un plan nuevo, y para dejar tranquilo a
+    # alguien que ya tenía más cargado que lo que su plan admite.
+    limite_sucursales: Mapped[int | None] = mapped_column()
+    # True cuando la empresa nació del registro público y no del alta
+    # manual del super-admin. Es lo que le deja ver a Leandro, de un
+    # vistazo en cobranza, a quién no conoce todavía.
+    de_registro_publico: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     creada_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -198,6 +209,25 @@ class Usuario(TenantMixin, Base):
     hash_clave: Mapped[str] = mapped_column(String(300))
     rol: Mapped[RolUsuario] = mapped_column(enum_pg(RolUsuario, "rol_usuario"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Verificación del email, para el registro público.
+    #
+    # Las cuentas que dio de alta el super-admin a mano nacen verificadas (la
+    # migración las marca): a esas personas Leandro las conoce. Lo que hay que
+    # verificar es a quien se registra solo.
+    #
+    # Mientras no esté verificado, la VIDRIERA PÚBLICA del negocio no se
+    # muestra. Ese es el candado anti-spam: sin él, cualquiera podría usar el
+    # registro para publicar páginas con el dominio de Turnos360. El panel sí
+    # se puede usar, así que el que se registró de verdad no queda esperando
+    # un email para poder probar el producto.
+    email_verificado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    verif_token_hash: Mapped[str | None] = mapped_column(String(128))
+    verif_token_expira: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     # Recuperación de contraseña: HASH del token de un solo uso + expiración.
     reset_token_hash: Mapped[str | None] = mapped_column(String(128))

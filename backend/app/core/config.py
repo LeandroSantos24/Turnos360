@@ -168,6 +168,16 @@ class Settings(BaseSettings):
     # → Webhooks). Es distinta de MP_WEBHOOK_SECRET, que es la de las señas.
     mp_saas_webhook_secret: str = ""
 
+    # --- Registro público ---------------------------------------------------
+    # Días de prueba con los que arranca quien se da de alta solo. 14 es lo
+    # que promete la landing; vive acá para poder correr una promo sin
+    # tocar código.
+    dias_prueba_registro: int = 14
+    # Interruptor del registro público. Apagado = la landing muestra solo
+    # "Iniciar sesión" y el endpoint contesta 503. Existe para poder cerrar
+    # la puerta en caliente si aparece abuso, sin necesidad de un deploy.
+    registro_publico_abierto: bool = True
+
     # --- Precio de lista del SaaS -------------------------------------------
     # Cuota mensual con la que nace toda empresa nueva y que muestra la landing.
     # Vive acá y no repartido por el código: cambiar el precio tiene que ser
