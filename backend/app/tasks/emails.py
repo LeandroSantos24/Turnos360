@@ -34,6 +34,26 @@ from app.services.empresa import automs_de
 
 log = logging.getLogger(__name__)
 
+
+def _link_en_dev(que: str, url: str, usuario_id: int) -> None:
+    """Deja el link en el log cuando no hay SMTP, para poder probar en local.
+
+    Sin esto, en una máquina de desarrollo el link no existe en ningún lado:
+    el mail no sale, el token se guarda hasheado y el flujo no se puede
+    probar a mano.
+
+    Nunca en producción, ni siquiera si alguien se olvida de cargar SMTP: un
+    token en el log es un token regalado a cualquiera que lea los logs.
+    """
+    if settings.es_produccion:
+        return
+    log.warning(
+        "[DEV] %s del usuario %s (SMTP sin configurar, el mail no salió): %s",
+        que,
+        usuario_id,
+        url,
+    )
+
 TEAL = "#17a08a"
 TINTA = "#0c1015"
 
@@ -544,6 +564,9 @@ def enviar_reset_password(usuario_id: int, token: str) -> None:
         try:
             mailer.enviar(usuario.email, "Restablecer tu contraseña · Turnos360", html)
             log.info("Email de restablecimiento enviado (usuario %s)", usuario_id)
+        except mailer.MailerNoConfigurado:
+            # No se reintenta: que falte SMTP no se arregla insistiendo.
+            _link_en_dev("Link para restablecer la contraseña", url, usuario_id)
         except Exception:
             # Se propaga para que Celery reintente (autoretry_for está puesto
             # en celery_app). Un fallo transitorio de SMTP no puede dejar a
@@ -1242,6 +1265,8 @@ def enviar_verificacion_email(usuario_id: int, token: str) -> None:
             mailer.enviar(
                 usuario.email, "Confirmá tu email · Turnos360", html
             )
+        except mailer.MailerNoConfigurado:
+            _link_en_dev("Link de verificación de email", url, usuario_id)
         except Exception:
             log.exception(
                 "No se pudo mandar el email de verificación (usuario %s)",
