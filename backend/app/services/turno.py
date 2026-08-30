@@ -271,6 +271,10 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
     # 4. Crear el turno
     turno = Turno(
         empresa_id=empresa_id,
+        # El turno se hace donde atiende el profesional. Se copia en vez de
+        # joinear: si mañana esa persona se muda de local, los turnos que ya
+        # pasaron tienen que seguir contando en el local donde ocurrieron.
+        sucursal_id=recurso.sucursal_id,
         cliente_id=datos.cliente_id,
         recurso_id=datos.recurso_id,
         servicio_id=datos.servicio_id,

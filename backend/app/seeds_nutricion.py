@@ -19,6 +19,7 @@ from app.models import (
     Recurso,
     Rubro,
     Servicio,
+    Sucursal,
     Usuario,
 )
 from app.models.enums import RolUsuario, TipoRecurso
@@ -68,6 +69,8 @@ def run() -> None:
         empresa = Empresa(rubro_id=rubro.id, nombre="Giuliana Nutrición",
                           slug="giuliana", config_pack={})
         db.add(empresa)
+        db.flush()
+        db.add(Sucursal(empresa_id=empresa.id, nombre=empresa.nombre))
         db.flush()
 
         # Usuario dueño — credenciales de PRUEBA (cambiar en producción)

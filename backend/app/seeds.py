@@ -34,6 +34,7 @@ from app.models import (
     Recurso,
     Rubro,
     Servicio,
+    Sucursal,
     SuperAdmin,
     Turno,
     Usuario,
@@ -195,6 +196,10 @@ def run() -> None:
         )
         db.add(barberia)
         db.flush()
+        # Su local. Toda empresa tiene uno; sin él, el alta de cualquier
+        # profesional o usuario choca contra el NOT NULL de sucursal_id.
+        db.add(Sucursal(empresa_id=barberia.id, nombre=barberia.nombre))
+        db.flush()
         db.add(Usuario(empresa_id=barberia.id, nombre="Dueño Barbería",
                        email="dueno@lacueva.com", hash_clave=hash_clave("demo1234"),
                        rol=RolUsuario.DUENO))
@@ -224,6 +229,8 @@ def run() -> None:
         consultorio = Empresa(rubro_id=r_medico.id, nombre="Consultorio San Martín",
                               slug="consultorio-san-martin", config_pack={})
         db.add(consultorio)
+        db.flush()
+        db.add(Sucursal(empresa_id=consultorio.id, nombre=consultorio.nombre))
         db.flush()
         db.add(Usuario(empresa_id=consultorio.id, nombre="Recepción",
                        email="recepcion@csm.com", hash_clave=hash_clave("demo1234"),

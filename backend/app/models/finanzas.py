@@ -8,15 +8,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.enums import EstadoCaja, ModalidadComision, TipoMovimiento
-from app.models.organizacion import TenantMixin
+from app.models.organizacion import TenantMixin, fk_sucursal, sucursal_por_defecto
 from app.models.tipos import enum_pg
 
 
 class Caja(TenantMixin, Base):
     __tablename__ = "caja"
+    __table_args__ = (fk_sucursal("fk_caja_sucursal"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))
+    # Cada local cuenta su propia plata y firma su propio arqueo.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     fecha_apertura: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

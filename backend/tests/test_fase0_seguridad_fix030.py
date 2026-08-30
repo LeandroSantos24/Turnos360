@@ -180,11 +180,17 @@ def test_la_sucursal_propia_si_se_puede_asignar(client, db, armar_empresa):
     assert r.json()["sucursal_id"] == propia.id
 
 
-def test_sin_sucursal_sigue_andando_como_siempre(client, armar_empresa):
-    """Hoy TODOS los recursos se crean sin sucursal. No se puede romper eso."""
+def test_sin_sucursal_el_alta_lo_manda_al_local_principal(client, armar_empresa):
+    """El alta sin sucursal tiene que seguir funcionando igual de simple.
+
+    Cambió lo que pasa por debajo: antes quedaba en NULL, ahora cae en el local
+    principal (paso 1 de multisucursal). Para quien usa la aplicación no cambia
+    nada —no hay ningún campo nuevo que completar—, que es exactamente el
+    criterio de aceptación de esta fase.
+    """
     a = armar_empresa()
     r = client.post(
         "/recursos", headers=token_de(a.dueno), json={"nombre": "Sin local", "tipo": "persona"}
     )
     assert r.status_code == 201, r.text
-    assert r.json()["sucursal_id"] is None
+    assert r.json()["sucursal_id"] == a.sede.id

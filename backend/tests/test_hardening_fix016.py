@@ -234,6 +234,21 @@ def test_el_diagrama_esta_al_dia():
     )
 
 
+def test_el_diagrama_sale_siempre_igual():
+    """El generador tiene que ser determinista, no "casi siempre igual".
+
+    `col.foreign_keys` es un SET. Cuando empresa_id pasó a participar en dos
+    FKs —la suya a empresa.id y la compuesta (empresa_id, sucursal_id) hacia
+    sucursal— tomar "el primero" empezó a devolver uno distinto según la
+    corrida. Efecto: el test de arriba se ponía rojo día por medio sin que
+    nadie tocara un modelo, que es la peor clase de test roto: el que enseña
+    a ignorar los rojos.
+    """
+    from app.tools.generar_dbml import generar
+
+    assert generar() == generar()
+
+
 def test_el_diagrama_tiene_las_tablas_que_faltaban():
     """Las 7 que el diagrama escrito a mano no tenía."""
     contenido = _dbml_o_skip()

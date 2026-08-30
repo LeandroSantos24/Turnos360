@@ -8,7 +8,21 @@ from typing import TYPE_CHECKING
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func, text, Numeric
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +42,48 @@ class TenantMixin:
 
     empresa_id: Mapped[int] = mapped_column(
         ForeignKey("empresa.id"), nullable=False, index=True
+    )
+
+
+def sucursal_por_defecto(context):
+    """Rellena sucursal_id con el local principal de la empresa de la fila.
+
+    Existe para que "toda fila tiene sucursal" sea un invariante del modelo y
+    no una disciplina de cada programador. Sin esto, alcanza con que UN alta
+    nueva se olvide del campo para que salte un IntegrityError en producción,
+    y ese olvido es fácil: la columna no aparece en ningún formulario mientras
+    el negocio tenga un solo local.
+
+    Solo corre cuando nadie asignó el valor: los servicios que sí saben qué
+    local corresponde (el turno hereda el del profesional, el empleado el que
+    se le eligió) siguen mandando y no pagan esta consulta.
+    """
+    empresa_id = context.get_current_parameters().get("empresa_id")
+    if empresa_id is None:
+        return None
+    return context.connection.scalar(
+        text(
+            "SELECT id FROM sucursal WHERE empresa_id = :e AND activa "
+            "ORDER BY id LIMIT 1"
+        ),
+        {"e": empresa_id},
+    )
+
+
+def fk_sucursal(nombre: str) -> ForeignKeyConstraint:
+    """La FK compuesta (empresa_id, sucursal_id) → sucursal(empresa_id, id).
+
+    Una FK simple a sucursal.id garantizaría que la sucursal EXISTE, no que sea
+    de esta empresa. Llevando empresa_id adentro de la misma constraint, la
+    base rechaza el cruce entre negocios sin que ningún servicio tenga que
+    acordarse de validarlo.
+
+    Regla 1 del proyecto, pero puesta donde no se puede olvidar.
+    """
+    return ForeignKeyConstraint(
+        ["empresa_id", "sucursal_id"],
+        ["sucursal.empresa_id", "sucursal.id"],
+        name=nombre,
     )
 
 
@@ -172,13 +228,23 @@ class Empresa(Base):
 
 
 class Sucursal(TenantMixin, Base):
-    """Prevista en E1, se activa en E16 (D-09)."""
+    """El local. Toda empresa tiene al menos uno (E16, D-09).
+
+    La UNIQUE sobre (empresa_id, id) es redundante como identidad —el id ya es
+    único— pero es lo que permite que las otras tablas apunten acá con una FK
+    COMPUESTA (empresa_id, sucursal_id). Con eso, la base misma rechaza que un
+    turno, una caja o un profesional queden colgados de la sucursal de OTRA
+    empresa: deja de depender de que ningún camino de código se olvide de
+    validar.
+    """
 
     __tablename__ = "sucursal"
+    __table_args__ = (UniqueConstraint("empresa_id", "id", name="uq_sucursal_empresa"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(120))
     direccion: Mapped[str | None] = mapped_column(String(200))
+    telefono: Mapped[str | None] = mapped_column(String(40))
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -200,10 +266,15 @@ class Usuario(TenantMixin, Base):
     # constraint.
     __table_args__ = (
         Index("uq_usuario_email_lower", text("lower(email)"), unique=True),
+        fk_sucursal("fk_usuario_sucursal"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))
+    # A qué local pertenece. Con un solo local nadie la ve ni la elige; con
+    # varios, es lo que decide qué agenda y qué caja ve esta persona.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     nombre: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(200))
     hash_clave: Mapped[str] = mapped_column(String(300))

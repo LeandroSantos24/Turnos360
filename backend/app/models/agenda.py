@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import TipoExcepcion, TipoRecurso
-from app.models.organizacion import TenantMixin
+from app.models.organizacion import TenantMixin, fk_sucursal, sucursal_por_defecto
 from app.models.tipos import enum_pg
 
 # Tablas puente N:M (no son clases porque no tienen datos propios)
@@ -51,10 +51,18 @@ class Recurso(TenantMixin, Base):
     """Regla 2: lo reservable es un Recurso con tipo persona/box/equipo."""
 
     __tablename__ = "recurso"
-    __table_args__ = (Index("ix_recurso_empresa_tipo", "empresa_id", "tipo"),)
+    __table_args__ = (
+        Index("ix_recurso_empresa_tipo", "empresa_id", "tipo"),
+        fk_sucursal("fk_recurso_sucursal"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))
+    # El profesional pertenece a UN local. Si una persona atiende en dos,
+    # se carga dos veces: es lo que hace el mercado y evita que el motor de
+    # disponibilidad tenga que adivinar a qué local corresponde cada hueco.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     tipo: Mapped[TipoRecurso] = mapped_column(enum_pg(TipoRecurso, "tipo_recurso"))
     nombre: Mapped[str] = mapped_column(String(120))
     usuario_id: Mapped[int | None] = mapped_column(

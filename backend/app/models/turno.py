@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.enums import EstadoTurno, TipoTurno
-from app.models.organizacion import TenantMixin
+from app.models.organizacion import TenantMixin, fk_sucursal, sucursal_por_defecto
 from app.models.tipos import enum_pg
 
 
@@ -59,10 +59,17 @@ class Turno(TenantMixin, Base):
             "creado_at",
             postgresql_where=text("sena_estado = 'pendiente'"),
         ),
+        fk_sucursal("fk_turno_sucursal"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    sucursal_id: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id"))
+    # Se copia del profesional en vez de joinear. Es desnormalización a
+    # propósito: caja y estadísticas filtran por local en cada consulta, y
+    # el local de un turno ya pasado no puede cambiar porque el profesional
+    # se haya mudado de sucursal el mes que viene.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     cliente_id: Mapped[int] = mapped_column(ForeignKey("cliente.id"))
     recurso_id: Mapped[int] = mapped_column(ForeignKey("recurso.id"))
     servicio_id: Mapped[int | None] = mapped_column(ForeignKey("servicio.id"))

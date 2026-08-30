@@ -28,7 +28,7 @@ from app.core.rate_limit import limiter
 from app.core.seguridad import crear_access_token, crear_refresh_token
 from app.db.session import engine, get_db
 from app.main import app
-from app.models import Cliente, Empresa, Recurso, Rubro, Usuario
+from app.models import Cliente, Empresa, Recurso, Rubro, Sucursal, Usuario
 from app.models.agenda import HorarioRecurso, Servicio
 from app.models.enums import EstadoTurno, RolUsuario, TipoRecurso
 from app.models.finanzas import MetodoPago, Pago
@@ -97,21 +97,36 @@ def armar_empresa(db):
         db.add(emp)
         db.flush()
 
+        # Toda empresa tiene su local desde el minuto cero, igual que en el alta
+        # real. Sin esto, cualquier test que cree un recurso o un usuario choca
+        # contra el NOT NULL de sucursal_id.
+        sede = Sucursal(empresa_id=emp.id, nombre=nombre, activa=True)
+        db.add(sede)
+        db.flush()
+
         clave = "clave1234"
         dueno = Usuario(
             empresa_id=emp.id,
+            sucursal_id=sede.id,
             nombre="Dueño Test",
             email=f"dueno-{s}@example.com",
             hash_clave=hash_clave(clave),
             rol=RolUsuario.DUENO,
         )
-        lucas = Recurso(empresa_id=emp.id, nombre="Lucas Estrella", tipo=TipoRecurso.PERSONA)
-        pablo = Recurso(empresa_id=emp.id, nombre="Pablo Vega", tipo=TipoRecurso.PERSONA)
+        lucas = Recurso(
+            empresa_id=emp.id, sucursal_id=sede.id,
+            nombre="Lucas Estrella", tipo=TipoRecurso.PERSONA,
+        )
+        pablo = Recurso(
+            empresa_id=emp.id, sucursal_id=sede.id,
+            nombre="Pablo Vega", tipo=TipoRecurso.PERSONA,
+        )
         db.add_all([dueno, lucas, pablo])
         db.flush()
 
         profesional = Usuario(
             empresa_id=emp.id,
+            sucursal_id=sede.id,
             nombre="Profe Test",
             email=f"profe-{s}@example.com",
             hash_clave=hash_clave(clave),
@@ -148,6 +163,7 @@ def armar_empresa(db):
 
         return SimpleNamespace(
             empresa=emp,
+            sede=sede,
             dueno=dueno,
             profesional=profesional,
             lucas=lucas,

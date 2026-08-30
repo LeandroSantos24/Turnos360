@@ -15,6 +15,7 @@ from app.core import planes
 from app.models import Especialidad, Empresa, Recurso, Sucursal, Usuario
 from app.models.enums import TipoRecurso
 from app.schemas.recurso import RecursoCrear, RecursoEditar
+from app.services import sucursal as sucursal_svc
 
 
 def _especialidades_de_empresa(
@@ -241,6 +242,10 @@ def crear(db: Session, empresa_id: int, datos: RecursoCrear) -> Recurso:
     _validar_sucursal(db, empresa_id, datos.sucursal_id)
     _validar_cupo(db, empresa_id, datos.tipo)
     payload = datos.model_dump(exclude={"especialidad_ids"})
+    # El profesional siempre pertenece a un local. Si el alta no dice cuál
+    # —que es el caso de todo negocio de una sola sucursal—, va a la principal.
+    if not payload.get("sucursal_id"):
+        payload["sucursal_id"] = sucursal_svc.id_principal(db, empresa_id)
     recurso = Recurso(empresa_id=empresa_id, **payload)
     recurso.especialidades = _especialidades_de_empresa(
         db, empresa_id, datos.especialidad_ids
@@ -268,7 +273,15 @@ def editar(
         )
 
     if "sucursal_id" in cambios:
-        _validar_sucursal(db, empresa_id, cambios["sucursal_id"])
+        if cambios["sucursal_id"] is None:
+            # Mandar sucursal_id: null explícitamente ya no puede significar
+            # "sacalo de todo local": la columna es NOT NULL desde el paso 1 de
+            # multisucursal, así que eso terminaba en un 500. Se interpreta
+            # como "no lo muevas", que es lo único que ese pedido puede querer
+            # decir.
+            cambios.pop("sucursal_id")
+        else:
+            _validar_sucursal(db, empresa_id, cambios["sucursal_id"])
 
     # Reactivar a alguien ocupa un asiento igual que darlo de alta. Sin esto,
     # el cupo se esquivaba desactivando y reactivando: se desactiva a uno para

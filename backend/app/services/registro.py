@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.models import Empresa, Rubro, Usuario
 from app.models.enums import RolUsuario
+from app.services import sucursal as sucursal_svc
 
 log = logging.getLogger("turnos360.registro")
 
@@ -98,8 +99,11 @@ def registrar(db: Session, datos) -> tuple[Empresa, Usuario, str]:
     db.add(empresa)
     db.flush()
 
+    principal = sucursal_svc.crear_principal(db, empresa)
+
     dueno = Usuario(
         empresa_id=empresa.id,
+        sucursal_id=principal.id,
         nombre=datos.nombre.strip(),
         email=datos.email,
         hash_clave=hash_clave(datos.clave),

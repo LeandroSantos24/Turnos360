@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
+from app.services import sucursal as sucursal_svc
 
 log = logging.getLogger(__name__)
 
@@ -182,9 +183,14 @@ def crear_empresa(db: Session, datos) -> Empresa:
     db.add(empresa)
     db.flush()
 
+    # Ninguna empresa existe sin un local. Ver services/sucursal.py: es lo que
+    # permite que todo el sistema filtre por sucursal sin ramas ni NULLs.
+    principal = sucursal_svc.crear_principal(db, empresa)
+
     db.add(
         Usuario(
             empresa_id=empresa.id,
+            sucursal_id=principal.id,
             nombre=datos.dueno.nombre,
             email=datos.dueno.email,
             hash_clave=hash_clave(datos.dueno.clave),
@@ -256,6 +262,7 @@ def crear_usuario(db: Session, empresa_id: int, datos) -> Usuario:
         )
     usuario = Usuario(
         empresa_id=empresa_id,
+        sucursal_id=sucursal_svc.id_principal(db, empresa_id),
         nombre=datos.nombre,
         email=datos.email,
         hash_clave=hash_clave(datos.clave),

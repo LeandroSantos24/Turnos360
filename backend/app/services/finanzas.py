@@ -29,6 +29,7 @@ from app.schemas.finanzas import (
     MetodoPagoCrear,
     MetodoPagoEditar,
 )
+from app.services import sucursal as sucursal_svc
 
 
 # ─────────────────────────── Métodos de pago ────────────────────────────────
@@ -121,6 +122,10 @@ def abrir_caja(
         return None
     c = Caja(
         empresa_id=empresa_id,
+        # Una caja por empresa hoy; una por local cuando llegue el paso 5 de
+        # multisucursal. La columna ya queda escrita para no tener que migrar
+        # arqueos viejos ese día.
+        sucursal_id=sucursal_svc.id_principal(db, empresa_id),
         saldo_inicial=datos.saldo_inicial,
         abierta_por=usuario_id,
     )

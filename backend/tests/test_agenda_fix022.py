@@ -23,7 +23,7 @@ from app.core.candados import bloquear_agenda
 from app.core.config import settings
 from app.core.reloj import ahora_de_pared
 from app.db.session import engine
-from app.models import Cliente, Empresa, Recurso, Rubro, Turno
+from app.models import Cliente, Empresa, Recurso, Rubro, Sucursal, Turno
 from app.models.agenda import HorarioRecurso, Servicio
 from app.models.enums import EstadoTurno, TipoRecurso
 from app.schemas.turno import TurnoCrear
@@ -65,6 +65,11 @@ def negocio_real():
     emp = Empresa(nombre="Carrera", slug=f"race-{s}", rubro_id=rubro.id)
     ses.add(emp)
     ses.flush()
+    # Su local, como toda empresa. Acá se crea a mano porque este fixture no
+    # pasa por el alta real.
+    sede = Sucursal(empresa_id=emp.id, nombre="Carrera", activa=True)
+    ses.add(sede)
+    ses.flush()
     recurso = Recurso(empresa_id=emp.id, nombre="Silla 1", tipo=TipoRecurso.PERSONA)
     ses.add(recurso)
     ses.flush()
@@ -103,6 +108,7 @@ def negocio_real():
         limpiar.execute(delete(Servicio).where(Servicio.empresa_id == eid))
         limpiar.execute(delete(Cliente).where(Cliente.empresa_id == eid))
         limpiar.execute(delete(Recurso).where(Recurso.empresa_id == eid))
+        limpiar.execute(delete(Sucursal).where(Sucursal.empresa_id == eid))
         limpiar.execute(delete(Empresa).where(Empresa.id == eid))
         limpiar.execute(delete(Rubro).where(Rubro.id == datos["rubro_id"]))
         limpiar.commit()

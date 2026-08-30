@@ -42,6 +42,7 @@ from app.core.crypto import hash_clave
 from app.models import Recurso, Usuario
 from app.models.enums import RolUsuario
 from app.services import auditoria
+from app.services import sucursal as sucursal_svc
 
 MINUTOS_VALIDEZ = 60
 
@@ -213,6 +214,9 @@ def crear_miembro(db: Session, empresa_id: int, datos) -> dict:
     _email_libre(db, datos.email)
     u = Usuario(
         empresa_id=empresa_id,
+        # Con un solo local no hay nada que elegir. Cuando haya varios, el alta
+        # va a poder decir en cuál trabaja (paso 6 de multisucursal).
+        sucursal_id=sucursal_svc.id_principal(db, empresa_id),
         nombre=datos.nombre.strip(),
         email=datos.email,
         hash_clave=hash_clave(datos.clave),

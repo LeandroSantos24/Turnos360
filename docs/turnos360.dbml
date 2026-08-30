@@ -159,7 +159,7 @@ Table aviso_pago {
 
 Table caja {
   id integer [pk]
-  sucursal_id integer [ref: > sucursal.id]
+  sucursal_id integer [ref: > sucursal.id, not null]
   fecha_apertura timestamp with time zone [not null]
   fecha_cierre timestamp with time zone
   saldo_inicial numeric(12, 2) [not null]
@@ -732,7 +732,7 @@ Table plantilla_mensaje {
 
 Table recurso {
   id integer [pk]
-  sucursal_id integer [ref: > sucursal.id]
+  sucursal_id integer [ref: > sucursal.id, not null]
   tipo tipo_recurso [not null]
   nombre varchar(120) [not null]
   usuario_id integer [ref: > usuario.id]
@@ -787,6 +787,7 @@ Table sucursal {
   id integer [pk]
   nombre varchar(120) [not null]
   direccion varchar(200)
+  telefono varchar(40)
   activa boolean [not null]
   empresa_id integer [ref: > empresa.id, not null]
 
@@ -805,7 +806,7 @@ Table super_admin {
 
 Table turno {
   id integer [pk]
-  sucursal_id integer [ref: > sucursal.id]
+  sucursal_id integer [ref: > sucursal.id, not null]
   cliente_id integer [ref: > cliente.id, not null]
   recurso_id integer [ref: > recurso.id, not null]
   servicio_id integer [ref: > servicio.id]
@@ -850,7 +851,7 @@ Table turno {
 
 Table usuario {
   id integer [pk]
-  sucursal_id integer [ref: > sucursal.id]
+  sucursal_id integer [ref: > sucursal.id, not null]
   nombre varchar(120) [not null]
   email varchar(200) [not null]
   hash_clave varchar(300) [not null]

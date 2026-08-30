@@ -92,7 +92,20 @@ def _atributos(tabla, col) -> str:
     if col.primary_key:
         partes.append("pk")
     if col.foreign_keys:
-        destino = list(col.foreign_keys)[0].target_fullname
+        # Una columna puede participar en más de una FK: empresa_id apunta a
+        # empresa.id por su cuenta y, además, entra en la FK compuesta
+        # (empresa_id, sucursal_id) → sucursal. `col.foreign_keys` es un set,
+        # así que tomar el primero daba un archivo distinto en cada corrida y
+        # el test del diagrama fallaba día por medio sin que nadie tocara nada.
+        #
+        # Se elige la FK de una sola columna cuando existe —que es la relación
+        # que el diagrama quiere mostrar— y, a igualdad, la primera por orden
+        # alfabético, para que el resultado sea siempre el mismo.
+        def _peso(fk):
+            columnas = len(fk.constraint.columns) if fk.constraint is not None else 1
+            return (columnas, fk.target_fullname)
+
+        destino = min(col.foreign_keys, key=_peso).target_fullname
         partes.append(f"ref: > {destino}")
     if not col.nullable and not col.primary_key:
         partes.append("not null")
