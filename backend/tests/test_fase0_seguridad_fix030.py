@@ -37,7 +37,13 @@ def rubro(db) -> Rubro:
     return r
 
 
-def _empresa(rubro, *, slug=None, email="dueno@example.com"):
+def _empresa(rubro, *, slug=None, email=None):
+    # El email por defecto es único a propósito. El índice de emails es
+    # GLOBAL (una persona = una dirección en todo el sistema), así que un
+    # literal fijo hace que el test dependa de que esa dirección no exista
+    # en la base contra la que corre, y revienta con 409 en cualquier
+    # entorno con datos reales.
+    email = email or f"dueno-{uuid.uuid4().hex[:8]}@example.com"
     return {
         "nombre": "Negocio de prueba",
         "slug": slug or f"n-{uuid.uuid4().hex[:8]}",
@@ -63,13 +69,14 @@ def test_un_dueno_sin_email_valido_se_rechaza(client, admin, rubro):
 
 def test_el_email_del_dueno_se_normaliza(client, db, admin, rubro):
     """Sin el .lower(), entra al índice único de emails sin normalizar."""
+    s = uuid.uuid4().hex[:8]
     r = client.post(
         "/admin/empresas",
         headers=admin,
-        json=_empresa(rubro, email="  Pepe@Gmail.COM "),
+        json=_empresa(rubro, email=f"  Pepe.{s}@Gmail.COM "),
     )
     assert r.status_code == 201, r.text
-    creado = db.query(Usuario).filter_by(email="pepe@gmail.com").first()
+    creado = db.query(Usuario).filter_by(email=f"pepe.{s}@gmail.com").first()
     assert creado is not None, "El email tiene que quedar en minúsculas y sin espacios."
 
 

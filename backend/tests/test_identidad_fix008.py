@@ -6,6 +6,7 @@ entrar a uno de los dos, en silencio) y el módulo nuevo de equipo.
 """
 
 import datetime as dt
+import uuid
 
 import pytest
 from sqlalchemy import select
@@ -138,18 +139,21 @@ def test_el_email_se_guarda_en_minusculas(client, db, armar_empresa):
     cab = _cabecera_superadmin(db)
     db.commit()
 
+    # Sufijo al azar: el índice de emails es global, así que un literal fijo
+    # choca con 409 en cualquier base que ya tenga esa dirección.
+    s = uuid.uuid4().hex[:8]
     r = client.post(
         f"/admin/empresas/{a.empresa.id}/usuarios",
         headers=cab,
         json={
             "nombre": "Mayus",
-            "email": "  Juan.Perez@GMAIL.com  ",
+            "email": f"  Juan.Perez.{s}@GMAIL.com  ",
             "clave": "clave1234",
             "rol": "recepcion",
         },
     )
     assert r.status_code == 201
-    assert r.json()["email"] == "juan.perez@gmail.com"
+    assert r.json()["email"] == f"juan.perez.{s}@gmail.com"
 
 
 # ══════════════════════════════════════════════════════════════════════

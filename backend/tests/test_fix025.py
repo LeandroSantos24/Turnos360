@@ -48,17 +48,18 @@ def test_crear_empresa_no_tira_500_y_devuelve_la_prueba_como_texto(client, db):
     cab = _cab_superadmin(db)
     rubro = _rubro(db)
     db.commit()
+    s = uuid.uuid4().hex[:8]
 
     r = client.post(
         "/admin/empresas",
         headers=cab,
         json={
             "nombre": "Barbería Nueva",
-            "slug": "barberia-nueva",
+            "slug": f"barberia-nueva-{s}",
             "rubro_id": rubro.id,
             "dueno": {
                 "nombre": "Leo",
-                "email": "leo-nueva@example.com",
+                "email": f"leo-nueva-{s}@example.com",
                 "clave": "clave1234",
             },
             "dias_prueba": 14,
@@ -80,17 +81,18 @@ def test_crear_empresa_sin_prueba_no_se_cae(client, db):
     cab = _cab_superadmin(db)
     rubro = _rubro(db)
     db.commit()
+    s = uuid.uuid4().hex[:8]
 
     r = client.post(
         "/admin/empresas",
         headers=cab,
         json={
             "nombre": "Sin Prueba",
-            "slug": "sin-prueba",
+            "slug": f"sin-prueba-{s}",
             "rubro_id": rubro.id,
             "dueno": {
                 "nombre": "Leo",
-                "email": "leo-sinprueba@example.com",
+                "email": f"leo-sinprueba-{s}@example.com",
                 "clave": "clave1234",
             },
             "dias_prueba": 0,
