@@ -19,6 +19,13 @@ export interface ConfigEmpresa {
   rubro_codigo: string;
   rubro_nombre: string;
   preset: PresetRubro;
+  /**
+   * Cuántos locales permite el plan. Con 1, el panel esconde TODO lo de
+   * sucursales: el menú, los selectores y el paso de la reserva pública.
+   * Por debajo el sistema ya es multisucursal — esto es lo único que decide
+   * si la palabra aparece en pantalla.
+   */
+  limite_sucursales: number;
 }
 
 /** Trae la empresa actual + el preset de su rubro (GET /empresa/actual). */

@@ -43,6 +43,11 @@ class EmpresaActualOut(BaseModel):
     # El preset del rubro (terminologia, modulos, campos_cliente...), ya con
     # los overrides de la empresa aplicados si los hubiera.
     preset: dict
+    # Cuántos locales permite el plan. Es lo único que el panel necesita para
+    # decidir si muestra o esconde TODO lo de sucursales: con tope 1, el
+    # negocio de una silla nunca ve la palabra. Sale de la grilla de planes,
+    # con el override de la ficha comercial si lo hay.
+    limite_sucursales: int = 1
 
 
 class LandingConfig(BaseModel):

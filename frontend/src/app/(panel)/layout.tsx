@@ -36,6 +36,7 @@ import {
   CalendarClock,
   LineChart,
   Receipt,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,10 @@ type NavItem = {
   soloProfesional?: boolean;
   ocultarProfesional?: boolean;
   moduloRequerido?: string; // solo se muestra si el preset activa ese módulo
+  // Solo si el plan permite más de un local. Es lo que hace que el negocio de
+  // una sola silla nunca vea la palabra "sucursal": por debajo el sistema ya
+  // es multisucursal, pero la pantalla no existe hasta que hace falta.
+  soloMultisucursal?: boolean;
 };
 
 // Ítems del menú, agrupados como en TurnosPro.
@@ -71,6 +76,7 @@ const NAV: NavItem[] = [
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
   { href: "/equipo", label: "Equipo", icon: Users, grupo: "negocio", soloDueno: true },
+  { href: "/sucursales", label: "Sucursales", icon: Building2, grupo: "negocio", soloDueno: true, soloMultisucursal: true },
   { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
   { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards" },
   { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
@@ -226,6 +232,10 @@ export default function PanelLayout({
               if (n.soloDueno && !dueno) return false;
               if (n.ocultarProfesional && esProfesional) return false;
               if (n.moduloRequerido && !config?.preset?.modulos?.[n.moduloRequerido])
+                return false;
+              // Con un solo local permitido no hay nada que administrar: la
+              // sucursal existe, se creó sola y se llama como el negocio.
+              if (n.soloMultisucursal && (config?.limite_sucursales ?? 1) <= 1)
                 return false;
               return true;
             });

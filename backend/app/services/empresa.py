@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.services import mercadopago as mp
+from app.core import planes
 from app.models import Empresa, Rubro
 from app.schemas.empresa import LandingConfig
 
@@ -29,6 +30,10 @@ def obtener_config(db: Session, empresa_id: int) -> dict:
         "rubro_codigo": rubro.codigo if rubro else "",
         "rubro_nombre": rubro.nombre if rubro else "",
         "preset": preset,
+        "limite_sucursales": planes.tope_sucursales(
+            empresa.plan if empresa else None,
+            empresa.limite_sucursales if empresa else None,
+        ),
     }
 
 
