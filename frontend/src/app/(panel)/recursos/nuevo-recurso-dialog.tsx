@@ -28,6 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SelectorUsuarioVinculado } from "./selector-usuario-vinculado";
+import { SelectorSucursal } from "./selector-sucursal";
 
 export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
   const [abierto, setAbierto] = useState(false);
@@ -35,10 +36,14 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
 
   const [nombre, setNombre] = useState("");
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
+  // null = "el que decida el backend", que es el local principal. Es lo que
+  // pasa siempre en un negocio de un solo local, donde el selector ni aparece.
+  const [sucursalId, setSucursalId] = useState<number | null>(null);
 
   function limpiar() {
     setNombre("");
     setUsuarioId(null);
+    setSucursalId(null);
   }
 
   async function guardar(e: React.FormEvent) {
@@ -49,6 +54,7 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
         nombre,
         tipo: "persona",
         usuario_id: usuarioId,
+        sucursal_id: sucursalId,
       });
       toast.success("Recurso creado");
       limpiar();
@@ -86,6 +92,8 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
               autoFocus
             />
           </div>
+          <SelectorSucursal value={sucursalId} onChange={setSucursalId} />
+
           <SelectorUsuarioVinculado value={usuarioId} onChange={setUsuarioId} />
 
           <DialogFooter>

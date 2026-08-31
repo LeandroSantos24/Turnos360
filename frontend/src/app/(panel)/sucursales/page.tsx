@@ -21,7 +21,17 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Building2, MapPin, Pencil, Phone, Plus, Users } from "lucide-react";
+import Link from "next/link";
+import {
+  Building2,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  RotateCcw,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
@@ -31,6 +41,7 @@ import {
   Sucursal,
   SucursalesRespuesta,
 } from "@/lib/sucursales-api";
+import { olvidarSucursales } from "@/lib/use-sucursales";
 import { RequiereDueno } from "@/components/requiere-rol";
 import { useConfirmar } from "@/components/confirmar";
 import { Button } from "@/components/ui/button";
@@ -46,6 +57,8 @@ function ContenidoSucursales() {
   const cargar = useCallback(async () => {
     try {
       setDatos(await listarSucursales());
+      // Que el selector de local de Recursos vea el cambio sin recargar la app.
+      olvidarSucursales();
     } catch {
       toast.error("No se pudieron cargar los locales");
     } finally {
@@ -73,7 +86,9 @@ function ContenidoSucursales() {
     }
     try {
       await editarSucursal(s.id, { activa: !s.activa });
-      toast.success(cerrando ? `«${s.nombre}» quedó cerrado` : `«${s.nombre}» está abierto`);
+      toast.success(
+        cerrando ? `«${s.nombre}» quedó cerrado` : `«${s.nombre}» está abierto`,
+      );
       void cargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo cambiar");
@@ -91,92 +106,173 @@ function ContenidoSucursales() {
   }
 
   if (cargando) {
-    return <p className="text-muted-foreground">Cargando…</p>;
+    return <p className="p-8 text-sm text-muted-foreground">Cargando…</p>;
   }
   if (!datos) return null;
 
   const sinCupo = datos.usadas >= datos.tope;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="p-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sucursales</h1>
+          <h1 className="text-2xl font-bold">Sucursales</h1>
           <p className="text-sm text-muted-foreground">
             Tus locales. Cada uno tiene su equipo, su agenda y su caja.
           </p>
         </div>
         <Button onClick={abrirAlta} disabled={sinCupo}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus size={16} className="mr-2" />
           Nuevo local
         </Button>
-      </header>
+      </div>
 
-      <p className="text-sm text-muted-foreground">
-        {datos.usadas} de {datos.tope} {datos.tope === 1 ? "local" : "locales"} en uso
+      {/* Cupo del plan. En barra y no en texto suelto: de un vistazo se ve
+          cuánto margen queda antes de tener que cambiar de plan. */}
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="flex items-center gap-1" aria-hidden>
+          {Array.from({ length: datos.tope }).map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-7 rounded-full ${
+                i < datos.usadas ? "bg-primary" : "bg-muted"
+              }`}
+            />
+          ))}
+        </div>
+        <p className="text-sm">
+          <span className="font-medium tabular-nums">
+            {datos.usadas} de {datos.tope}
+          </span>{" "}
+          <span className="text-muted-foreground">
+            {datos.tope === 1 ? "local" : "locales"} · plan {datos.plan_etiqueta}
+          </span>
+        </p>
         {sinCupo && (
-          <>
-            {" "}
-            — tu plan {datos.plan_etiqueta} no incluye más. Para sumar otro,
-            cambiá de plan desde <b>Mi suscripción</b>.
-          </>
+          <p className="text-sm text-muted-foreground">
+            — para sumar otro,{" "}
+            <Link href="/suscripcion" className="font-medium underline underline-offset-4">
+              cambiá de plan
+            </Link>
+            .
+          </p>
         )}
-      </p>
+      </div>
 
-      <ul className="space-y-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         {datos.sucursales.map((s) => (
-          <li
+          <div
             key={s.id}
-            className={`rounded-xl border p-4 ${s.activa ? "" : "opacity-60"}`}
+            className={`flex flex-col rounded-2xl border bg-card p-5 transition-colors ${
+              s.activa ? "hover:border-foreground/20" : "opacity-70"
+            }`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{s.nombre}</span>
+            <div className="mb-3 flex items-start gap-3">
+              <span
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  s.activa ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <Building2 size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate font-semibold">{s.nombre}</h2>
+                  {s.es_principal && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      Principal
+                    </span>
+                  )}
                   {!s.activa && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                    <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
                       Cerrado
                     </span>
                   )}
                 </div>
-                {s.direccion && (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5" />
-                    {s.direccion}
+                <div className="mt-1.5 space-y-1 text-sm text-muted-foreground">
+                  <p className="flex items-start gap-2">
+                    <MapPin size={13} className="mt-0.5 shrink-0 opacity-60" />
+                    <span className={s.direccion ? "" : "italic opacity-70"}>
+                      {s.direccion ?? "Sin dirección cargada"}
+                    </span>
                   </p>
-                )}
-                {s.telefono && (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    {s.telefono}
-                  </p>
-                )}
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Users className="h-3.5 w-3.5" />
-                  {s.profesionales === 0
-                    ? "Sin profesionales asignados"
-                    : `${s.profesionales} ${s.profesionales === 1 ? "profesional" : "profesionales"}`}
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => abrirEdicion(s)}>
-                  <Pencil className="mr-2 h-3.5 w-3.5" />
-                  Editar
-                </Button>
-                <Button
-                  variant={s.activa ? "outline" : "default"}
-                  size="sm"
-                  onClick={() => void cambiarEstado(s)}
-                >
-                  {s.activa ? "Cerrar" : "Reabrir"}
-                </Button>
+                  {s.telefono && (
+                    <p className="flex items-center gap-2">
+                      <Phone size={13} className="shrink-0 opacity-60" />
+                      {s.telefono}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </li>
+
+            {/* Cuánta gente trabaja acá. Es el dato que hay que mirar antes de
+                cerrar un local, y el atajo para ir a asignar profesionales. */}
+            <Link
+              href="/recursos"
+              className="mb-4 flex items-center justify-between rounded-xl border border-dashed px-3 py-2.5 text-sm transition-colors hover:border-solid hover:bg-muted/50"
+            >
+              <span className="flex items-center gap-2">
+                {s.profesionales === 0 ? (
+                  <>
+                    <UserPlus size={14} className="opacity-60" />
+                    <span className="text-muted-foreground">
+                      Sin profesionales — asigná los primeros
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Users size={14} className="opacity-60" />
+                    <span>
+                      <span className="font-medium tabular-nums">
+                        {s.profesionales}
+                      </span>{" "}
+                      <span className="text-muted-foreground">
+                        {s.profesionales === 1 ? "profesional" : "profesionales"}
+                      </span>
+                    </span>
+                  </>
+                )}
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Ver en Recursos →
+              </span>
+            </Link>
+
+            <div className="mt-auto flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => abrirEdicion(s)}
+              >
+                <Pencil size={14} className="mr-2" />
+                Editar
+              </Button>
+              <Button
+                variant={s.activa ? "ghost" : "default"}
+                size="sm"
+                className="flex-1"
+                onClick={() => void cambiarEstado(s)}
+              >
+                {s.activa ? (
+                  "Cerrar local"
+                ) : (
+                  <>
+                    <RotateCcw size={14} className="mr-2" />
+                    Reabrir
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
+
+      <p className="mt-6 text-xs text-muted-foreground">
+        Los locales no se borran: se cierran. Los turnos, la caja y los arqueos
+        que ya tienen se conservan, y podés reabrirlos cuando quieras.
+      </p>
 
       <SucursalDialog
         abierto={dialogo}

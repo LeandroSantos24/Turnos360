@@ -24,7 +24,8 @@ export interface Recurso {
   color: string | null;
   /** Foto del profesional para la landing pública (se edita en "Mi página"). */
   foto_url: string | null;
-  sucursal_id: number | null;
+  /** Siempre tiene local. Con un solo local, nadie lo elige ni lo ve. */
+  sucursal_id: number;
   usuario_id: number | null;
   activo: boolean;
   especialidades: EspecialidadEmbebida[];
@@ -43,6 +44,8 @@ export interface RecursoCrear {
   foto_url?: string | null;
   /** Usuario con login que opera este recurso (1-a-1). null = sin vincular. */
   usuario_id?: number | null;
+  /** En qué local atiende. Sin esto, el backend lo manda al principal. */
+  sucursal_id?: number | null;
 }
 
 /** Un usuario de la empresa que se puede vincular a un recurso. */

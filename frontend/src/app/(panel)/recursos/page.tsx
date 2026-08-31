@@ -21,7 +21,8 @@ import { EditarRecursoDialog } from "./editar-recurso-dialog";
 import { SoloDueno } from "@/components/si-rol";
 import { HorarioSemanal } from "./horario-semanal";
 import { toast } from "sonner";
-import { CalendarClock, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Building2, CalendarClock, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { useSucursales } from "@/lib/use-sucursales";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+function BotonFiltro({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        activo
+          ? "border-transparent bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 const TIPO_LABEL: Record<string, string> = {
   persona: "Persona",
   box: "Box",
@@ -62,6 +87,9 @@ export default function RecursosPage() {
   const [error, setError] = useState<string | null>(null);
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
+  // "todos" mientras el negocio tenga un solo local: el filtro ni se dibuja.
+  const [filtroSucursal, setFiltroSucursal] = useState<string>("todas");
+  const { abiertas, multi, nombreDe } = useSucursales();
 
   // Recurso cuyo horario se muestra abajo. Se guarda el id y no el objeto
   // entero para que al recargar la lista (crear, editar, borrar) el panel
@@ -92,11 +120,15 @@ export default function RecursosPage() {
     const texto = buscar.trim().toLowerCase();
     return recursos
       .filter((r) => r.nombre.toLowerCase().includes(texto))
+      .filter(
+        (r) =>
+          filtroSucursal === "todas" || String(r.sucursal_id) === filtroSucursal,
+      )
       .sort((a, b) => {
         const cmp = a.nombre.localeCompare(b.nombre, "es");
         return orden === "asc" ? cmp : -cmp;
       });
-  }, [recursos, buscar, orden]);
+  }, [recursos, buscar, orden, filtroSucursal]);
 
   const seleccionado = useMemo(
     () => recursos.find((r) => r.id === seleccionadoId) ?? null,
@@ -144,12 +176,33 @@ export default function RecursosPage() {
         </SoloDueno>
       </div>
 
-      <div className="mb-4 max-w-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
           placeholder="Buscar recurso…"
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
+          className="max-w-sm"
         />
+        {/* El filtro por local solo existe si hay más de uno. */}
+        {multi && (
+          <div className="flex flex-wrap gap-1.5">
+            <BotonFiltro
+              activo={filtroSucursal === "todas"}
+              onClick={() => setFiltroSucursal("todas")}
+            >
+              Todos los locales
+            </BotonFiltro>
+            {abiertas.map((s) => (
+              <BotonFiltro
+                key={s.id}
+                activo={filtroSucursal === String(s.id)}
+                onClick={() => setFiltroSucursal(String(s.id))}
+              >
+                {s.nombre}
+              </BotonFiltro>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -184,6 +237,7 @@ export default function RecursosPage() {
                   Nombre {orden === "asc" ? "↑" : "↓"}
                 </TableHead>
                 {hayTiposViejos && <TableHead>Tipo</TableHead>}
+                {multi && <TableHead>Local</TableHead>}
                 <TableHead>Especialidades</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
@@ -210,6 +264,14 @@ export default function RecursosPage() {
                   </TableCell>
                   {hayTiposViejos && (
                     <TableCell>{TIPO_LABEL[r.tipo] ?? r.tipo}</TableCell>
+                  )}
+                  {multi && (
+                    <TableCell className="text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 size={13} className="shrink-0 opacity-60" />
+                        {nombreDe(r.sucursal_id) ?? "—"}
+                      </span>
+                    </TableCell>
                   )}
                   <TableCell className="text-muted-foreground">
                     {r.especialidades.length > 0

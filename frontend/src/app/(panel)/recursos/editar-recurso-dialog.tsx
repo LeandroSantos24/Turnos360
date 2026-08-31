@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SelectorUsuarioVinculado } from "./selector-usuario-vinculado";
+import { SelectorSucursal } from "./selector-sucursal";
 
 interface EditarRecursoDialogProps {
   recurso: Recurso | null;
@@ -45,12 +46,14 @@ export function EditarRecursoDialog({
   const [tipo, setTipo] = useState<TipoRecurso>("persona");
   const esTipoViejo = recurso != null && recurso.tipo !== "persona";
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
+  const [sucursalId, setSucursalId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!recurso) return;
     setNombre(recurso.nombre);
     setTipo(recurso.tipo);
     setUsuarioId(recurso.usuario_id);
+    setSucursalId(recurso.sucursal_id);
   }, [recurso]);
 
   function cambiarTipo(v: string) {
@@ -68,6 +71,7 @@ export function EditarRecursoDialog({
         nombre,
         tipo,
         usuario_id: tipo === "persona" ? usuarioId : null,
+        sucursal_id: sucursalId,
       });
       toast.success("Recurso actualizado");
       onEditado();
@@ -128,6 +132,9 @@ export function EditarRecursoDialog({
                 </p>
               )}
             </>
+          )}
+          {tipo === "persona" && (
+            <SelectorSucursal value={sucursalId} onChange={setSucursalId} />
           )}
           {tipo === "persona" && (
             <SelectorUsuarioVinculado

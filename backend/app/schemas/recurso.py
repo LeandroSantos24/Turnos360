@@ -56,7 +56,9 @@ class RecursoOut(BaseModel):
     tipo: TipoRecurso
     color: str | None
     foto_url: str | None
-    sucursal_id: int | None
+    # Siempre tiene local: desde el paso 1 de multisucursal la columna es NOT
+    # NULL y el alta que no lo dice cae en el principal.
+    sucursal_id: int
     usuario_id: int | None
     activo: bool
     especialidades: list[EspecialidadOut]
