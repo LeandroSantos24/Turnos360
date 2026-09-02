@@ -515,7 +515,7 @@ def test_la_vidriera_arranca_en_el_dia_del_negocio(client, db, armar_empresa, mo
 
     visto = {}
 
-    def espia(db_, slug, servicio_id, recurso_id, desde, dias):
+    def espia(db_, slug, servicio_id, recurso_id, desde, dias, sucursal_id=None):
         visto["desde"] = desde
         return []
 

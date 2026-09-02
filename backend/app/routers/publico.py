@@ -302,14 +302,21 @@ def slugs(request: Request, db: DB) -> list[str]:
 
 @router.get("/{slug}", response_model=VidrieraOut)
 @limiter.limit("60/minute")
-def vidriera(request: Request, slug: str, db: DB) -> VidrieraOut:
+def vidriera(
+    request: Request,
+    slug: str,
+    db: DB,
+    sucursal_id: int | None = Query(
+        default=None, description="Local elegido: acota servicios, equipo y precios"
+    ),
+) -> VidrieraOut:
     """Datos de la página del negocio: info + servicios + equipo.
 
     Era el único endpoint público que quedaba sin límite, y es el más golpeado:
     tres consultas por llamada. 60/min por IP no molesta a nadie navegando la
     vidriera (se pide una vez al abrir) y corta el polleo automatizado.
     """
-    return svc.vidriera(db, slug)
+    return svc.vidriera(db, slug, sucursal_id)
 
 
 @router.get("/{slug}/horarios", response_model=list[HuecosDia])
@@ -320,6 +327,9 @@ def horarios(
     db: DB,
     servicio_id: int = Query(...),
     recurso_id: int | None = Query(default=None),
+    sucursal_id: int | None = Query(
+        default=None, description="Local elegido. Obligatorio si el negocio tiene varios."
+    ),
     desde: dt.date | None = Query(default=None),
     dias: int = Query(default=14, ge=1, le=31),
 ) -> list[HuecosDia]:
@@ -335,7 +345,7 @@ def horarios(
     # (UTC) ya está en el día siguiente, y la vidriera arrancaba mostrando
     # mañana sin que nadie se lo pidiera.
     return svc.huecos(
-        db, slug, servicio_id, recurso_id, desde or hoy_de_pared(), dias
+        db, slug, servicio_id, recurso_id, desde or hoy_de_pared(), dias, sucursal_id
     )
 
 

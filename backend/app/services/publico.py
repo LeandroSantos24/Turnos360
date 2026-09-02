@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.reloj import ahora_de_pared
-from app.models import Cliente, Empresa, Recurso, Servicio
+from app.models import Cliente, Empresa, Recurso, Servicio, ServicioSucursal, Sucursal
 from app.models.enums import TipoRecurso
 from app.schemas.publico import ReservaPublicaCrear
 from app.schemas.turno import TurnoCrear
@@ -55,6 +55,43 @@ def resolver_empresa(db: Session, slug: str) -> Empresa:
     return empresa
 
 
+def _sucursales_abiertas(db: Session, empresa_id: int) -> list[Sucursal]:
+    return list(
+        db.scalars(
+            select(Sucursal)
+            .where(Sucursal.empresa_id == empresa_id, Sucursal.activa.is_(True))
+            .order_by(Sucursal.id)
+        )
+    )
+
+
+def _resolver_sucursal(
+    db: Session, empresa: Empresa, sucursal_id: int | None
+) -> int | None:
+    """Valida el local elegido y exige elegir cuando hay más de uno.
+
+    Devuelve None solo cuando el negocio tiene un local (o ninguno): ahí no hay
+    nada que filtrar y el wizard ni muestra el paso.
+
+    Con dos locales, reservar sin elegir no es un detalle: "sin preferencia"
+    podría asignarle a alguien del otro local, y el cliente se presenta en la
+    dirección equivocada. Por eso es un 400 y no un default silencioso.
+    """
+    abiertas = _sucursales_abiertas(db, empresa.id)
+    if sucursal_id is not None:
+        if sucursal_id not in {s.id for s in abiertas}:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Ese local no existe o está cerrado."
+            )
+        return sucursal_id
+    if len(abiertas) > 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Elegí en qué local querés reservar.",
+        )
+    return None
+
+
 def _servicio_publico(db: Session, empresa_id: int, servicio_id: int) -> Servicio:
     """Servicio activo y agendable de la empresa, o 404."""
     servicio = db.scalar(
@@ -70,28 +107,59 @@ def _servicio_publico(db: Session, empresa_id: int, servicio_id: int) -> Servici
     return servicio
 
 
-def vidriera(db: Session, slug: str) -> dict:
-    """Datos para pintar la página del negocio: info + servicios + equipo."""
-    empresa = resolver_empresa(db, slug)
+def vidriera(db: Session, slug: str, sucursal_id: int | None = None) -> dict:
+    """Datos para pintar la página del negocio: info + servicios + equipo.
 
-    servicios = db.scalars(
-        select(Servicio)
-        .where(
-            Servicio.empresa_id == empresa.id,
-            Servicio.activo.is_(True),
-            Servicio.agendable.is_(True),
+    Con `sucursal_id`, los servicios y el equipo son los DE ESE LOCAL, y cada
+    servicio muestra el precio de ahí. Sin él, se muestra todo (que es lo que
+    pasa siempre en un negocio de un solo local).
+    """
+    empresa = resolver_empresa(db, slug)
+    abiertas = _sucursales_abiertas(db, empresa.id)
+    if sucursal_id is not None and sucursal_id not in {s.id for s in abiertas}:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Ese local no existe o está cerrado."
         )
-        .order_by(Servicio.nombre)
+
+    cond_servicios = [
+        Servicio.empresa_id == empresa.id,
+        Servicio.activo.is_(True),
+        Servicio.agendable.is_(True),
+    ]
+    if sucursal_id is not None:
+        cond_servicios.append(
+            Servicio.id.in_(
+                select(ServicioSucursal.servicio_id).where(
+                    ServicioSucursal.sucursal_id == sucursal_id
+                )
+            )
+        )
+    servicios = db.scalars(
+        select(Servicio).where(*cond_servicios).order_by(Servicio.nombre)
     ).all()
 
+    # El precio de cada servicio EN ESE LOCAL: el mismo corte puede costar
+    # distinto en el centro y en el barrio.
+    precios: dict[int, float | None] = {}
+    if sucursal_id is not None and servicios:
+        for fila in db.scalars(
+            select(ServicioSucursal).where(
+                ServicioSucursal.sucursal_id == sucursal_id,
+                ServicioSucursal.servicio_id.in_([s.id for s in servicios]),
+            )
+        ):
+            if fila.precio is not None:
+                precios[fila.servicio_id] = float(fila.precio)
+
+    cond_recursos = [
+        Recurso.empresa_id == empresa.id,
+        Recurso.activo.is_(True),
+        Recurso.tipo == TipoRecurso.PERSONA,
+    ]
+    if sucursal_id is not None:
+        cond_recursos.append(Recurso.sucursal_id == sucursal_id)
     recursos = db.scalars(
-        select(Recurso)
-        .where(
-            Recurso.empresa_id == empresa.id,
-            Recurso.activo.is_(True),
-            Recurso.tipo == TipoRecurso.PERSONA,
-        )
-        .order_by(Recurso.nombre)
+        select(Recurso).where(*cond_recursos).order_by(Recurso.nombre)
     ).all()
 
     return {
@@ -120,7 +188,9 @@ def vidriera(db: Session, slug: str) -> dict:
             {
                 "id": s.id,
                 "nombre": s.nombre,
-                "precio": float(s.precio) if s.precio is not None else None,
+                "precio": precios.get(
+                    s.id, float(s.precio) if s.precio is not None else None
+                ),
                 "duracion_min": s.duracion_min,
             }
             for s in servicios
@@ -128,7 +198,23 @@ def vidriera(db: Session, slug: str) -> dict:
         "recursos": [
             {"id": r.id, "nombre": r.nombre, "foto_url": r.foto_url} for r in recursos
         ],
+        "sucursales": [
+            {
+                "id": s.id,
+                "nombre": s.nombre,
+                # Con varios locales, la dirección del local es la que importa:
+                # es a dónde tiene que ir el cliente.
+                "direccion": s.direccion or empresa.direccion,
+                "telefono": s.telefono or empresa.telefono_publico,
+            }
+            for s in abiertas
+        ],
     }
+
+
+def _se_ofrece_en(db: Session, servicio_id: int, sucursal_id: int) -> bool:
+    """El servicio se presta en ese local (paso 3b)."""
+    return db.get(ServicioSucursal, (servicio_id, sucursal_id)) is not None
 
 
 def _elegibles(servicio: Servicio) -> list[Recurso]:
@@ -216,6 +302,7 @@ def huecos(
     recurso_id: int | None,
     desde: dt.date,
     dias: int,
+    sucursal_id: int | None = None,
 ) -> list[dict]:
     """Horarios de inicio libres, por día, para un servicio (y opcionalmente un
     profesional). Con 'cualquiera', un horario está libre si ALGÚN profesional
@@ -226,8 +313,16 @@ def huecos(
     """
     empresa = resolver_empresa(db, slug)
     servicio = _servicio_publico(db, empresa.id, servicio_id)
+    sucursal_id = _resolver_sucursal(db, empresa, sucursal_id)
 
     elegibles = _elegibles(servicio)
+    if sucursal_id is not None:
+        # Solo la gente de ESE local. Sin este filtro, "sin preferencia"
+        # ofrecería los huecos de los dos locales mezclados y el cliente
+        # terminaría con turno en una dirección a la que no pensaba ir.
+        if not _se_ofrece_en(db, servicio.id, sucursal_id):
+            return []
+        elegibles = [r for r in elegibles if r.sucursal_id == sucursal_id]
     if recurso_id is not None:
         elegibles = [r for r in elegibles if r.id == recurso_id]
         if not elegibles:
@@ -298,8 +393,18 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     servicio = _servicio_publico(db, empresa.id, servicio_id=datos.servicio_id)
 
     _validar_ventana(datos.inicio, empresa)
+    sucursal_id = _resolver_sucursal(db, empresa, datos.sucursal_id)
 
     elegibles = _elegibles(servicio)
+    if sucursal_id is not None:
+        if not _se_ofrece_en(db, servicio.id, sucursal_id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Ese servicio no se ofrece en el local que elegiste.",
+            )
+        # El profesional tiene que ser de ESE local: si no, el cliente reserva
+        # creyendo que va a una dirección y lo atienden en la otra.
+        elegibles = [r for r in elegibles if r.sucursal_id == sucursal_id]
     if not elegibles:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

@@ -24,6 +24,15 @@ class RecursoPublico(BaseModel):
     foto_url: str | None = None
 
 
+class SucursalPublica(BaseModel):
+    """Un local, como lo ve el cliente al elegir dónde reservar."""
+
+    id: int
+    nombre: str
+    direccion: str | None = None
+    telefono: str | None = None
+
+
 class VidrieraOut(BaseModel):
     """Datos para pintar la página del negocio."""
 
@@ -48,6 +57,10 @@ class VidrieraOut(BaseModel):
     galeria: list[str] = []
     servicios: list[ServicioPublico]
     recursos: list[RecursoPublico]
+    # Los locales abiertos. Con uno solo la lista igual viene, pero el wizard
+    # no muestra el paso: el cliente de un negocio de una silla no tiene que
+    # elegir entre una sola opción.
+    sucursales: list[SucursalPublica] = []
 
 
 class HuecosDia(BaseModel):
@@ -79,6 +92,10 @@ class ClientePublico(BaseModel):
 
 class ReservaPublicaCrear(BaseModel):
     servicio_id: int
+    # En qué local. Obligatorio cuando el negocio tiene más de uno: sin esto,
+    # "sin preferencia" podría asignarle a alguien del otro local y el cliente
+    # se presenta en la dirección equivocada.
+    sucursal_id: int | None = None
     recurso_id: int | None = None  # None = "sin preferencia" (cualquiera libre)
     inicio: dt.datetime
     cliente: ClientePublico

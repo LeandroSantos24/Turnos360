@@ -21,6 +21,14 @@ export interface RecursoPublico {
 /** [abre, cierra], ej. ["09:00", "13:00"]. */
 export type Franja = [string, string];
 
+export interface SucursalPublica {
+  id: number;
+  nombre: string;
+  /** La del local. Es a dónde tiene que ir el cliente. */
+  direccion: string | null;
+  telefono: string | null;
+}
+
 export interface Vidriera {
   nombre: string;
   slug: string;
@@ -46,6 +54,11 @@ export interface Vidriera {
   galeria: string[];
   servicios: ServicioPublico[];
   recursos: RecursoPublico[];
+  /**
+   * Los locales abiertos. Viene siempre; con uno solo el wizard no muestra el
+   * paso, porque elegir entre una sola opción no es elegir.
+   */
+  sucursales: SucursalPublica[];
 }
 
 export interface HuecosDia {
@@ -55,6 +68,8 @@ export interface HuecosDia {
 
 export interface DatosReserva {
   servicio_id: number;
+  /** Obligatorio si el negocio tiene más de un local abierto. */
+  sucursal_id?: number | null;
   recurso_id: number | null; // null = sin preferencia
   inicio: string; // ISO datetime (uno de los huecos)
   cliente: { nombre: string; telefono: string; email: string; acepta_marketing?: boolean };
@@ -74,8 +89,12 @@ export interface ReservaResultado {
 }
 
 /** Datos de la página del negocio (GET /publico/{slug}). */
-export function obtenerVidriera(slug: string): Promise<Vidriera> {
-  return api.get<Vidriera>(`/publico/${encodeURIComponent(slug)}`);
+export function obtenerVidriera(
+  slug: string,
+  sucursalId?: number | null,
+): Promise<Vidriera> {
+  const qs = sucursalId != null ? `?sucursal_id=${sucursalId}` : "";
+  return api.get<Vidriera>(`/publico/${encodeURIComponent(slug)}${qs}`);
 }
 
 /** Horarios libres por día (GET /publico/{slug}/horarios). recursoId null = cualquiera. */
@@ -84,12 +103,14 @@ export function obtenerHuecos(
   servicioId: number,
   recursoId: number | null,
   dias = 14,
+  sucursalId?: number | null,
 ): Promise<HuecosDia[]> {
   const p = new URLSearchParams({
     servicio_id: String(servicioId),
     dias: String(dias),
   });
   if (recursoId != null) p.set("recurso_id", String(recursoId));
+  if (sucursalId != null) p.set("sucursal_id", String(sucursalId));
   return api.get<HuecosDia[]>(
     `/publico/${encodeURIComponent(slug)}/horarios?${p.toString()}`,
   );

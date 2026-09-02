@@ -18,7 +18,6 @@ import { es } from "date-fns/locale";
 import {
   X,
   ChevronLeft,
-  ChevronRight,
   Clock,
   User,
   Users,
@@ -124,6 +123,7 @@ export function ReservaWizard({
   acento,
   abierto,
   servicioInicial,
+  sucursalId,
   onCerrar,
 }: {
   v: Vidriera;
@@ -131,6 +131,13 @@ export function ReservaWizard({
   acento: string;
   abierto: boolean;
   servicioInicial: number | null;
+  /**
+   * El local que el cliente eligió arriba de la página. Viaja hasta acá para
+   * que los horarios y la reserva sean de ESE local: con varios, reservar
+   * creyendo que vas a una dirección y que te atiendan en la otra es de lo
+   * peor que le puede pasar a un cliente.
+   */
+  sucursalId: number | null;
   onCerrar: () => void;
 }) {
   const [paso, setPaso] = useState<Paso>(1);
@@ -264,11 +271,11 @@ export function ReservaWizard({
     setHuecos(null);
     setDiaSel(null);
     setHoraSel(null);
-    obtenerHuecos(slug, servicioId, recursoId, 14)
+    obtenerHuecos(slug, servicioId, recursoId, 14, sucursalId)
       .then(setHuecos)
       .catch(() => setError("No pudimos cargar los horarios. Probá de nuevo."))
       .finally(() => setCargandoHuecos(false));
-  }, [slug, servicioId, recursoId]);
+  }, [slug, servicioId, recursoId, sucursalId]);
 
   useEffect(() => {
     if (abierto && paso === 3) cargarHuecos();
@@ -329,6 +336,7 @@ export function ReservaWizard({
     try {
       const r = await reservar(slug, {
         servicio_id: servicioId,
+        sucursal_id: sucursalId,
         recurso_id: recursoId,
         inicio: horaSel,
         cliente: {

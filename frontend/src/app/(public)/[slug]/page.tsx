@@ -31,6 +31,8 @@ import {
   TINTA,
   TINTA_SUAVE,
   ACENTO_DEFAULT,
+  BORDE,
+  hexA,
 } from "./vidriera-ui";
 import { ReservaWizard } from "./reserva-wizard";
 import { ScriptsSeguimiento } from "@/components/scripts-seguimiento";
@@ -77,6 +79,11 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
     params.slug,
   );
   const [vidriera, setVidriera] = useState<Vidriera | null>(null);
+  // El local que el cliente está mirando. Se elige ARRIBA de la página y no
+  // dentro del wizard a propósito: los precios, el equipo y los servicios
+  // cambian según el local, así que el cliente tiene que estar viendo los del
+  // local correcto mientras decide, no enterarse al final.
+  const [sucursalId, setSucursalId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<"no-existe" | "error" | null>(null);
   const [wizard, setWizard] = useState<{ abierto: boolean; servicio: number | null }>({
@@ -96,16 +103,21 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   }, []);
 
   useEffect(() => {
-    obtenerVidriera(params.slug)
+    obtenerVidriera(params.slug, sucursalId)
       .then((v) => {
         setVidriera(v);
         document.title = `${v.nombre} · Reservá tu turno online`;
+        // Con un solo local no hay nada que elegir: se fija solo y el
+        // selector nunca aparece.
+        if (sucursalId === null && v.sucursales.length === 1) {
+          setSucursalId(v.sucursales[0].id);
+        }
       })
       .catch((e) =>
         setError(e instanceof ApiError && e.status === 404 ? "no-existe" : "error"),
       )
       .finally(() => setCargando(false));
-  }, [params.slug]);
+  }, [params.slug, sucursalId]);
 
   if (cargando) {
     return (
@@ -160,6 +172,43 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
       <TopBar v={vidriera} acento={acento} onReservar={() => abrir()} />
       <Hero v={vidriera} acento={acento} onReservar={() => abrir()} />
 
+      {/* Elegir local. Solo con más de uno: el cliente de un negocio de una
+          silla no tiene que elegir entre una sola opción. */}
+      {vidriera.sucursales.length > 1 && (
+        <section className="mx-auto max-w-3xl px-5 pb-2 pt-4">
+          <p
+            className="mb-2 text-center text-sm font-medium"
+            style={{ color: TINTA_SUAVE }}
+          >
+            ¿A qué local querés ir?
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {vidriera.sucursales.map((suc) => {
+              const elegido = suc.id === sucursalId;
+              return (
+                <button
+                  key={suc.id}
+                  type="button"
+                  onClick={() => setSucursalId(suc.id)}
+                  className="rounded-2xl border px-4 py-3 text-left transition-colors"
+                  style={{
+                    borderColor: elegido ? acento : BORDE,
+                    background: elegido ? hexA(acento, 0.08) : "transparent",
+                  }}
+                >
+                  <span className="block text-sm font-semibold">{suc.nombre}</span>
+                  {suc.direccion && (
+                    <span className="block text-xs" style={{ color: TINTA_SUAVE }}>
+                      {suc.direccion}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {vidriera.descripcion && (
         <section className="mx-auto max-w-3xl px-5 pb-4 text-center">
           <p
@@ -187,6 +236,7 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
         acento={acento}
         abierto={wizard.abierto}
         servicioInicial={wizard.servicio}
+        sucursalId={sucursalId}
         onCerrar={cerrar}
       />
     </div>
