@@ -15,7 +15,7 @@ from app.models import Cliente, Turno
 from app.models.finanzas import MetodoPago, MovimientoFinanciero, Pago
 from app.models.modulos.fidelizacion import PlanAbono, Membresia
 from app.models.enums import EstadoMembresia, EstadoTurno, TipoMovimiento
-from app.services.finanzas import caja_abierta
+from app.services.finanzas import caja_abierta, sucursal_de_usuario
 
 
 # ===== PLANES =====
@@ -151,12 +151,16 @@ def crear_membresia(db: Session, empresa_id: int, datos, usuario_id: int | None 
     if metodo is not None and monto > 0:
         # Mismo criterio que el cobro de un turno y que la gift card: si hay
         # caja abierta se asocia, y si no, el movimiento igual queda registrado.
-        caja = caja_abierta(db, empresa_id)
+        # El abono se vende en un mostrador, no en un turno: entra a la caja
+        # del local de quien lo carga.
+        sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
+        caja = caja_abierta(db, empresa_id, sucursal_id)
         comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
 
         mov = MovimientoFinanciero(
             empresa_id=empresa_id,
             caja_id=caja.id if caja else None,
+            sucursal_id=sucursal_id,
             tipo=TipoMovimiento.INGRESO,
             concepto=f"Venta abono {plan.nombre}",
             descripcion=f"{cliente.nombre} {cliente.apellido or ''}".strip(),
@@ -174,6 +178,7 @@ def crear_membresia(db: Session, empresa_id: int, datos, usuario_id: int | None 
         db.add(
             Pago(
                 empresa_id=empresa_id,
+                sucursal_id=sucursal_id,
                 turno_id=None,
                 cliente_id=datos.cliente_id,
                 metodo_pago_id=metodo_pago_id,

@@ -24,6 +24,8 @@ import {
   Movimiento,
 } from "@/lib/finanzas-api";
 import { ApiError } from "@/lib/api";
+import { useSucursales } from "@/lib/use-sucursales";
+import { getMe } from "@/lib/auth-api";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,14 +76,27 @@ export default function CajaPage() {
   const [saldoInicial, setSaldoInicial] = useState("");
   const [saldoReal, setSaldoReal] = useState("");
   const [procesando, setProcesando] = useState(false);
+  // Qué local se está mirando. null = "el mío", que es lo que responde el
+  // backend cuando no se le pasa nada: la recepcionista del centro abre Caja
+  // y ve la suya sin elegir nada. El dueño puede mirar la del otro local,
+  // pero abrir y cerrar SIEMPRE opera sobre la propia: cada encargado firma
+  // el arqueo del local donde estuvo.
+  const { abiertas, multi, nombreDe } = useSucursales();
+  const [mirando, setMirando] = useState<number | null>(null);
+  const [miSucursal, setMiSucursal] = useState<number | null>(null);
+  useEffect(() => {
+    getMe()
+      .then((u) => setMiSucursal(u.sucursal_id))
+      .catch(() => undefined);
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
       const [r, m, cs] = await Promise.all([
-        cajaActual(),
-        listarMovimientos({ limite: PAGINA }),
-        listarCajas(),
+        cajaActual(mirando),
+        listarMovimientos({ limite: PAGINA, sucursalId: mirando }),
+        listarCajas(mirando),
       ]);
       setResumen(r);
       setMovimientos(m.items);
@@ -92,7 +107,7 @@ export default function CajaPage() {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [mirando]);
 
   useEffect(() => {
     cargar();
@@ -138,6 +153,11 @@ export default function CajaPage() {
   const efectivoEsperado = resumen?.efectivo_esperado ?? 0;
   const difViva = (Number(saldoReal) || 0) - efectivoEsperado;
 
+  // Abrir, cerrar y cargar gastos actúan SIEMPRE sobre la caja del local de
+  // quien lo hace. Mirando la de otro local, esos botones se apagan en vez de
+  // hacer algo distinto de lo que dicen.
+  const operable = !multi || mirando === null || mirando === miSucursal;
+
   return (
     <div className="p-8">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -159,6 +179,43 @@ export default function CajaPage() {
         </a>
       </div>
 
+      {/* Selector de local. Solo existe si el negocio tiene más de uno. */}
+      {multi && (
+        <div className="mb-5 flex flex-wrap items-center gap-1.5">
+          {abiertas.map((suc) => {
+            const activo =
+              mirando === suc.id || (mirando === null && miSucursal === suc.id);
+            const propio = suc.id === miSucursal;
+            return (
+              <button
+                key={suc.id}
+                type="button"
+                onClick={() => setMirando(propio ? null : suc.id)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activo
+                    ? "border-transparent bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {suc.nombre}
+                {propio && " · tu local"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Mirando el local de otro: se puede ver, no operar. Abrir y cerrar
+          caja actúan siempre sobre la propia — cada encargado firma el arqueo
+          del local donde estuvo. */}
+      {multi && mirando != null && mirando !== miSucursal && (
+        <p className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          Estás viendo la caja de <b>{nombreDe(mirando)}</b>. Podés mirarla,
+          pero abrir, cerrar y cargar gastos siempre opera sobre la de tu
+          local: el arqueo lo firma quien estuvo ahí.
+        </p>
+      )}
+
       {cargando ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : !resumen ? (
@@ -167,7 +224,7 @@ export default function CajaPage() {
           <p className="text-sm text-muted-foreground">
             No hay una caja abierta. Abrí la caja para empezar a registrar el día.
           </p>
-          <Button className="mt-4" onClick={() => setAbriendo(true)}>
+          <Button className="mt-4" disabled={!operable} onClick={() => setAbriendo(true)}>
             <Plus className="mr-1.5 h-4 w-4" /> Abrir caja
           </Button>
         </div>
@@ -210,10 +267,10 @@ export default function CajaPage() {
           </div>
 
           <div className="mb-8 flex gap-2">
-            <Button variant="outline" onClick={() => setGastando(true)}>
+            <Button variant="outline" disabled={!operable} onClick={() => setGastando(true)}>
               <Plus className="mr-1.5 h-4 w-4" /> Registrar gasto
             </Button>
-            <Button onClick={() => setCerrando(true)}>
+            <Button disabled={!operable} onClick={() => setCerrando(true)}>
               <Lock className="mr-1.5 h-4 w-4" /> Cerrar caja
             </Button>
           </div>
@@ -427,6 +484,7 @@ export default function CajaPage() {
                     const p = await listarMovimientos({
                       offset: movimientos.length,
                       limite: PAGINA,
+                      sucursalId: mirando,
                     });
                     setMovimientos((prev) => [...prev, ...p.items]);
                     setTotalMovs(p.total);

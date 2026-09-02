@@ -106,18 +106,35 @@ def crear_categoria(datos: CategoriaCrear, empresa_id: EmpresaActual, db: DB) ->
 # ─────────────────────────── Caja ───────────────────────────────────────────
 
 @router.get("/caja/actual", response_model=CajaResumen | None)
-def caja_actual(empresa_id: EmpresaActual, db: DB) -> CajaResumen | None:
-    """La caja abierta con sus cifras al momento, o null si no hay ninguna abierta."""
-    caja = svc.caja_abierta(db, empresa_id)
+def caja_actual(
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
+    sucursal_id: int | None = Query(
+        default=None, description="Local a mirar. Por defecto, el de quien pregunta."
+    ),
+) -> CajaResumen | None:
+    """La caja abierta de un local con sus cifras al momento, o null.
+
+    Sin `sucursal_id` responde por el local de quien pregunta: la recepcionista
+    del centro abre Caja y ve la suya, sin elegir nada.
+    """
+    if sucursal_id is None:
+        sucursal_id = svc.sucursal_de_usuario(db, empresa_id, usuario.id)
+    caja = svc.caja_abierta(db, empresa_id, sucursal_id)
     if caja is None:
         return None
     return svc.resumen_caja(db, empresa_id, caja)
 
 
 @router.get("/cajas", response_model=list[CajaOut])
-def listar_cajas(empresa_id: EmpresaActual, db: DB) -> list[CajaOut]:
+def listar_cajas(
+    empresa_id: EmpresaActual,
+    db: DB,
+    sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
+) -> list[CajaOut]:
     """Historial de cajas con sus fechas y saldos."""
-    return svc.listar_cajas(db, empresa_id)
+    return svc.listar_cajas(db, empresa_id, sucursal_id=sucursal_id)
 
 
 @router.get("/cajas/{caja_id}/detalle", response_model=CajaDetalle)
@@ -218,12 +235,13 @@ def listar_movimientos(
     empresa_id: EmpresaActual,
     db: DB,
     tipo: TipoMovimiento | None = Query(default=None),
+    sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
     offset: int = Query(default=0, ge=0),
     limite: int = Query(default=30, ge=1, le=200),
 ):
     """Movimientos paginados, del más nuevo al más viejo."""
     total, items = svc.listar_movimientos(
-        db, empresa_id, tipo, offset=offset, limite=limite
+        db, empresa_id, tipo, sucursal_id=sucursal_id, offset=offset, limite=limite
     )
     return {"total": total, "items": items}
 

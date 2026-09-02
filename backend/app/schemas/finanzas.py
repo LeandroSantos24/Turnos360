@@ -101,6 +101,9 @@ class CajaCerrar(BaseModel):
 
 class CajaOut(BaseModel):
     id: int
+    # De qué local es esta caja. Con un solo local nadie lo mira; con varios,
+    # es lo que distingue un arqueo del otro en el historial.
+    sucursal_id: int
     fecha_apertura: dt.datetime
     fecha_cierre: dt.datetime | None
     saldo_inicial: float
@@ -166,6 +169,7 @@ class GastoCrear(BaseModel):
 
 class MovimientoOut(BaseModel):
     id: int
+    sucursal_id: int
     fecha: dt.datetime
     tipo: TipoMovimiento
     concepto: str | None

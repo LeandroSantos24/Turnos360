@@ -57,6 +57,8 @@ export function crearCategoria(datos: { nombre: string; tipo?: string }): Promis
 
 export interface Caja {
   id: number;
+  /** De qué local es esta caja. Con un solo local, siempre el mismo. */
+  sucursal_id: number;
   fecha_apertura: string;
   fecha_cierre: string | null;
   saldo_inicial: number;
@@ -92,11 +94,17 @@ export interface CajaResumen {
   efectivo_esperado: number; // lo que tiene que haber en el cajón físico
 }
 
-export function cajaActual(): Promise<CajaResumen | null> {
-  return api.get<CajaResumen | null>("/caja/actual");
+/**
+ * La caja abierta de un local. Sin `sucursalId`, la del local de quien
+ * pregunta: la recepcionista del centro abre Caja y ve la suya.
+ */
+export function cajaActual(sucursalId?: number | null): Promise<CajaResumen | null> {
+  const qs = sucursalId != null ? `?sucursal_id=${sucursalId}` : "";
+  return api.get<CajaResumen | null>(`/caja/actual${qs}`);
 }
-export function listarCajas(): Promise<Caja[]> {
-  return api.get<Caja[]>("/cajas");
+export function listarCajas(sucursalId?: number | null): Promise<Caja[]> {
+  const qs = sucursalId != null ? `?sucursal_id=${sucursalId}` : "";
+  return api.get<Caja[]>(`/cajas${qs}`);
 }
 export interface CajaDetalle {
   resumen: CajaResumen;
@@ -149,6 +157,7 @@ export function pagosDeTurno(turnoId: number): Promise<Pago[]> {
 
 export interface Movimiento {
   id: number;
+  sucursal_id: number;
   fecha: string;
   tipo: string;
   concepto: string | null;
@@ -184,11 +193,13 @@ export interface MovimientosPagina {
 /** Página de movimientos, del más nuevo al más viejo. */
 export function listarMovimientos(opciones?: {
   tipo?: "ingreso" | "egreso";
+  sucursalId?: number | null;
   offset?: number;
   limite?: number;
 }): Promise<MovimientosPagina> {
   const q = new URLSearchParams();
   if (opciones?.tipo) q.set("tipo", opciones.tipo);
+  if (opciones?.sucursalId != null) q.set("sucursal_id", String(opciones.sucursalId));
   q.set("offset", String(opciones?.offset ?? 0));
   q.set("limite", String(opciones?.limite ?? 30));
   return api.get<MovimientosPagina>(`/movimientos?${q.toString()}`);

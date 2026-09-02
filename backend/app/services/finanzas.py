@@ -20,6 +20,7 @@ from app.models.finanzas import (
     Pago,
 )
 from app.models.turno import Turno
+from app.models.organizacion import Usuario
 from app.schemas.finanzas import (
     CajaAbrir,
     CajaCerrar,
@@ -106,10 +107,43 @@ def crear_categoria(
 
 # ─────────────────────────── Caja ───────────────────────────────────────────
 
-def caja_abierta(db: Session, empresa_id: int) -> Caja | None:
+def sucursal_de_usuario(db: Session, empresa_id: int, usuario_id: int | None) -> int:
+    """El local donde está parado quien registra la plata.
+
+    Es lo que decide a qué caja entra una gift card, un abono o un gasto: no
+    tienen turno del cual heredar el local, así que el local es el de quien
+    los carga. Con un solo local siempre da el mismo.
+    """
+    if usuario_id is not None:
+        suc = db.scalar(
+            select(Usuario.sucursal_id).where(
+                Usuario.id == usuario_id, Usuario.empresa_id == empresa_id
+            )
+        )
+        if suc is not None:
+            return suc
+    return sucursal_svc.id_principal(db, empresa_id)
+
+
+def caja_abierta(
+    db: Session, empresa_id: int, sucursal_id: int | None = None
+) -> Caja | None:
+    """La caja abierta de un local. Sin local, la del principal.
+
+    Desde el paso 5 de multisucursal hay UNA caja abierta POR LOCAL: la plata
+    del centro y la del barrio no se cuentan juntas, y cada encargado firma lo
+    suyo. El índice único parcial de la base lo garantiza.
+
+    El default al principal mantiene andando todo lo que todavía no pasa el
+    local, que para un negocio de una sola sucursal es lo mismo de siempre.
+    """
+    if sucursal_id is None:
+        sucursal_id = sucursal_svc.id_principal(db, empresa_id)
     return db.scalar(
         select(Caja).where(
-            Caja.empresa_id == empresa_id, Caja.estado == EstadoCaja.ABIERTA
+            Caja.empresa_id == empresa_id,
+            Caja.sucursal_id == sucursal_id,
+            Caja.estado == EstadoCaja.ABIERTA,
         )
     )
 
@@ -117,15 +151,13 @@ def caja_abierta(db: Session, empresa_id: int) -> Caja | None:
 def abrir_caja(
     db: Session, empresa_id: int, datos: CajaAbrir, usuario_id: int
 ) -> Caja | None:
-    """Abre una caja. None si ya hay una abierta (el router responde 409)."""
-    if caja_abierta(db, empresa_id) is not None:
+    """Abre la caja del local de quien la abre. None si ya hay una (409)."""
+    sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
+    if caja_abierta(db, empresa_id, sucursal_id) is not None:
         return None
     c = Caja(
         empresa_id=empresa_id,
-        # Una caja por empresa hoy; una por local cuando llegue el paso 5 de
-        # multisucursal. La columna ya queda escrita para no tener que migrar
-        # arqueos viejos ese día.
-        sucursal_id=sucursal_svc.id_principal(db, empresa_id),
+        sucursal_id=sucursal_id,
         saldo_inicial=datos.saldo_inicial,
         abierta_por=usuario_id,
     )
@@ -289,8 +321,13 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
 def cerrar_caja(
     db: Session, empresa_id: int, datos: CajaCerrar, usuario_id: int
 ) -> dict | None:
-    """Cierra la caja abierta y devuelve el resumen con la diferencia."""
-    caja = caja_abierta(db, empresa_id)
+    """Cierra la caja de SU local y devuelve el resumen con la diferencia.
+
+    Cada encargado cierra la suya: sin esto, el del centro cerraría la del
+    barrio con la plata que él contó, y el arqueo del otro local quedaría
+    firmado por alguien que no estuvo ahí.
+    """
+    caja = caja_abierta(db, empresa_id, sucursal_de_usuario(db, empresa_id, usuario_id))
     if caja is None:
         return None
     caja.estado = EstadoCaja.CERRADA
@@ -330,7 +367,10 @@ def registrar_cobro(
             detail="Este turno ya fue cobrado.",
         )
 
-    caja = caja_abierta(db, empresa_id)
+    # El local es el del TURNO, no el de quien cobra: la plata de una atención
+    # entra donde se atendió, aunque la cobre el dueño desde otro local.
+    sucursal_id = turno.sucursal_id
+    caja = caja_abierta(db, empresa_id, sucursal_id)
     caja_id = caja.id if caja else None
 
     # Los métodos de pago se traen de una sola vez, no uno por línea. En un
@@ -374,6 +414,7 @@ def registrar_cobro(
         mov = MovimientoFinanciero(
             empresa_id=empresa_id,
             caja_id=caja_id,
+            sucursal_id=sucursal_id,
             tipo=TipoMovimiento.INGRESO,
             concepto="Cobro de turno",
             monto=linea.monto,
@@ -385,6 +426,7 @@ def registrar_cobro(
 
         pago = Pago(
             empresa_id=empresa_id,
+            sucursal_id=sucursal_id,
             turno_id=turno_id,
             cliente_id=turno.cliente_id,
             metodo_pago_id=linea.metodo_pago_id,
@@ -427,7 +469,8 @@ def pagos_de_turno(db: Session, empresa_id: int, turno_id: int) -> list[Pago]:
 def registrar_gasto(
     db: Session, empresa_id: int, datos: GastoCrear, usuario_id: int
 ) -> MovimientoFinanciero:
-    caja = caja_abierta(db, empresa_id)
+    sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
+    caja = caja_abierta(db, empresa_id, sucursal_id)
 
     # Regla 1: los ids vienen del body, así que hay que verificar que sean
     # de ESTA empresa. Sin esto se podía apuntar a un método de otro tenant
@@ -460,6 +503,7 @@ def registrar_gasto(
     mov = MovimientoFinanciero(
         empresa_id=empresa_id,
         caja_id=caja.id if caja else None,
+        sucursal_id=sucursal_id,
         tipo=TipoMovimiento.EGRESO,
         concepto=datos.concepto,
         descripcion=datos.descripcion,
@@ -502,6 +546,7 @@ def listar_movimientos(
     empresa_id: int,
     tipo: TipoMovimiento | None = None,
     *,
+    sucursal_id: int | None = None,
     offset: int = 0,
     limite: int = 30,
 ) -> tuple[int, list[MovimientoFinanciero]]:
@@ -521,6 +566,8 @@ def listar_movimientos(
     condiciones = [MovimientoFinanciero.empresa_id == empresa_id]
     if tipo is not None:
         condiciones.append(MovimientoFinanciero.tipo == tipo)
+    if sucursal_id is not None:
+        condiciones.append(MovimientoFinanciero.sucursal_id == sucursal_id)
 
     total = db.scalar(
         select(func.count(MovimientoFinanciero.id)).where(*condiciones)
@@ -633,12 +680,21 @@ def total_cobrado_cliente(db: Session, empresa_id: int, cliente_id: int) -> dict
     return {"total_cobrado": float(total or 0), "cantidad_pagos": int(cantidad or 0)}
 
 
-def listar_cajas(db: Session, empresa_id: int, limit: int = 60) -> list[Caja]:
+def listar_cajas(
+    db: Session, empresa_id: int, limit: int = 60, sucursal_id: int | None = None
+) -> list[Caja]:
     """Historial de cajas (abiertas y cerradas), de la más reciente a la más vieja."""
     return list(
         db.scalars(
             select(Caja)
-            .where(Caja.empresa_id == empresa_id)
+            .where(
+                Caja.empresa_id == empresa_id,
+                *(
+                    [Caja.sucursal_id == sucursal_id]
+                    if sucursal_id is not None
+                    else []
+                ),
+            )
             .order_by(Caja.fecha_apertura.desc())
             .limit(limit)
         )
@@ -734,11 +790,12 @@ def registrar_sena_cobrada(
         return None
 
     metodo = _metodo_mercado_pago(db, turno.empresa_id)
-    caja = caja_abierta(db, turno.empresa_id)
+    caja = caja_abierta(db, turno.empresa_id, turno.sucursal_id)
     comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
 
     mov = MovimientoFinanciero(
         empresa_id=turno.empresa_id,
+        sucursal_id=turno.sucursal_id,
         caja_id=caja.id if caja else None,
         tipo=TipoMovimiento.INGRESO,
         concepto="Seña de reserva",
@@ -755,6 +812,7 @@ def registrar_sena_cobrada(
 
     pago = Pago(
         empresa_id=turno.empresa_id,
+        sucursal_id=turno.sucursal_id,
         turno_id=turno.id,
         cliente_id=turno.cliente_id,
         metodo_pago_id=metodo.id,

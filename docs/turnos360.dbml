@@ -171,6 +171,7 @@ Table caja {
 
   Indexes {
     empresa_id [name: 'ix_caja_empresa_id']
+    (empresa_id, sucursal_id) [name: 'uq_caja_abierta_por_sucursal', unique]
   }
 }
 
@@ -620,6 +621,7 @@ Table metodo_pago {
 Table movimiento_financiero {
   id integer [pk]
   caja_id integer [ref: > caja.id]
+  sucursal_id integer [ref: > sucursal.id, not null]
   fecha timestamp with time zone [not null]
   tipo tipo_movimiento [not null]
   concepto varchar(120)
@@ -645,6 +647,7 @@ Table movimiento_financiero {
 
 Table pago {
   id integer [pk]
+  sucursal_id integer [ref: > sucursal.id, not null]
   turno_id integer [ref: > turno.id]
   orden_trabajo_id integer
   cliente_id integer [ref: > cliente.id]

@@ -64,7 +64,7 @@ def crear(
     un regalo del negocio (sorteo, compensación por un problema), y ahí no hay
     nada que cobrar.
     """
-    from app.services.finanzas import caja_abierta
+    from app.services.finanzas import caja_abierta, sucursal_de_usuario
 
     metodo = None
     if datos.metodo_pago_id is not None:
@@ -92,10 +92,14 @@ def crear(
     if metodo is not None:
         # Mismo criterio que el cobro de un turno: si hay caja abierta se
         # asocia, y si no, el movimiento igual queda registrado.
-        caja = caja_abierta(db, empresa_id)
+        # La gift card no tiene turno del cual heredar el local, así que
+        # entra a la caja de quien la vende. Con un solo local, la de siempre.
+        sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
+        caja = caja_abierta(db, empresa_id, sucursal_id)
         mov = MovimientoFinanciero(
             empresa_id=empresa_id,
             caja_id=caja.id if caja else None,
+            sucursal_id=sucursal_id,
             tipo=TipoMovimiento.INGRESO,
             concepto=f"Venta gift card {gc.codigo}",
             monto=datos.monto,
@@ -119,6 +123,7 @@ def crear(
         db.add(
             Pago(
                 empresa_id=empresa_id,
+                sucursal_id=sucursal_id,
                 turno_id=None,
                 cliente_id=None,
                 metodo_pago_id=datos.metodo_pago_id,

@@ -8,13 +8,30 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.enums import EstadoCaja, ModalidadComision, TipoMovimiento
-from app.models.organizacion import TenantMixin, fk_sucursal, sucursal_por_defecto
+from app.models.organizacion import (
+    TenantMixin,
+    fk_sucursal,
+    sucursal_por_defecto,
+)
 from app.models.tipos import enum_pg
 
 
 class Caja(TenantMixin, Base):
     __tablename__ = "caja"
-    __table_args__ = (fk_sucursal("fk_caja_sucursal"),)
+    __table_args__ = (
+        fk_sucursal("fk_caja_sucursal"),
+        # Una sola caja abierta por local, garantizado por la base y no por un
+        # SELECT seguido de un INSERT: dos pestañas abriendo caja al mismo
+        # tiempo pasaban las dos y el negocio terminaba con dos cajas abiertas
+        # y la plata del día repartida entre ambas.
+        Index(
+            "uq_caja_abierta_por_sucursal",
+            "empresa_id",
+            "sucursal_id",
+            unique=True,
+            postgresql_where=text("estado = 'abierta'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # Cada local cuenta su propia plata y firma su propio arqueo.
@@ -64,10 +81,20 @@ class MovimientoFinanciero(TenantMixin, Base):
         # "índice que sobra en la base" y escribe un DROP INDEX en la migración
         # nueva, silenciosamente.
         Index("ix_movfin_caja_activos", "empresa_id", "caja_id", "anulado"),
+        fk_sucursal("fk_movfin_sucursal"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     caja_id: Mapped[int | None] = mapped_column(ForeignKey("caja.id"))
+    # En qué local entró (o salió) esta plata.
+    #
+    # Se guarda acá y no se deduce de la caja a propósito: `caja_id` es
+    # NULLABLE —un cobro con la caja cerrada igual se registra— y sin esta
+    # columna esa plata quedaría sin local, invisible para el arqueo y para
+    # las estadísticas por sucursal.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     tipo: Mapped[TipoMovimiento] = mapped_column(enum_pg(TipoMovimiento, "tipo_movimiento"))
     concepto: Mapped[str | None] = mapped_column(String(120))
@@ -125,9 +152,16 @@ class Pago(TenantMixin, Base):
             "fecha",
             postgresql_where=text("anulado = false"),
         ),
+        fk_sucursal("fk_pago_sucursal"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # El local que facturó. Estadísticas lee de esta tabla, no de los
+    # movimientos, así que sin esta columna no habría forma de comparar la
+    # facturación de dos locales.
+    sucursal_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=sucursal_por_defecto
+    )
     turno_id: Mapped[int | None] = mapped_column(ForeignKey("turno.id"))
     orden_trabajo_id: Mapped[int | None] = mapped_column(Integer)  # FK real en E14
     # Opcional: la venta de una gift card al mostrador no tiene ficha de
