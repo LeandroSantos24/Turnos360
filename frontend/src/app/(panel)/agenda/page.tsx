@@ -16,6 +16,8 @@ import { es } from "date-fns/locale";
 import { Plus, Printer, Search } from "lucide-react";
  
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
+import { useSucursales } from "@/lib/use-sucursales";
+import { getMe } from "@/lib/auth-api";
 import { listarHorarios, Horario } from "@/lib/horarios-api";
 import { listarServicios, Servicio } from "@/lib/servicios-api";
 import { listarTurnos, listarTurnosDelDia, moverTurno, Turno } from "@/lib/turnos-api";
@@ -57,6 +59,31 @@ function ordenarPorHora(turnos: Turno[]): Turno[] {
 }
  
 /** "lunes 13 de julio" → "Lunes 13 de julio" (solo la primera letra). */
+/** Chip de filtro por local. Mismo aspecto que el de Recursos. */
+function ChipLocal({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        activo
+          ? "border-transparent bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -66,6 +93,12 @@ export default function AgendaPage() {
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [recursoId, setRecursoId] = useState<number | null>(null);
+  // Local que se está mirando. null = todos. Arranca en el local de quien
+  // entra: con dos sucursales y cinco barberos cada una, abrir la agenda con
+  // diez columnas mezcladas no le sirve a nadie.
+  const { abiertas, multi, cargando: cargandoSucursales } = useSucursales();
+  const [sucursalId, setSucursalId] = useState<number | null>(null);
+  const [sucursalLista, setSucursalLista] = useState(false);
   const [dia, setDia] = useState<Date>(startOfDay(new Date()));
   const [vista, setVista] = useState<"dia" | "semana" | "mes" | "equipo">("dia");
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -82,18 +115,41 @@ export default function AgendaPage() {
  
   const hoyEs = isToday(dia);
  
+  // El local de quien entró, una sola vez. Si por lo que sea no se puede
+  // saber, se queda en "todos", que es el comportamiento de siempre.
+  useEffect(() => {
+    if (sucursalLista || cargandoSucursales) return;
+    if (!multi) {
+      setSucursalLista(true);
+      return;
+    }
+    getMe()
+      .then((u) => {
+        if (u.sucursal_id != null && abiertas.some((s) => s.id === u.sucursal_id)) {
+          setSucursalId(u.sucursal_id);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setSucursalLista(true));
+  }, [multi, cargandoSucursales, abiertas, sucursalLista]);
+
   const cargarRecursos = useCallback(async () => {
     try {
-      const data = await listarRecursos();
+      const data = await listarRecursos(sucursalId);
       const personas = data.items.filter((r) => r.tipo === "persona");
       setRecursos(personas);
-      if (personas.length > 0) {
-        setRecursoId((actual) => actual ?? personas[0].id);
-      }
+      // Si el que estaba elegido no trabaja en este local, se pasa al primero
+      // de acá. Sin esto la agenda queda mostrando a alguien que ya no está
+      // en la lista, con la grilla vacía y sin explicación.
+      setRecursoId((actual) =>
+        actual != null && personas.some((p) => p.id === actual)
+          ? actual
+          : (personas[0]?.id ?? null),
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     }
-  }, []);
+  }, [sucursalId]);
  
   useEffect(() => {
     cargarRecursos();
@@ -131,13 +187,13 @@ export default function AgendaPage() {
  
       if (vista === "equipo") {
         // Equipo: todos los barberos del día (sin filtrar por recurso)
-        const data = await listarTurnosDelDia(desdeDia, hastaDia, signal);
+        const data = await listarTurnosDelDia(desdeDia, hastaDia, signal, sucursalId);
         setTurnos(ordenarPorHora(data.items));
         setTurnosDia(data.items);
       } else {
         const [delRecurso, delDia] = await Promise.all([
           listarTurnos(recursoId, desde, hasta, signal),
-          listarTurnosDelDia(desdeDia, hastaDia, signal),
+          listarTurnosDelDia(desdeDia, hastaDia, signal, sucursalId),
         ]);
         setTurnos(ordenarPorHora(delRecurso.items));
         setTurnosDia(delDia.items);
@@ -151,7 +207,7 @@ export default function AgendaPage() {
     } finally {
       if (!signal?.aborted) setCargando(false);
     }
-  }, [recursoId, dia, vista]);
+  }, [recursoId, dia, vista, sucursalId]);
  
   useEffect(() => {
     // Al cambiar de día, de vista o de profesional, se cancela el pedido
@@ -270,7 +326,25 @@ export default function AgendaPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Agenda</h1>
  
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Filtro por local. Solo existe si el negocio tiene más de uno. */}
+          {multi && (
+            <div className="flex flex-wrap gap-1.5">
+              <ChipLocal activo={sucursalId === null} onClick={() => setSucursalId(null)}>
+                Todos
+              </ChipLocal>
+              {abiertas.map((s) => (
+                <ChipLocal
+                  key={s.id}
+                  activo={sucursalId === s.id}
+                  onClick={() => setSucursalId(s.id)}
+                >
+                  {s.nombre}
+                </ChipLocal>
+              ))}
+            </div>
+          )}
+
           {recursos.length > 0 && vista !== "equipo" && (
             <Select
               value={recursoId ? String(recursoId) : undefined}

@@ -94,6 +94,7 @@ def listar_turnos(
     db: DB,
     recurso_id: int | None = Query(default=None, description="Filtrar por recurso (agenda de un barbero)"),
     cliente_id: int | None = Query(default=None, description="Filtrar por cliente (historial)"),
+    sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
     desde: dt.datetime | None = Query(default=None, description="Turnos desde esta fecha/hora"),
     hasta: dt.datetime | None = Query(default=None, description="Turnos hasta esta fecha/hora"),
     estado: EstadoTurno | None = Query(default=None),
@@ -114,7 +115,7 @@ def listar_turnos(
 
     total, items = svc.listar(
         db, usuario.empresa_id,
-        recurso_id=recurso_id, cliente_id=cliente_id,
+        recurso_id=recurso_id, cliente_id=cliente_id, sucursal_id=sucursal_id,
         desde=desde, hasta=hasta, estado=estado,
     )
     if es_prof:

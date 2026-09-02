@@ -59,8 +59,12 @@ export interface UsuarioVinculable {
   recurso_nombre: string | null;
 }
 
-export function listarRecursos(): Promise<RecursosPagina> {
-  return api.get<RecursosPagina>("/recursos");
+export function listarRecursos(
+  /** Con varios locales: solo los de ese local. undefined = todos. */
+  sucursalId?: number | null,
+): Promise<RecursosPagina> {
+  const qs = sucursalId != null ? `?sucursal_id=${sucursalId}` : "";
+  return api.get<RecursosPagina>(`/recursos${qs}`);
 }
 
 /** Usuarios de la empresa para el selector "Usuario vinculado" (solo dueño). */

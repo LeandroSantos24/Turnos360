@@ -20,6 +20,8 @@ export interface UsuarioMe {
   email: string;
   rol: string;
   empresa_id: number;
+  /** El local al que pertenece. Con un solo local, siempre el mismo. */
+  sucursal_id: number | null;
   /**
    * false solo para quien se registró solo y todavía no confirmó su email.
    * Mientras esté en false, la página pública de su negocio no se muestra.

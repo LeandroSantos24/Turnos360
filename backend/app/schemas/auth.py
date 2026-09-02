@@ -41,6 +41,9 @@ class UsuarioMe(BaseModel):
     email: EmailStr
     rol: str
     empresa_id: int
+    # A qué local pertenece. El panel lo usa para abrir la agenda en el local
+    # de quien entra en vez de mezclar los de todos.
+    sucursal_id: int | None = None
     # Lo necesita el panel para mostrar el aviso de "confirmá tu email": sin
     # eso, la página pública del negocio no aparece y el dueño no tiene forma
     # de saber por qué.

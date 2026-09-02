@@ -26,10 +26,15 @@ def listar_recursos(
     db: DB,
     solo_activos: bool = Query(default=True),
     tipo: TipoRecurso | None = Query(default=None, description="Filtrar por persona/box/equipo"),
+    sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
 ) -> RecursosPagina:
-    """Lista los recursos de la empresa, opcionalmente filtrados por tipo."""
+    """Lista los recursos de la empresa, opcionalmente filtrados por tipo y local."""
     total, items = svc.listar(
-        db, empresa_id, solo_activos=solo_activos, tipo=tipo.value if tipo else None
+        db,
+        empresa_id,
+        solo_activos=solo_activos,
+        tipo=tipo.value if tipo else None,
+        sucursal_id=sucursal_id,
     )
     return RecursosPagina(total=total, items=items)
 

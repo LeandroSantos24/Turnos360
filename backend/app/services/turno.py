@@ -165,6 +165,7 @@ def listar(
     *,
     recurso_id: int | None = None,
     cliente_id: int | None = None,
+    sucursal_id: int | None = None,
     desde: dt.datetime | None = None,
     hasta: dt.datetime | None = None,
     estado: EstadoTurno | None = None,
@@ -178,6 +179,12 @@ def listar(
         condiciones.append(Turno.recurso_id == recurso_id)
     if cliente_id is not None:
         condiciones.append(Turno.cliente_id == cliente_id)
+    if sucursal_id is not None:
+        # Se filtra por la columna del turno y no joineando con recurso: el
+        # local quedó copiado al crearlo justamente para esto, y para que un
+        # turno viejo siga contando en el local donde ocurrió aunque el
+        # profesional se haya mudado después.
+        condiciones.append(Turno.sucursal_id == sucursal_id)
     if desde is not None:
         condiciones.append(Turno.fecha_inicio >= desde)
     if hasta is not None:

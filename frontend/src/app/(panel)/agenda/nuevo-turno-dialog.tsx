@@ -11,7 +11,7 @@
  * grilla (con carril y hora precargados).
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AlertTriangle } from "lucide-react";
@@ -19,6 +19,7 @@ import { AlertTriangle } from "lucide-react";
 import { Cliente } from "@/lib/clientes-api";
 import { listarServicios, Servicio } from "@/lib/servicios-api";
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
+import { useSucursales } from "@/lib/use-sucursales";
 import { crearTurno } from "@/lib/turnos-api";
 import { ApiError } from "@/lib/api";
 import { SelectorCliente } from "./selector-cliente";
@@ -64,6 +65,7 @@ export function NuevoTurnoDialog({
 }: NuevoTurnoDialogProps) {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
+  const { multi, nombreDe } = useSucursales();
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [servicioId, setServicioId] = useState<string>("");
@@ -84,6 +86,29 @@ export function NuevoTurnoDialog({
       .then((d) => setRecursos(d.items.filter((r) => r.tipo === "persona")))
       .catch(() => {});
   }, [abierto]);
+
+  // Los profesionales que pueden prestar ESE servicio: los que trabajan en un
+  // local donde el servicio se ofrece. Sin este filtro, el dueño elige una
+  // combinación que el backend rechaza con un 409 recién al guardar, después
+  // de haber cargado el cliente y la hora.
+  const servicioElegido = servicios.find((s) => String(s.id) === servicioId);
+  const recursosPosibles = useMemo(() => {
+    if (!servicioElegido) return recursos;
+    const locales = new Set(
+      (servicioElegido.sucursales ?? []).map((x) => x.sucursal_id),
+    );
+    if (locales.size === 0) return recursos;
+    return recursos.filter((r) => locales.has(r.sucursal_id));
+  }, [recursos, servicioElegido]);
+
+  // Si el que estaba elegido no puede prestar el servicio nuevo, se limpia:
+  // dejarlo puesto sería mostrar una selección que va a fallar.
+  useEffect(() => {
+    if (!recursoId) return;
+    if (!recursosPosibles.some((r) => String(r.id) === recursoId)) {
+      setRecursoId("");
+    }
+  }, [recursosPosibles, recursoId]);
 
   // Prefill al abrir desde un hueco
   useEffect(() => {
@@ -222,13 +247,22 @@ export function NuevoTurnoDialog({
                 <SelectValue placeholder="Elegí un profesional" />
               </SelectTrigger>
               <SelectContent>
-                {recursos.map((r) => (
+                {recursosPosibles.map((r) => (
                   <SelectItem key={r.id} value={String(r.id)}>
                     {r.nombre}
+                    {multi && nombreDe(r.sucursal_id)
+                      ? ` · ${nombreDe(r.sucursal_id)}`
+                      : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {servicioElegido && recursosPosibles.length === 0 && (
+              <p className="text-xs text-destructive">
+                Nadie presta «{servicioElegido.nombre}» en los locales donde se
+                ofrece. Agregá el servicio a otro local, o mové a alguien.
+              </p>
+            )}
           </div>
 
           {/* Fecha + hora */}

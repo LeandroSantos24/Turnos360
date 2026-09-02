@@ -129,6 +129,7 @@ def listar(
     *,
     solo_activos: bool = True,
     tipo: str | None = None,
+    sucursal_id: int | None = None,
 ) -> tuple[int, list[Recurso]]:
     """Devuelve (total, lista) de recursos de esta empresa.
 
@@ -140,6 +141,8 @@ def listar(
         condiciones.append(Recurso.activo.is_(True))
     if tipo:
         condiciones.append(Recurso.tipo == tipo)
+    if sucursal_id is not None:
+        condiciones.append(Recurso.sucursal_id == sucursal_id)
 
     total = db.scalar(
         select(func.count()).select_from(Recurso).where(*condiciones)

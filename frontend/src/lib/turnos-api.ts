@@ -74,8 +74,11 @@ export function listarTurnosDelDia(
   desde: string,
   hasta: string,
   signal?: AbortSignal,
+  /** Con varios locales: solo los de ese local. undefined = todos. */
+  sucursalId?: number | null,
 ): Promise<TurnosPagina> {
   const params = new URLSearchParams({ desde, hasta });
+  if (sucursalId != null) params.set("sucursal_id", String(sucursalId));
   return api.get<TurnosPagina>(`/turnos?${params.toString()}`, signal);
 }
 
