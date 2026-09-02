@@ -163,6 +163,29 @@ def contexto_profesional(usuario: Usuario) -> tuple[bool, int | None]:
     return (True, recurso.id if recurso else None)
 
 
+def sucursal_visible(usuario: Usuario, pedida: int | None) -> int | None:
+    """Qué local puede mirar esta persona (E16, paso 6).
+
+    El dueño y el administrador ven todos los locales y pueden compararlos:
+    es lo que hace que el plan Multi valga la plata, y sin eso nadie con dos
+    sucursales tendría motivo para pagarlo.
+
+    Recepción y el profesional ven SOLO el suyo. Se ignora lo que pidan en vez
+    de responderles 403, por el mismo criterio que ya usa la agenda con el
+    recurso de un profesional: la pantalla no ofrece el filtro, así que un
+    sucursal_id de otro local solo puede llegar a mano, y contestar "no
+    autorizado" confirmaría que ese local existe.
+
+    Devuelve None cuando no hay restricción (= todos los locales).
+
+    Para un negocio de un solo local esto no cambia nada: el único local es el
+    de todos, y filtrar por él es filtrar por nada.
+    """
+    if usuario.rol in (RolUsuario.DUENO, RolUsuario.ADMIN):
+        return pedida
+    return usuario.sucursal_id
+
+
 # Atajos para escribir las rutas más corto (se usan desde E2 en adelante)
 def get_current_superadmin(
     credenciales: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],

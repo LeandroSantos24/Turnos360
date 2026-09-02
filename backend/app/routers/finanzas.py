@@ -17,7 +17,14 @@ Roles:
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno, gate_gestion
+from app.api.deps import (
+    DB,
+    EmpresaActual,
+    UsuarioActual,
+    gate_dueno,
+    gate_gestion,
+    sucursal_visible,
+)
 from app.models.enums import TipoMovimiento
 from app.schemas.finanzas import (
     CajaAbrir,
@@ -119,6 +126,8 @@ def caja_actual(
     Sin `sucursal_id` responde por el local de quien pregunta: la recepcionista
     del centro abre Caja y ve la suya, sin elegir nada.
     """
+    # Recepción solo puede mirar la caja de su local; el dueño, la que pida.
+    sucursal_id = sucursal_visible(usuario, sucursal_id)
     if sucursal_id is None:
         sucursal_id = svc.sucursal_de_usuario(db, empresa_id, usuario.id)
     caja = svc.caja_abierta(db, empresa_id, sucursal_id)
@@ -129,19 +138,31 @@ def caja_actual(
 
 @router.get("/cajas", response_model=list[CajaOut])
 def listar_cajas(
+    usuario: UsuarioActual,
     empresa_id: EmpresaActual,
     db: DB,
     sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
 ) -> list[CajaOut]:
-    """Historial de cajas con sus fechas y saldos."""
-    return svc.listar_cajas(db, empresa_id, sucursal_id=sucursal_id)
+    """Historial de cajas con sus fechas y saldos. Recepción ve solo el suyo."""
+    return svc.listar_cajas(
+        db, empresa_id, sucursal_id=sucursal_visible(usuario, sucursal_id)
+    )
 
 
 @router.get("/cajas/{caja_id}/detalle", response_model=CajaDetalle)
-def detalle_caja(caja_id: int, empresa_id: EmpresaActual, db: DB) -> CajaDetalle:
-    """Resumen y movimientos de una caja (para el cierre imprimible)."""
+def detalle_caja(
+    caja_id: int, usuario: UsuarioActual, empresa_id: EmpresaActual, db: DB
+) -> CajaDetalle:
+    """Resumen y movimientos de una caja (para el cierre imprimible).
+
+    Recepción solo puede abrir los arqueos de SU local: si no, el filtro del
+    listado sería decorativo — bastaba con probar ids.
+    """
     det = svc.detalle_caja(db, empresa_id, caja_id)
     if det is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Caja no encontrada")
+    limite = sucursal_visible(usuario, None)
+    if limite is not None and det["resumen"]["caja"].sucursal_id != limite:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Caja no encontrada")
     return det
 
@@ -232,6 +253,7 @@ def anular_movimiento(
 
 @router.get("/movimientos", response_model=MovimientosPagina)
 def listar_movimientos(
+    usuario: UsuarioActual,
     empresa_id: EmpresaActual,
     db: DB,
     tipo: TipoMovimiento | None = Query(default=None),
@@ -239,9 +261,18 @@ def listar_movimientos(
     offset: int = Query(default=0, ge=0),
     limite: int = Query(default=30, ge=1, le=200),
 ):
-    """Movimientos paginados, del más nuevo al más viejo."""
+    """Movimientos paginados, del más nuevo al más viejo.
+
+    Recepción ve solo los de su local: la plata de otro local no es asunto de
+    quien no estuvo ahí, y es lo que separa al plan Multi del resto.
+    """
     total, items = svc.listar_movimientos(
-        db, empresa_id, tipo, sucursal_id=sucursal_id, offset=offset, limite=limite
+        db,
+        empresa_id,
+        tipo,
+        sucursal_id=sucursal_visible(usuario, sucursal_id),
+        offset=offset,
+        limite=limite,
     )
     return {"total": total, "items": items}
 

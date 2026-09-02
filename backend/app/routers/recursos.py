@@ -6,7 +6,13 @@ Roles: leer es libre para cualquier usuario logueado; crear / editar / baja
 del catálogo de recursos es configuración del negocio -> solo el dueño.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
+from app.api.deps import (
+    DB,
+    EmpresaActual,
+    UsuarioActual,
+    gate_dueno,
+    sucursal_visible,
+)
 from app.models.enums import TipoRecurso
 from app.schemas.recurso import (
     RecursoCrear,
@@ -22,19 +28,23 @@ router = APIRouter(prefix="/recursos", tags=["recursos"])
 
 @router.get("", response_model=RecursosPagina)
 def listar_recursos(
+    usuario: UsuarioActual,
     empresa_id: EmpresaActual,
     db: DB,
     solo_activos: bool = Query(default=True),
     tipo: TipoRecurso | None = Query(default=None, description="Filtrar por persona/box/equipo"),
     sucursal_id: int | None = Query(default=None, description="Filtrar por local"),
 ) -> RecursosPagina:
-    """Lista los recursos de la empresa, opcionalmente filtrados por tipo y local."""
+    """Lista los recursos de la empresa, opcionalmente filtrados por tipo y local.
+
+    Recepción y el profesional ven solo los de SU local, pidan lo que pidan.
+    """
     total, items = svc.listar(
         db,
         empresa_id,
         solo_activos=solo_activos,
         tipo=tipo.value if tipo else None,
-        sucursal_id=sucursal_id,
+        sucursal_id=sucursal_visible(usuario, sucursal_id),
     )
     return RecursosPagina(total=total, items=items)
 

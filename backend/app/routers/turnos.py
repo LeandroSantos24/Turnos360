@@ -21,7 +21,11 @@ from app.api.deps import (
     UsuarioActual,
     contexto_profesional,
     gate_gestion,
+    sucursal_visible,
 )
+from sqlalchemy import select
+
+from app.models import Recurso
 from app.models.enums import EstadoTurno
 from app.schemas.turno import (
     TurnoCambiarEstado,
@@ -88,6 +92,31 @@ def buscar_huecos(
         grupo_agenda=servicio.grupo_agenda,
     )
 
+def _solo_mi_local(db, usuario, empresa_id: int, recurso_id: int | None) -> None:
+    """Recepción no agenda en un local que no es el suyo.
+
+    La pantalla ya solo le ofrece a la gente de su local (el listado de
+    recursos viene filtrado), así que un recurso de otro local solo puede
+    llegar a mano. Se responde 404 y no 403 por el mismo criterio de siempre:
+    decir "no autorizado" confirmaría que ese profesional existe.
+    """
+    if recurso_id is None:
+        return
+    limite = sucursal_visible(usuario, None)
+    if limite is None:  # dueño o admin: sin restricción
+        return
+    suya = db.scalar(
+        select(Recurso.sucursal_id).where(
+            Recurso.id == recurso_id, Recurso.empresa_id == empresa_id
+        )
+    )
+    if suya is not None and suya != limite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ese profesional no trabaja en tu local.",
+        )
+
+
 @router.get("", response_model=TurnosPagina)
 def listar_turnos(
     usuario: UsuarioActual,
@@ -112,6 +141,9 @@ def listar_turnos(
             # Profesional todavía sin recurso asignado: agenda vacía (no error).
             return TurnosPagina(total=0, items=[])
         recurso_id = mi_recurso  # fuerza el suyo, ignora lo pedido
+
+    # Recepción ve solo la agenda de SU local. El dueño ve la que pida.
+    sucursal_id = sucursal_visible(usuario, sucursal_id)
 
     total, items = svc.listar(
         db, usuario.empresa_id,
@@ -154,8 +186,11 @@ def pedir_resena(turno_id: int, empresa_id: EmpresaActual, db: DB) -> dict:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(gate_gestion)],
 )
-def crear_turno(datos: TurnoCrear, empresa_id: EmpresaActual, db: DB) -> TurnoOut:
+def crear_turno(
+    datos: TurnoCrear, usuario: UsuarioActual, empresa_id: EmpresaActual, db: DB
+) -> TurnoOut:
     """Crea un turno validando disponibilidad. 409 si el horario no está libre."""
+    _solo_mi_local(db, usuario, empresa_id, datos.recurso_id)
     return svc.crear(db, empresa_id, datos)
 
 
@@ -165,9 +200,15 @@ def crear_turno(datos: TurnoCrear, empresa_id: EmpresaActual, db: DB) -> TurnoOu
     dependencies=[Depends(gate_gestion)],
 )
 def mover_turno(
-    turno_id: int, datos: TurnoMover, empresa_id: EmpresaActual, db: DB
+    turno_id: int,
+    datos: TurnoMover,
+    usuario: UsuarioActual,
+    empresa_id: EmpresaActual,
+    db: DB,
 ) -> TurnoOut:
     """Reprograma un turno (horario y/o recurso). 409 si el nuevo horario choca."""
+    if datos.recurso_id is not None:
+        _solo_mi_local(db, usuario, empresa_id, datos.recurso_id)
     turno = svc.mover(db, empresa_id, turno_id, datos)
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")

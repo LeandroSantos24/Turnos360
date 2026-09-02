@@ -11,7 +11,8 @@ haya que migrar nada.
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import DB, EmpresaActual, gate_dueno
+from app.api.deps import DB, EmpresaActual, gate_dueno, requiere_rol
+from app.models.enums import RolUsuario
 from app.schemas.sucursal import (
     SucursalCrear,
     SucursalEditar,
@@ -20,24 +21,39 @@ from app.schemas.sucursal import (
 )
 from app.services import sucursal as svc
 
-router = APIRouter(
-    prefix="/sucursales", tags=["sucursales"], dependencies=[Depends(gate_dueno)]
+# El gate va por ruta y no en el router entero: VER la lista también la puede
+# el administrador —es quien mira la plata de todos los locales (paso 6) y sin
+# la lista no tendría con qué elegir cuál— pero abrir y cerrar un local sigue
+# siendo una decisión comercial, solo del dueño.
+router = APIRouter(prefix="/sucursales", tags=["sucursales"])
+
+
+@router.get(
+    "",
+    response_model=SucursalesOut,
+    dependencies=[Depends(requiere_rol(RolUsuario.DUENO, RolUsuario.ADMIN))],
 )
-
-
-@router.get("", response_model=SucursalesOut)
 def listar(empresa_id: EmpresaActual, db: DB) -> SucursalesOut:
     """Los locales del negocio, con el cupo que da el plan."""
     return svc.listar(db, empresa_id)
 
 
-@router.post("", response_model=SucursalOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SucursalOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(gate_dueno)],
+)
 def crear(datos: SucursalCrear, empresa_id: EmpresaActual, db: DB) -> SucursalOut:
     """Abre un local nuevo. 409 con el nombre del plan si no queda cupo."""
     return svc.crear(db, empresa_id, datos)
 
 
-@router.patch("/{sucursal_id}", response_model=SucursalOut)
+@router.patch(
+    "/{sucursal_id}",
+    response_model=SucursalOut,
+    dependencies=[Depends(gate_dueno)],
+)
 def editar(
     sucursal_id: int, datos: SucursalEditar, empresa_id: EmpresaActual, db: DB
 ) -> SucursalOut:
