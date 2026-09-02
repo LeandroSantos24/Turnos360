@@ -12,6 +12,8 @@
  * disponibilidad tenga que adivinar a qué local corresponde cada hueco.
  */
 
+import { useEffect } from "react";
+
 import { useSucursales } from "@/lib/use-sucursales";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,13 +33,23 @@ export function SelectorSucursal({
 }) {
   const { abiertas, multi } = useSucursales();
 
+  // El campo es obligatorio: dejarlo vacío obligaría al dueño a elegir algo
+  // que casi siempre es el primero. Se preselecciona y él lo cambia si quiere.
+  useEffect(() => {
+    if (multi && value == null && abiertas.length > 0) {
+      onChange(abiertas[0].id);
+    }
+  }, [multi, value, abiertas, onChange]);
+
   if (!multi) return null;
 
   return (
     <div className="space-y-2">
       <Label>Local *</Label>
       <Select
-        value={value != null ? String(value) : ""}
+        // null y no "": con cadena vacía Base UI no considera que no haya
+        // valor, y en vez del texto de ayuda dibuja el vacío.
+        value={value != null ? String(value) : null}
         onValueChange={(v) => onChange(v ? Number(v) : null)}
       >
         <SelectTrigger>

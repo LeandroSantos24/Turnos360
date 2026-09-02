@@ -6,7 +6,59 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Junta los `<SelectItem>` que hay en el árbol de hijos, en un mapa
+ * valor -> etiqueta.
+ *
+ * POR QUÉ EXISTE ESTO
+ * ───────────────────
+ * Base UI dibuja en el disparador el VALOR crudo del ítem elegido, no su
+ * texto, salvo que se le pase `items` a `Select.Root`. Como ningún selector
+ * de la aplicación lo pasaba, todos mostraban el valor: el selector de local
+ * decía "14" en vez de "Barbería el Faro", y el de usuario vinculado decía
+ * "2" en vez de "Lucas Estrella".
+ *
+ * Se resuelve una vez acá y no en los quince lugares que usan Select: si
+ * dependiera de que cada pantalla se acuerde de mandar `items`, el próximo
+ * selector que alguien escriba vuelve a mostrar números.
+ *
+ * Un `items` explícito en la llamada sigue mandando, para los casos donde la
+ * etiqueta del disparador tenga que ser distinta de la de la lista.
+ */
+function recolectarItems(
+  nodo: React.ReactNode,
+  acumulado: Record<string, React.ReactNode>,
+): Record<string, React.ReactNode> {
+  React.Children.forEach(nodo, (hijo) => {
+    if (!React.isValidElement(hijo)) return
+    const props = hijo.props as {
+      value?: unknown
+      children?: React.ReactNode
+    }
+    if (hijo.type === SelectItem && props.value != null) {
+      acumulado[String(props.value)] = props.children
+    }
+    if (props.children) recolectarItems(props.children, acumulado)
+  })
+  return acumulado
+}
+
+function Select<Valor>({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<Valor>) {
+  const derivados = React.useMemo(
+    () => items ?? recolectarItems(children, {}),
+    [items, children],
+  )
+  return (
+    <SelectPrimitive.Root items={derivados} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
+
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

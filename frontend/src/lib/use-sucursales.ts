@@ -13,7 +13,7 @@
  * GET cada vez.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { listarSucursales, Sucursal } from "./sucursales-api";
 
@@ -73,7 +73,9 @@ export function useSucursales() {
     };
   }, []);
 
-  const abiertas = sucursales.filter((s) => s.activa);
+  // Memoizado: sin esto devuelve un array nuevo en cada render y cualquier
+  // useEffect que lo tenga como dependencia se dispara siempre.
+  const abiertas = useMemo(() => sucursales.filter((s) => s.activa), [sucursales]);
   return {
     sucursales,
     /** Solo las que están abiertas: son las únicas asignables. */
