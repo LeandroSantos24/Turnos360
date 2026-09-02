@@ -8,18 +8,28 @@ from sqlalchemy import (
     Column,
     Date,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
     Table,
     Time,
+    UniqueConstraint,
+    event,
+    literal,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import TipoExcepcion, TipoRecurso
-from app.models.organizacion import TenantMixin, fk_sucursal, sucursal_por_defecto
+from app.models.organizacion import (
+    Sucursal,
+    TenantMixin,
+    fk_sucursal,
+    sucursal_por_defecto,
+)
 from app.models.tipos import enum_pg
 
 # Tablas puente N:M (no son clases porque no tienen datos propios)
@@ -110,7 +120,13 @@ class ExcepcionAgenda(TenantMixin, Base):
 
 class Servicio(TenantMixin, Base):
     __tablename__ = "servicio"
-    __table_args__ = (Index("ix_servicio_empresa_activo", "empresa_id", "activo"),)
+    __table_args__ = (
+        Index("ix_servicio_empresa_activo", "empresa_id", "activo"),
+        # Igual que en sucursal: redundante como identidad, necesaria para que
+        # servicio_sucursal pueda apuntar con una FK COMPUESTA y la base
+        # rechace cruzar un servicio de una empresa con el local de otra.
+        UniqueConstraint("empresa_id", "id", name="uq_servicio_empresa"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(120))
@@ -127,3 +143,67 @@ class Servicio(TenantMixin, Base):
     agendable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     recursos: Mapped[list["Recurso"]] = relationship(secondary=servicio_recurso)
+
+class ServicioSucursal(TenantMixin, Base):
+    """En qué locales se ofrece cada servicio, y a qué precio (E16, paso 3b).
+
+    Es una tabla de asociación CON dato propio (`precio`), así que va como
+    modelo y no como Table suelta: el mismo "Corte" puede costar $8.000 en el
+    centro y $6.500 en el barrio, que es la primera pregunta que hace cualquier
+    dueño de dos locales.
+
+    `precio` en NULL significa "el del servicio". No se copia el precio base a
+    cada fila a propósito: si se copiara, subir el precio general obligaría a
+    tocar cada local uno por uno, y el que se olvidara quedaría vendiendo al
+    precio viejo sin que nadie se entere.
+
+    INVARIANTE: todo servicio tiene al menos una fila acá. Lo garantiza el
+    listener de abajo, no la disciplina de quien escriba el próximo alta.
+    """
+
+    __tablename__ = "servicio_sucursal"
+    __table_args__ = (
+        fk_sucursal("fk_servicio_sucursal_sucursal"),
+        ForeignKeyConstraint(
+            ["empresa_id", "servicio_id"],
+            ["servicio.empresa_id", "servicio.id"],
+            name="fk_servicio_sucursal_servicio",
+            ondelete="CASCADE",
+        ),
+    )
+
+    servicio_id: Mapped[int] = mapped_column(primary_key=True)
+    sucursal_id: Mapped[int] = mapped_column(primary_key=True)
+    precio: Mapped[float | None] = mapped_column(Numeric(12, 2))
+
+
+@event.listens_for(Servicio, "after_insert")
+def _ofrecer_en_todos_los_locales(mapper, connection, servicio) -> None:
+    """Un servicio nuevo se ofrece en TODOS los locales abiertos.
+
+    Es el mismo criterio que el default de `sucursal_id`: el invariante no
+    puede depender de que cada alta se acuerde. Un servicio sin ningún local
+    no daría un error ruidoso —daría un servicio invisible, que es peor: nadie
+    se entera hasta que un cliente no lo encuentra en la página de reservas.
+
+    El alta del panel pisa esto inmediatamente después si el dueño eligió
+    locales puntuales. Para un negocio de un solo local, "todos" es "el suyo"
+    y nadie ve nada.
+    """
+    connection.execute(
+        servicio_sucursal_tabla().insert().from_select(
+            ["empresa_id", "servicio_id", "sucursal_id"],
+            select(
+                literal(servicio.empresa_id),
+                literal(servicio.id),
+                Sucursal.id,
+            ).where(
+                Sucursal.empresa_id == servicio.empresa_id,
+                Sucursal.activa.is_(True),
+            ),
+        )
+    )
+
+
+def servicio_sucursal_tabla():
+    return ServicioSucursal.__table__

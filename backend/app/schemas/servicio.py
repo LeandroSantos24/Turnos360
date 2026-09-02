@@ -3,6 +3,17 @@
 from pydantic import BaseModel, Field
 
 
+class SucursalDeServicio(BaseModel):
+    """En qué local se ofrece un servicio, y a cuánto.
+
+    `precio` en None = "el del servicio". Es lo que permite subir el precio
+    general una sola vez sin tener que recorrer local por local.
+    """
+
+    sucursal_id: int
+    precio: float | None = Field(default=None, ge=0)
+
+
 class ServicioBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     duracion_min: int = Field(gt=0, le=600, description="Minutos de atención activa")
@@ -15,6 +26,11 @@ class ServicioBase(BaseModel):
 
 class ServicioCrear(ServicioBase):
     recurso_ids: list[int] = Field(default_factory=list, description="Recursos que prestan este servicio")
+    # None = "en todos los locales abiertos", que es lo que pasa siempre en un
+    # negocio de un solo local: el formulario ni pregunta.
+    sucursales: list[SucursalDeServicio] | None = Field(
+        default=None, description="Locales donde se ofrece. None = todos."
+    )
 
 
 class ServicioEditar(BaseModel):
@@ -27,6 +43,9 @@ class ServicioEditar(BaseModel):
     agendable: bool | None = None
     activo: bool | None = None
     recurso_ids: list[int] | None = Field(default=None, description="Si viene, reemplaza el set de recursos")
+    sucursales: list[SucursalDeServicio] | None = Field(
+        default=None, description="Si viene, reemplaza los locales donde se ofrece"
+    )
 
 
 class ServicioOut(ServicioBase):
@@ -34,14 +53,21 @@ class ServicioOut(ServicioBase):
     empresa_id: int
     activo: bool
     recurso_ids: list[int] = Field(default_factory=list)
+    # Siempre trae al menos uno: un servicio ofrecido en ningún lado no
+    # existiría para nadie. La pantalla lo muestra solo con varios locales.
+    sucursales: list[SucursalDeServicio] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
     @classmethod
-    def desde_modelo(cls, servicio) -> "ServicioOut":
-        """Arma el Out incluyendo los ids de recursos vinculados."""
+    def desde_modelo(cls, servicio, sucursales=None) -> "ServicioOut":
+        """Arma el Out incluyendo recursos y locales."""
         base = cls.model_validate(servicio)
         base.recurso_ids = [r.id for r in servicio.recursos]
+        base.sucursales = [
+            SucursalDeServicio(sucursal_id=f.sucursal_id, precio=f.precio)
+            for f in (sucursales or [])
+        ]
         return base
 
 

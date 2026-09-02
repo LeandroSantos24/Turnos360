@@ -19,7 +19,12 @@ def listar_servicios(
     empresa_id: EmpresaActual, db: DB, solo_activos: bool = Query(default=True)
 ) -> ServiciosPagina:
     total, items = svc.listar(db, empresa_id, solo_activos=solo_activos)
-    return ServiciosPagina(total=total, items=items)
+    # Los locales de TODOS los servicios en una sola consulta, no una por fila.
+    mapa = svc.mapa_de_sucursales(db, [s.id for s in items])
+    return ServiciosPagina(
+        total=total,
+        items=[ServicioOut.desde_modelo(s, mapa.get(s.id, [])) for s in items],
+    )
 
 
 @router.get("/{servicio_id}", response_model=ServicioOut)
@@ -27,7 +32,7 @@ def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> Ser
     servicio = svc.obtener(db, empresa_id, servicio_id)
     if servicio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
-    return ServicioOut.desde_modelo(servicio)
+    return ServicioOut.desde_modelo(servicio, svc.sucursales_de(db, servicio.id))
 
 
 # Catálogo = configuración del negocio -> solo el dueño.
@@ -38,7 +43,8 @@ def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> Ser
     dependencies=[Depends(gate_dueno)],
 )
 def crear_servicio(datos: ServicioCrear, empresa_id: EmpresaActual, db: DB) -> ServicioOut:
-    return ServicioOut.desde_modelo(svc.crear(db, empresa_id, datos))
+    servicio = svc.crear(db, empresa_id, datos)
+    return ServicioOut.desde_modelo(servicio, svc.sucursales_de(db, servicio.id))
 
 
 @router.patch(
@@ -52,7 +58,7 @@ def editar_servicio(
     servicio = svc.editar(db, empresa_id, servicio_id, datos)
     if servicio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
-    return ServicioOut.desde_modelo(servicio)
+    return ServicioOut.desde_modelo(servicio, svc.sucursales_de(db, servicio.id))
 
 
 @router.delete(

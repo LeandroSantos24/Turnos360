@@ -10,6 +10,7 @@ import {
   borrarServicio,
   Servicio,
 } from "@/lib/servicios-api";
+import { useSucursales } from "@/lib/use-sucursales";
 import { ApiError } from "@/lib/api";
 import { NuevoServicioDialog } from "./nuevo-servicio-dialog";
 import { EditarServicioDialog } from "./editar-servicio-dialog";
@@ -51,6 +52,8 @@ export default function ServiciosPage() {
   const [error, setError] = useState<string | null>(null);
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
+  // La columna "Locales" solo existe si el negocio tiene más de uno.
+  const { abiertas, multi, nombreDe } = useSucursales();
 
   // Estados para editar y borrar
   const [editando, setEditando] = useState<Servicio | null>(null);
@@ -157,6 +160,7 @@ export default function ServiciosPage() {
                 <TableHead>Duración</TableHead>
                 <TableHead>Turno cada</TableHead>
                 <TableHead>Grupo</TableHead>
+                {multi && <TableHead>Locales</TableHead>}
                 <TableHead className="text-right">Precio</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
@@ -182,6 +186,30 @@ export default function ServiciosPage() {
                       </span>
                     )}
                   </TableCell>
+                  {multi && (
+                    <TableCell className="text-muted-foreground">
+                      <span className="flex flex-wrap gap-1">
+                        {s.sucursales?.length === abiertas.length ? (
+                          <span className="text-xs">Todos</span>
+                        ) : (
+                          (s.sucursales ?? []).map((ss) => (
+                            <span
+                              key={ss.sucursal_id}
+                              className="rounded-full bg-muted px-2 py-0.5 text-[11px]"
+                              title={
+                                ss.precio != null
+                                  ? `Precio propio: $${Number(ss.precio).toLocaleString("es-AR")}`
+                                  : undefined
+                              }
+                            >
+                              {nombreDe(ss.sucursal_id) ?? "—"}
+                              {ss.precio != null && " ·  $" + Number(ss.precio).toLocaleString("es-AR")}
+                            </span>
+                          ))
+                        )}
+                      </span>
+                    </TableCell>
+                  )}
                   <TableCell className="text-right font-medium tabular-nums">
                     {s.precio != null
                       ? `$${Number(s.precio).toLocaleString("es-AR")}`

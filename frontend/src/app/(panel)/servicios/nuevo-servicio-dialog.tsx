@@ -11,9 +11,11 @@
  * Por detrás todo se traduce al campo grupo_agenda del backend.
  */
 
-import { useState } from "react";
-import { crearServicio } from "@/lib/servicios-api";
+import { useEffect, useState } from "react";
+import { crearServicio, SucursalDeServicio } from "@/lib/servicios-api";
+import { useSucursales } from "@/lib/use-sucursales";
 import { SelectorRecursos } from "./selector-recursos";
+import { SelectorSucursalesServicio } from "./selector-sucursales-servicio";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -56,6 +58,20 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
   const [enParalelo, setEnParalelo] = useState(false); // ¿convive con todo?
   const [grupo, setGrupo] = useState(""); // nombre del carril (si NO es en paralelo)
   const [recursoIds, setRecursoIds] = useState<number[]>([]);
+  // Arranca con TODOS los locales tildados: es lo que hace el backend si no se
+  // manda nada, y es lo que el dueño quiere el 90% de las veces.
+  const { abiertas, multi } = useSucursales();
+  const [sucursales, setSucursales] = useState<SucursalDeServicio[]>([]);
+  useEffect(() => {
+    if (abierto) {
+      setSucursales(
+        abiertas.map((s) => ({ sucursal_id: s.id, precio: null })),
+      );
+    }
+    // Solo al abrir: si dependiera de `sucursales`, pisaría lo que el dueño
+    // acaba de destildar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, abiertas.length]);
 
   function limpiar() {
     setNombre("");
@@ -66,6 +82,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
     setEnParalelo(false);
     setGrupo("");
     setRecursoIds([]);
+    setSucursales(abiertas.map((s) => ({ sucursal_id: s.id, precio: null })));
   }
 
   async function guardar(e: React.FormEvent) {
@@ -91,6 +108,8 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
         grupo_agenda: agendable ? grupoAgenda : null,
         agendable,
         recurso_ids: recursoIds,
+        // Con un solo local no se manda nada y el backend lo ofrece en el suyo.
+        sucursales: multi ? sucursales : undefined,
       });
       toast.success("Servicio creado");
       limpiar();
@@ -218,6 +237,12 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
               )}
 
               <SelectorRecursos seleccionados={recursoIds} onCambio={setRecursoIds} />
+
+              <SelectorSucursalesServicio
+                seleccionadas={sucursales}
+                onCambio={setSucursales}
+                precioBase={precio ? Number(precio) : null}
+              />
             </div>
           )}
 

@@ -5,6 +5,17 @@
 
 import { api } from "./api";
 
+/**
+ * En qué local se ofrece un servicio, y a cuánto.
+ *
+ * `precio` en null = "el del servicio". Ese fallback es lo que permite subir
+ * el precio general una sola vez sin recorrer local por local.
+ */
+export interface SucursalDeServicio {
+  sucursal_id: number;
+  precio: number | null;
+}
+
 export interface Servicio {
   id: number;
   empresa_id: number;
@@ -17,6 +28,8 @@ export interface Servicio {
   activo: boolean;
   agendable: boolean;
   recurso_ids?: number[];
+  /** Siempre trae al menos uno: un servicio sin local no existiría para nadie. */
+  sucursales: SucursalDeServicio[];
 }
 
 export interface ServiciosPagina {
@@ -33,6 +46,8 @@ export interface ServicioCrear {
   precio?: number;
   agendable?: boolean;
   recurso_ids?: number[];
+  /** Si no se manda, el backend lo ofrece en todos los locales abiertos. */
+  sucursales?: SucursalDeServicio[];
 }
 
 export function obtenerServicio(id: number): Promise<Servicio> {

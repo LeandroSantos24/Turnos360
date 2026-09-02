@@ -8,8 +8,15 @@
  */
 
 import { useState, useEffect } from "react";
-import { editarServicio, obtenerServicio, Servicio } from "@/lib/servicios-api";
+import {
+  editarServicio,
+  obtenerServicio,
+  Servicio,
+  SucursalDeServicio,
+} from "@/lib/servicios-api";
+import { useSucursales } from "@/lib/use-sucursales";
 import { SelectorRecursos } from "./selector-recursos";
+import { SelectorSucursalesServicio } from "./selector-sucursales-servicio";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -59,6 +66,8 @@ export function EditarServicioDialog({
   const [enParalelo, setEnParalelo] = useState(false);
   const [grupo, setGrupo] = useState("");
   const [recursoIds, setRecursoIds] = useState<number[]>([]);
+  const { multi } = useSucursales();
+  const [sucursales, setSucursales] = useState<SucursalDeServicio[]>([]);
 
   // Precargar los valores del servicio cuando se abre
   useEffect(() => {
@@ -68,6 +77,7 @@ export function EditarServicioDialog({
     setPaso(String(servicio.paso_turno_min));
     setPrecio(servicio.precio != null ? String(servicio.precio) : "");
     setAgendable(servicio.agendable);
+    setSucursales(servicio.sucursales ?? []);
     // Deducir el estado del carril desde grupo_agenda
     const g = servicio.grupo_agenda ?? "";
     if (g.startsWith("solo-")) {
@@ -105,6 +115,7 @@ export function EditarServicioDialog({
         grupo_agenda: agendable ? grupoAgenda : null,
         agendable,
         recurso_ids: recursoIds,
+        sucursales: multi ? sucursales : undefined,
       });
       toast.success("Servicio actualizado");
       onEditado();
@@ -220,6 +231,12 @@ export function EditarServicioDialog({
               )}
 
               <SelectorRecursos seleccionados={recursoIds} onCambio={setRecursoIds} />
+
+              <SelectorSucursalesServicio
+                seleccionadas={sucursales}
+                onCambio={setSucursales}
+                precioBase={precio ? Number(precio) : null}
+              />
             </div>
           )}
 

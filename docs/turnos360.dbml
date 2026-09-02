@@ -783,6 +783,17 @@ Table servicio_recurso {
   recurso_id integer [pk, ref: > recurso.id]
 }
 
+Table servicio_sucursal {
+  servicio_id integer [pk, ref: > servicio.id]
+  sucursal_id integer [pk, ref: > sucursal.id]
+  precio numeric(12, 2)
+  empresa_id integer [ref: > empresa.id, not null]
+
+  Indexes {
+    empresa_id [name: 'ix_servicio_sucursal_empresa_id']
+  }
+}
+
 Table sucursal {
   id integer [pk]
   nombre varchar(120) [not null]

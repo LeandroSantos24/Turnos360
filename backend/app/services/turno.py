@@ -260,13 +260,27 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
     # Si sí: el turno queda en $0 y se marca como cubierto (para finanzas).
     cubierto = _abono_cubre_servicio(db, empresa_id, datos.cliente_id, servicio.id)
 
-    # Importe: si está cubierto por abono → 0. Si no, el que vino o el del servicio.
+    # El servicio tiene que prestarse en el local donde atiende esta persona.
+    # Con un solo local siempre se cumple (todo servicio nace ofrecido en
+    # todos), así que este chequeo no se nota hasta que hay varios.
+    from app.services import servicio as servicio_svc
+
+    if not servicio_svc.se_ofrece_en(db, servicio.id, recurso.sucursal_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"«{servicio.nombre}» no se ofrece en el local donde atiende "
+            f"{recurso.nombre}. Agregalo a ese local desde Servicios, o elegí "
+            "a alguien de otro local.",
+        )
+
+    # Importe: si está cubierto por abono → 0. Si no, el que vino o el del
+    # servicio EN ESE LOCAL (el mismo corte puede costar distinto en cada uno).
     if cubierto:
         importe = 0
     elif datos.importe_previsto is not None:
         importe = datos.importe_previsto
     else:
-        importe = servicio.precio
+        importe = servicio_svc.precio_en(db, servicio, recurso.sucursal_id)
 
     # 4. Crear el turno
     turno = Turno(

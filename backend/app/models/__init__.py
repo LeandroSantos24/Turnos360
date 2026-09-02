@@ -8,6 +8,7 @@ from app.models.agenda import (
     HorarioRecurso,
     Recurso,
     Servicio,
+    ServicioSucursal,
     recurso_especialidad,
     servicio_recurso,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "Base",
     "Rubro", "Empresa", "Sucursal", "Usuario", "SuperAdmin",
     "Especialidad", "Recurso", "HorarioRecurso", "ExcepcionAgenda", "Servicio",
+    "ServicioSucursal",
     "recurso_especialidad", "servicio_recurso",
     "Cliente", "HistorialCliente", "Calificacion", "Adjunto", "ListaEspera",
     "Turno",
