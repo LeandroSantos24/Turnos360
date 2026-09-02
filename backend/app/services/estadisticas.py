@@ -5,7 +5,7 @@ import datetime as dt
 from sqlalchemy import and_ as sa_and, case as sa_case, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Recurso
+from app.models import Recurso, Sucursal
 from app.models.agenda import Servicio
 from app.models.cupon import CuponDescuento
 from app.models.enums import EstadoTurno
@@ -19,11 +19,17 @@ def facturacion(
     desde: dt.datetime,
     hasta: dt.datetime,
     recurso_id: int | None = None,
+    sucursal_id: int | None = None,
 ) -> dict:
     """Resumen de lo cobrado en el rango: totales, por método, por profesional y por día.
 
     Si recurso_id viene, TODO el panel se filtra a ese profesional: sus pagos,
     sus servicios, sus horarios y su ausentismo.
+
+    Si sucursal_id viene, lo mismo pero por local. Y venga o no, el resultado
+    incluye `por_sucursal`: la comparación entre locales, que es la pregunta
+    que se hace un dueño con dos sucursales y la razón por la que paga el plan
+    Multi. Con un solo local la lista trae una fila y el panel no la muestra.
     """
     # Los pagos anulados (una gift card emitida por error, una venta
     # revertida) NO facturan. Va en `cond`, que comparten facturación,
@@ -35,6 +41,11 @@ def facturacion(
         Pago.fecha < hasta,
         Pago.anulado.is_(False),
     ]
+    # El local es una columna del propio pago (paso 5): filtrar acá no cuesta
+    # un join, y alcanza con esta línea para que TODO el panel —totales, por
+    # método, por día, por servicio, cupones— quede acotado al local.
+    if sucursal_id is not None:
+        cond.append(Pago.sucursal_id == sucursal_id)
     # Los pagos no tienen recurso directo: se filtran por el turno del recurso.
     if recurso_id is not None:
         cond.append(
@@ -66,6 +77,8 @@ def facturacion(
         Pago.fecha < desde,
         Pago.anulado.is_(False),
     ]
+    if sucursal_id is not None:
+        cond_ant.append(Pago.sucursal_id == sucursal_id)
     if recurso_id is not None:
         cond_ant.append(
             Pago.turno_id.in_(
@@ -133,6 +146,8 @@ def facturacion(
     ]
     if recurso_id is not None:
         cond_turno.append(Turno.recurso_id == recurso_id)
+    if sucursal_id is not None:
+        cond_turno.append(Turno.sucursal_id == sucursal_id)
     filas_estado = db.execute(
         select(Turno.estado, func.count(Turno.id))
         .where(*cond_turno)
@@ -332,12 +347,59 @@ def facturacion(
         ),
     }
 
+    # ── Comparación entre locales ───────────────────────────────────────
+    # La pregunta de un dueño con dos sucursales: cuál factura más, cuál tiene
+    # el ticket más alto, cuál se está quedando atrás. Es lo que hace que el
+    # plan Multi tenga sentido para él.
+    #
+    # A propósito NO se filtra por `sucursal_id`: aunque el dueño esté mirando
+    # un local, la comparación tiene que mostrarle los dos. Si se filtrara,
+    # elegir un local haría desaparecer aquello con lo que se compara.
+    cond_todos = [
+        Pago.empresa_id == empresa_id,
+        Pago.fecha >= desde,
+        Pago.fecha < hasta,
+        Pago.anulado.is_(False),
+    ]
+    filas_suc = db.execute(
+        select(
+            Sucursal.id,
+            Sucursal.nombre,
+            func.coalesce(func.sum(Pago.monto), 0),
+            func.count(Pago.id),
+            func.count(func.distinct(Pago.turno_id)),
+        )
+        .select_from(Sucursal)
+        .join(
+            Pago,
+            sa_and(Pago.sucursal_id == Sucursal.id, *cond_todos),
+            isouter=True,
+        )
+        .where(Sucursal.empresa_id == empresa_id)
+        .group_by(Sucursal.id, Sucursal.nombre)
+        .order_by(func.coalesce(func.sum(Pago.monto), 0).desc())
+    ).all()
+    total_todos = sum(float(t) for _, _, t, _, _ in filas_suc) or 0.0
+    por_sucursal = [
+        {
+            "sucursal_id": sid,
+            "sucursal": nombre,
+            "total": round(float(total), 2),
+            "cantidad_pagos": int(cant),
+            "turnos": int(turnos),
+            "ticket": round(float(total) / int(turnos), 2) if turnos else 0.0,
+            "pct": round(float(total) / total_todos * 100, 1) if total_todos else 0.0,
+        }
+        for sid, nombre, total, cant, turnos in filas_suc
+    ]
+
     # Ticket promedio: SOLO sobre la atención. Meter la venta de un abono acá
     # inflaría el número y dejaría de servir para lo único que sirve, que es
     # comparar cuánto gasta un cliente por visita.
     ticket = monto_turnos / cant_turnos if cant_turnos else 0.0
 
     return {
+        "por_sucursal": por_sucursal,
         "por_origen": por_origen,
         "facturado_turnos": round(monto_turnos, 2),
         "por_cupon": por_cupon,

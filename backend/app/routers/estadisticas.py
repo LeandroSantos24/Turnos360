@@ -27,6 +27,7 @@ def facturacion(
     empresa_id: EmpresaActual,
     db: DB,
     recurso_id: int | None = None,
+    sucursal_id: int | None = None,
 ) -> EstadisticasFacturacion:
     """Facturación real del rango [desde, hasta).
 
@@ -35,8 +36,11 @@ def facturacion(
     faltaba declararlo acá, así que el filtro que mandaba el panel se
     descartaba en silencio y las tarjetas seguían mostrando el total.
 
-    No hace falta validar que el recurso sea de la empresa: el servicio cruza
-    siempre por empresa_id, así que un id ajeno devuelve vacío, nunca datos
-    de otro negocio.
+    sucursal_id opcional: lo mismo, pero por local. La comparación entre
+    locales (`por_sucursal`) viene siempre, esté filtrado o no.
+
+    No hace falta validar que el recurso ni el local sean de la empresa: el
+    servicio cruza siempre por empresa_id, así que un id ajeno devuelve vacío,
+    nunca datos de otro negocio.
     """
-    return svc.facturacion(db, empresa_id, desde, hasta, recurso_id)
+    return svc.facturacion(db, empresa_id, desde, hasta, recurso_id, sucursal_id)

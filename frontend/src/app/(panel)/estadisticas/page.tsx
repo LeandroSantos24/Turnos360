@@ -25,6 +25,7 @@ import {
   EstadisticasFacturacion,
 } from "@/lib/estadisticas-api";
 import { ApiError } from "@/lib/api";
+import { useSucursales } from "@/lib/use-sucursales";
 import {
   SelectorPeriodo,
   rangoDe,
@@ -111,6 +112,11 @@ function ContenidoEstadisticas() {
   const [desdeCustom, setDesdeCustom] = useState(inicial.desde);
   const [hastaCustom, setHastaCustom] = useState(inicial.hasta);
   const [recursoId, setRecursoId] = useState<number | null>(null);
+  // Local que se está mirando. null = todos, que con varios locales es la
+  // vista que el dueño quiere por defecto: primero el total, después el
+  // desglose.
+  const { multi } = useSucursales();
+  const [sucursalId, setSucursalId] = useState<number | null>(null);
   const [recursos, setRecursos] = useState<{ id: number; nombre: string }[]>([]);
   const [datos, setDatos] = useState<EstadisticasFacturacion | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -142,6 +148,7 @@ function ContenidoEstadisticas() {
         desde.toISOString(),
         hasta.toISOString(),
         recursoId,
+        sucursalId,
       );
       setDatos(d);
     } catch (err) {
@@ -149,7 +156,7 @@ function ContenidoEstadisticas() {
     } finally {
       setCargando(false);
     }
-  }, [periodo, recursoId, desdeCustom, hastaCustom]);
+  }, [periodo, recursoId, sucursalId, desdeCustom, hastaCustom]);
 
   useEffect(() => {
     cargar();
@@ -159,6 +166,10 @@ function ContenidoEstadisticas() {
   const maxProf = Math.max(
     1,
     ...(datos?.por_profesional.map((p) => p.total) ?? [1]),
+  );
+  const maxSucursal = Math.max(
+    1,
+    ...(datos?.por_sucursal.map((s) => s.total) ?? [1]),
   );
   const sinDatos =
     datos &&
@@ -199,6 +210,36 @@ function ContenidoEstadisticas() {
           </a>
         </div>
       </div>
+
+      {/* Selector de local. Solo con más de uno. */}
+      {multi && (datos?.por_sucursal.length ?? 0) > 1 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Local:</span>
+          <button
+            onClick={() => setSucursalId(null)}
+            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+              sucursalId === null
+                ? "border-primary bg-primary/10 text-primary"
+                : "hover:border-muted-foreground/40"
+            }`}
+          >
+            Todos
+          </button>
+          {(datos?.por_sucursal ?? []).map((suc) => (
+            <button
+              key={suc.sucursal_id}
+              onClick={() => setSucursalId(suc.sucursal_id)}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                sucursalId === suc.sucursal_id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "hover:border-muted-foreground/40"
+              }`}
+            >
+              {suc.sucursal}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Selector de profesional: "Todos" o filtrar el panel a uno */}
       {recursos.length > 0 && (
@@ -327,6 +368,40 @@ function ContenidoEstadisticas() {
               )}
             </Card>
           </div>
+
+          {/* Comparación entre locales. Se muestra ENTERA aunque el panel
+              esté filtrado a uno: un gráfico de comparación con una sola
+              barra no compara nada. */}
+          {datos.por_sucursal.length > 1 && (
+            <div className="mt-4">
+              <Card titulo="Comparación entre locales">
+                {datos.por_sucursal.map((suc) => (
+                  <div key={suc.sucursal_id} className="mb-3 last:mb-0">
+                    <div className="mb-1 flex justify-between text-sm">
+                      <span>
+                        {suc.sucursal}{" "}
+                        <span className="text-muted-foreground">
+                          · {suc.turnos} turnos · ticket {pesos(suc.ticket)}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums" style={NUM}>
+                        {pesos(suc.total)}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {suc.pct}%
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${(suc.total / maxSucursal) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          )}
 
           {/* Ausentismo + servicios + horarios */}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">

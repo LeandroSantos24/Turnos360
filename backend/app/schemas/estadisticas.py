@@ -74,6 +74,18 @@ class CuponesResumen(BaseModel):
     descuento_otorgado: float = 0.0
 
 
+class SucursalResumen(BaseModel):
+    """Un local en la comparación. Solo se muestra con más de uno."""
+
+    sucursal_id: int
+    sucursal: str
+    total: float
+    cantidad_pagos: int
+    turnos: int
+    ticket: float
+    pct: float
+
+
 class EstadisticasFacturacion(BaseModel):
     """Facturación real de un período: cuánto entró, neto de comisiones, y desgloses."""
 
@@ -100,3 +112,9 @@ class EstadisticasFacturacion(BaseModel):
     # Rendimiento de los cupones de descuento del período.
     por_cupon: list[CuponRendimiento] = []
     cupones_resumen: CuponesResumen = CuponesResumen()
+
+    # Comparación entre locales. Viene SIEMPRE con todos los locales, incluso
+    # cuando el panel está filtrado a uno: filtrar la comparación sería sacarle
+    # aquello con lo que se compara. Con un solo local trae una fila y el panel
+    # no la muestra.
+    por_sucursal: list[SucursalResumen] = []

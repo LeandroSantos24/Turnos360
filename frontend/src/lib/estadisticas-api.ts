@@ -62,6 +62,17 @@ export interface CuponesResumen {
   facturado: number;
   descuento_otorgado: number;
 }
+/** Un local en la comparación. Solo se muestra si el negocio tiene más de uno. */
+export interface SucursalResumen {
+  sucursal_id: number;
+  sucursal: string;
+  total: number;
+  cantidad_pagos: number;
+  turnos: number;
+  ticket: number;
+  pct: number;
+}
+
 export interface EstadisticasFacturacion {
   facturado_real: number;
   facturado_anterior: number;
@@ -81,15 +92,23 @@ export interface EstadisticasFacturacion {
   facturado_turnos: number;
   por_cupon: CuponRendimiento[];
   cupones_resumen: CuponesResumen;
+  /**
+   * Comparación entre locales. Viene con TODOS los locales aunque el panel
+   * esté filtrado a uno: un gráfico de comparación con una sola barra no
+   * compara nada.
+   */
+  por_sucursal: SucursalResumen[];
 }
 
 export function obtenerFacturacion(
   desde: string,
   hasta: string,
   recursoId?: number | null,
+  sucursalId?: number | null,
 ): Promise<EstadisticasFacturacion> {
   const p = new URLSearchParams({ desde, hasta });
   if (recursoId != null) p.set("recurso_id", String(recursoId));
+  if (sucursalId != null) p.set("sucursal_id", String(sucursalId));
   return api.get<EstadisticasFacturacion>(
     `/estadisticas/facturacion?${p.toString()}`,
   );
