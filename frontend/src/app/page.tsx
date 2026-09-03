@@ -160,6 +160,106 @@ export default function Page() {
           de manual: hay gente a la que el movimiento continuo le da mareo, y
           esta es una página de venta que se abre desde el celular. */}
       <style>{`
+        /* ── Barra superior ──────────────────────────────────────────────
+           Grilla de tres columnas (1fr · auto · 1fr) y no space-between: con
+           space-between el grupo del medio se centra entre el logo y los
+           botones, que miden distinto, así que los links quedaban corridos a
+           la izquierda del centro real de la página. Con las dos columnas de
+           los costados iguales, el menú cae exactamente en el eje. */
+        .nav-barra {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+        }
+        .nav-links {
+          display: flex; align-items: center; gap: 26px;
+          justify-self: center;
+        }
+        .nav-accesos { justify-self: end; }
+
+        /* Los dos accesos comparten alto, radio y tipografía: leen como un
+           par, no como un texto suelto al lado de un botón. */
+        .nav-boton {
+          display: inline-flex; align-items: center; justify-content: center;
+          gap: 8px;
+          height: 42px; padding: 0 20px;
+          border-radius: 999px;
+          font-size: 15px; font-weight: 600;
+          white-space: nowrap; text-decoration: none;
+          transition: background-color .18s ease, border-color .18s ease,
+                      box-shadow .18s ease, transform .18s ease, color .18s ease;
+        }
+        .nav-boton:focus-visible {
+          outline: 2px solid #12b886;
+          outline-offset: 3px;
+        }
+
+        /* Secundario: contorno en vez de texto pelado. Sin forma propia, al
+           lado de una píldora sólida parecía un link olvidado. */
+        .nav-boton-suave {
+          color: #39414f;
+          background: #fff;
+          border: 1px solid #e4e8ee;
+        }
+        .nav-boton-suave:hover {
+          background: #f7f9fb;
+          border-color: #cfd6e0;
+          color: #1c222c;
+        }
+
+        /* Principal: el peso visual va acá. La sombra es apenas un apoyo, no
+           un resplandor — el brillo fuerte queda para el botón del hero. */
+        .nav-boton-fuerte {
+          color: #fff;
+          background: #1c222c;
+          border: 1px solid #1c222c;
+          padding: 0 22px;
+          box-shadow: 0 1px 2px rgba(28,34,44,.16);
+        }
+        .nav-boton-fuerte:hover {
+          background: #0f141c;
+          box-shadow: 0 6px 18px rgba(28,34,44,.22);
+          transform: translateY(-1px);
+        }
+        .nav-boton-fuerte:active { transform: translateY(0); }
+        .nav-flecha { transition: transform .18s ease; }
+        .nav-corto { display: none; }
+        .nav-boton-fuerte:hover .nav-flecha { transform: translateX(3px); }
+
+        /* El menú cae en el eje mientras las dos columnas de los costados
+           tengan lugar de sobra; la que manda es la derecha, porque los
+           accesos con la etiqueta larga miden 320px. Por debajo de ~1240 ya
+           no entran los dos lados iguales y el menú se empieza a correr a la
+           izquierda, que es justo lo que queríamos arreglar. Así que a partir
+           de ahí los accesos acortan la etiqueta: pasan a medir ~170 y el
+           menú vuelve a quedar centrado hasta que lo escondemos. */
+        @media (max-width: 1240px) {
+          .nav-largo { display: none; }
+          .nav-corto { display: inline; }
+          .nav-flecha { display: none; }
+        }
+
+        /* Angosto: el menú del medio no entra y empujaría los accesos fuera
+           de la pantalla. Las secciones siguen a un scroll de distancia.
+           Ojo: el display del menú va acá y no en un style inline, porque un
+           inline le gana a la media query y el menú no se escondía — el
+           header terminaba en dos renglones en el celular. */
+        @media (max-width: 900px) {
+          .nav-barra { grid-template-columns: auto 1fr; }
+          .nav-links { display: none; }
+        }
+
+        /* Celular: los dos accesos completos no entraban al lado de la marca
+           (medían ~460px de los ~350px útiles). En vez de sacar uno —el que
+           ya es cliente también tiene que poder entrar— achicamos la píldora. */
+        @media (max-width: 560px) {
+          .nav-boton { height: 40px; padding: 0 14px; font-size: 14px; }
+          .nav-boton-fuerte { padding: 0 16px; gap: 6px; }
+        }
+        @media (max-width: 360px) {
+          .nav-boton { padding: 0 12px; }
+        }
+
         @keyframes correr-cinta {
           from { transform: translateX(0); }
           to   { transform: translateX(-50%); }
@@ -237,12 +337,12 @@ export default function Page() {
 
     <div style={{ fontFamily: font.texto, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
       {/* NAV */}
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
+      <nav className="nav-barra" style={{ gap: 16, padding: "12px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/img/logo.png" alt="Turnos360" style={{ width: 38, height: 38, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <div className="nav-links">
           <a href="#funciones" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Funciones</a>
           <a href="#como-funciona" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Cómo funciona</a>
           <a href="#rubros" style={{ color: "#5d6578", fontSize: 15, fontWeight: 500, textDecoration: "none" }}>Rubros</a>
@@ -252,20 +352,16 @@ export default function Page() {
         {/* Los dos accesos que espera cualquiera arriba a la derecha: el que
             YA es cliente entra, y el que recién llega se da de alta. Antes
             había uno solo ("Ingresar") y el alta era por WhatsApp. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Link
-          href="/login"
-          style={{ color: "#5d6578", fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textDecoration: "none" }}
-        >
-          Iniciar sesión
-        </Link>
-        <Link
-          href="/registro"
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#1c222c", color: "#fff", fontWeight: 700, fontSize: 15, padding: "10px 22px", borderRadius: 999, whiteSpace: "nowrap", textDecoration: "none" }}
-        >
-          Comenzar gratis
-          <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>→</span>
-        </Link>
+        <div className="nav-accesos" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link href="/login" className="nav-boton nav-boton-suave">
+            <span className="nav-largo">Iniciar sesión</span>
+            <span className="nav-corto">Entrar</span>
+          </Link>
+          <Link href="/registro" className="nav-boton nav-boton-fuerte">
+            <span className="nav-largo">Comenzar gratis</span>
+            <span className="nav-corto">Empezar</span>
+            <span aria-hidden className="nav-flecha" style={{ fontSize: 17, lineHeight: 1 }}>→</span>
+          </Link>
         </div>
       </nav>
 
