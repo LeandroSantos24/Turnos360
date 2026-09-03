@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { WA_LINK_DEMO as WA_LINK, INSTAGRAM, EMAIL_CONTACTO } from "@/lib/contacto";
 import {
+  PRECIO_MENSUAL,
   PRECIO_MENSUAL_TEXTO,
   PRECIO_NORMAL_TEXTO,
   PROMO_ACTIVA,
@@ -71,6 +72,20 @@ const rubros: { emoji: string; label: string; img?: string }[] = [
   { emoji: "🧑‍⚕️", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
 ];
 
+/**
+ * Multisucursal, lo que se terminó de construir en la fase 3.
+ *
+ * Va en la landing porque es el diferencial más caro del rubro: el
+ * competidor que lo tiene lo cobra en su plan más alto, y el otro
+ * directamente no lo tiene. Cada punto es algo que YA anda, no una promesa.
+ */
+const locales = [
+  { title: "Una caja por local", body: "Cada sucursal abre y cierra la suya. Los turnos, las gift cards, los abonos y los gastos caen en la caja del local donde pasaron." },
+  { title: "Cada uno con su equipo", body: "El profesional queda atado a su sucursal y solo ve su agenda. El dueño ve todas, y puede filtrar por local cuando quiere." },
+  { title: "Comparás locales de verdad", body: "Facturación, turnos y ausencias de un local contra el otro, en el mismo gráfico. Ahí se ve cuál rinde y cuál no." },
+  { title: "Tu cliente elige dónde", body: "La página de reservas muestra los locales abiertos con su dirección, y cada uno puede tener su propio precio." },
+];
+
 const planItems = [
   "Agenda con carriles paralelos",
   "Página de reservas propia (tu link y tu QR)",
@@ -97,6 +112,50 @@ const faqs = [
   { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
   { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis. Arrancamos por WhatsApp: te damos de alta el negocio con tus servicios, tu equipo y tu página, y lo usás con clientes reales. Recién al día ${DIAS_PRUEBA} decidís si seguís. No pedimos tarjeta.` },
 ];
+
+/**
+ * Datos estructurados para Google (schema.org).
+ *
+ * Se arman del mismo array `faqs` que se muestra en pantalla, a propósito: si
+ * quedaran duplicados a mano, el día que cambie una respuesta uno de los dos
+ * queda viejo — y a Google eso le importa, marca el schema como no coincidente.
+ *
+ * El FAQPage hace que las preguntas aparezcan desplegables debajo del
+ * resultado de búsqueda; el SoftwareApplication con su Offer, que se vea el
+ * precio. Es de lo poco de SEO que da resultado visible rápido.
+ */
+const SITIO = process.env.NEXT_PUBLIC_SITE_URL || "https://turnos360.com.ar";
+
+function datosEstructurados(preguntas: { q: string; a: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        name: "Turnos360",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        url: SITIO,
+        description:
+          "Agenda online, seña con Mercado Pago, recordatorios automáticos, caja y comisiones para barberías, peluquerías, salones y centros de estética de Argentina.",
+        offers: {
+          "@type": "Offer",
+          price: String(PRECIO_MENSUAL),
+          priceCurrency: "ARS",
+          url: `${SITIO}/#precios`,
+        },
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: preguntas.map((f) => ({
+          "@type": "Question",
+          name: f.q,
+          acceptedAnswer: { "@type": "Answer", text: f.a },
+        })),
+      },
+    ],
+  };
+}
 
 function FotoRubro({ src, emoji, label }: { src?: string; emoji: string; label: string }) {
   const [falló, setFalló] = useState(false);
@@ -149,6 +208,11 @@ export default function Page() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(datosEstructurados(faqs)) }}
+      />
+
       {/* Todo el movimiento de la landing en un solo lugar.
 
           Las rotaciones se repiten dentro de cada keyframe porque `transform`
@@ -260,6 +324,71 @@ export default function Page() {
           .nav-boton { padding: 0 12px; }
         }
 
+        /* ── Llamados a la acción ────────────────────────────────────────
+           Una sola forma para los botones grandes de toda la página: antes
+           cada sección repetía su propio bloque de estilos inline y ninguno
+           tenía hover ni foco visible. */
+        .cta {
+          display: inline-flex; align-items: center; justify-content: center;
+          gap: 10px;
+          padding: 15px 28px;
+          border-radius: 999px;
+          font-size: 17px; font-weight: 700;
+          white-space: nowrap; text-decoration: none;
+          transition: background-color .18s ease, border-color .18s ease,
+                      box-shadow .18s ease, transform .18s ease, color .18s ease;
+        }
+        .cta:focus-visible { outline: 2px solid #12b886; outline-offset: 3px; }
+        .cta-flecha { transition: transform .18s ease; }
+        .cta:hover .cta-flecha { transform: translateX(3px); }
+
+        .cta-fuerte {
+          background: #12b886; color: #fff;
+          border: 1px solid #12b886;
+          box-shadow: 0 8px 24px rgba(18,184,134,0.28);
+        }
+        .cta-fuerte:hover {
+          background: #0fa377; border-color: #0fa377;
+          box-shadow: 0 12px 30px rgba(18,184,134,0.34);
+          transform: translateY(-1px);
+        }
+        .cta-fuerte:active { transform: translateY(0); }
+
+        .cta-suave {
+          background: #fff; color: #1c222c;
+          border: 1px solid #e4e8ee;
+        }
+        .cta-suave:hover { background: #f7f9fb; border-color: #cfd6e0; }
+
+        /* Los dos de la sección de cierre, que va sobre fondo oscuro. */
+        .cta-claro { background: #12b886; }
+        .cta-oscuro {
+          background: rgba(255,255,255,0.06); color: #fff;
+          border: 1px solid rgba(255,255,255,0.22);
+        }
+        .cta-oscuro:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.4); }
+
+        /* ── Barra fija del celular ──────────────────────────────────────── */
+        .barra-movil { display: none; }
+        @media (max-width: 720px) {
+          .barra-movil {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #eef1f5;
+          }
+          .barra-movil .cta { padding: 13px 20px; font-size: 16px; box-shadow: none; }
+          .barra-movil-wa {
+            display: flex; align-items: center; justify-content: center;
+            width: 48px; height: 48px; flex-shrink: 0;
+            border: 1px solid #e4e8ee; border-radius: 999px; background: #fff;
+          }
+          /* Para que la barra no tape la última línea del footer. */
+          footer { padding-bottom: 88px; }
+        }
+
         @keyframes correr-cinta {
           from { transform: translateX(0); }
           to   { transform: translateX(-50%); }
@@ -368,17 +497,29 @@ export default function Page() {
       {/* HERO */}
       <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)", padding: "clamp(48px,8vw,96px) clamp(16px,5vw,64px) clamp(40px,6vw,72px)", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ flex: "1 1 420px", minWidth: 300 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho para barberías, peluquerías y salones de Argentina</div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho en Argentina para negocios que trabajan con turnos</div>
           <h1 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
           <p style={{ fontSize: "clamp(16px,2vw,19px)", lineHeight: 1.6, color: "#5d6578", margin: "0 0 28px", maxWidth: 520, textWrap: "pretty" as any }}>Con Turnos360 tus clientes reservan solos, pagan la seña con Mercado Pago y reciben recordatorios automáticos. Vos atendés; el sistema agenda, cobra y te muestra los números.</p>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
-            <a href={WA_LINK} target="_blank" style={{ display: "flex", alignItems: "center", gap: 10, background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>
-              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#8bc540" }} />
-              Hablemos por WhatsApp
+          {/* El botón grande crea la cuenta. Antes mandaba a WhatsApp y el nav,
+              dos centímetros más arriba, decía "Comenzar gratis": el que venía
+              de la publicidad leía dos cosas distintas en la misma pantalla.
+              El alta asistida no se pierde — baja a ser la segunda opción, que
+              es lo que en realidad es. */}
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+            <Link href="/registro" className="cta cta-fuerte">
+              Crear mi cuenta gratis
+              <span aria-hidden className="cta-flecha">→</span>
+            </Link>
+            <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta cta-suave">
+              <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: "#8bc540", flexShrink: 0 }} />
+              Que me lo configuren
             </a>
-            <a href="#como-funciona" style={{ color: "#1c222c", fontWeight: 700, fontSize: 16, padding: "15px 8px", textDecoration: "none" }}>Ver cómo funciona ↓</a>
           </div>
-          <p style={{ fontSize: 13, color: "#8b93a7", margin: "18px 0 0" }}>Sin autoservicio: te lo configuramos nosotros y te lo entregamos andando.</p>
+          <p style={{ fontSize: 13.5, color: "#8b93a7", margin: "16px 0 0", lineHeight: 1.55 }}>
+            {DIAS_PRUEBA} días gratis · No pedimos tarjeta · Cancelás cuando quieras.
+            <br />
+            <span style={{ color: "#5d6578" }}>¿Preferís no cargar nada vos? Te damos de alta el negocio por WhatsApp, gratis.</span>
+          </p>
         </div>
         <div style={{ flex: "1 1 380px", minWidth: 300, display: "flex", justifyContent: "center" }}>
           <div style={{ position: "relative", width: "100%", maxWidth: 420 }}>
@@ -603,6 +744,63 @@ export default function Page() {
         </div>
       </section>
 
+      {/* MULTISUCURSAL */}
+      <section id="sucursales" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)" }}>
+          <div style={{ flex: "1 1 420px", minWidth: 300 }}>
+            <div style={{ display: "inline-flex", background: "#eef2ff", color: "#4338ca", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 16 }}>Para los que tienen más de un local</div>
+            <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Dos locales, dos cajas, un solo panel.</h2>
+            <p style={{ color: "#5d6578", fontSize: 17, lineHeight: 1.6, margin: "0 0 28px", maxWidth: 520 }}>
+              Cuando abrís el segundo local, la mayoría de los sistemas te obliga a pagar dos cuentas y a sumar los números a mano. Acá cada sucursal tiene su caja, su equipo y su agenda, y vos las ves todas juntas.
+            </p>
+            <div style={{ display: "grid", gap: 18 }}>
+              {locales.map((l) => (
+                <div key={l.title} style={{ display: "flex", gap: 12 }}>
+                  <span style={{ color: "#12b886", fontWeight: 700, fontSize: 17, lineHeight: 1.45, flexShrink: 0 }}>✓</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 16.5, marginBottom: 4 }}>{l.title}</div>
+                    <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{l.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Comparativa de dos locales. Son números de ejemplo y la etiqueta
+              lo dice: la landing no puede insinuar que son reales. */}
+          <div style={{ flex: "1 1 360px", minWidth: 300 }}>
+            <div style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 24, boxShadow: "0 24px 60px rgba(28,34,44,0.10)", padding: "clamp(20px,3vw,28px)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>Comparativa del mes</span>
+                <span style={{ fontSize: 12, color: "#8b93a7", background: "#f3f5f8", borderRadius: 999, padding: "4px 10px" }}>Ejemplo</span>
+              </div>
+              {[
+                { nombre: "El Faro · Centro", monto: "$1.840.000", turnos: "212 turnos", barra: 100, color: "#12b886" },
+                { nombre: "El Faro · Godoy Cruz", monto: "$1.115.000", turnos: "141 turnos", barra: 61, color: "#8bc540" },
+              ].map((l) => (
+                <div key={l.nombre} style={{ marginBottom: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, gap: 12 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14.5 }}>{l.nombre}</span>
+                    <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 17 }}>{l.monto}</span>
+                  </div>
+                  <div style={{ height: 10, borderRadius: 999, background: "#f0f2f6", overflow: "hidden" }}>
+                    <div style={{ width: `${l.barra}%`, height: "100%", borderRadius: 999, background: l.color }} />
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#8b93a7", marginTop: 6 }}>{l.turnos}</div>
+                </div>
+              ))}
+              <div style={{ borderTop: "1px solid #eef1f5", paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13.5, color: "#5d6578" }}>Caja abierta hoy</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700 }}>2 de 2 locales</span>
+              </div>
+            </div>
+            <p style={{ fontSize: 13, color: "#8b93a7", margin: "14px 4px 0", textAlign: "center" }}>
+              Incluido en el plan, sin costo por local extra.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* COMO FUNCIONA */}
       <section id="como-funciona" style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -689,8 +887,17 @@ export default function Page() {
                 </div>
               ))}
             </div>
-            <a href={WA_LINK} target="_blank" style={{ display: "flex", justifyContent: "center", background: "#12b886", color: "#fff", fontWeight: 700, fontSize: 17, padding: "15px 28px", borderRadius: 999, boxShadow: "0 8px 24px rgba(18,184,134,0.28)", textDecoration: "none" }}>Probalo gratis {DIAS_PRUEBA} días</a>
-            <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0" }}>Arrancamos por WhatsApp: te lo dejamos configurado y andando.</p>
+            <Link href="/registro" className="cta cta-fuerte" style={{ width: "100%" }}>
+              Probalo gratis {DIAS_PRUEBA} días
+              <span aria-hidden className="cta-flecha">→</span>
+            </Link>
+            <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0", lineHeight: 1.55 }}>
+              Te das de alta solo, sin tarjeta.{" "}
+              <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: "#0e8371", fontWeight: 600 }}>
+                O que te lo configuremos gratis
+              </a>
+              .
+            </p>
           </div>
         </div>
       </section>
@@ -721,6 +928,28 @@ export default function Page() {
         </div>
       </section>
 
+      {/* CIERRE */}
+      <section style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(28px,4vw,44px)", lineHeight: 1.12, color: "#fff", margin: "0 0 16px" }}>
+            Mañana a esta hora podés tener la agenda cobrando sola.
+          </h2>
+          <p style={{ color: "#b8bfcc", fontSize: "clamp(16px,2vw,18px)", lineHeight: 1.6, margin: "0 auto 32px", maxWidth: 560 }}>
+            El alta lleva dos minutos y son {DIAS_PRUEBA} días gratis. Si no te sirve, no pagás nada: nunca te pedimos la tarjeta.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12 }}>
+            <Link href="/registro" className="cta cta-fuerte cta-claro">
+              Crear mi cuenta gratis
+              <span aria-hidden className="cta-flecha">→</span>
+            </Link>
+            <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta cta-oscuro">
+              <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: "#8bc540", flexShrink: 0 }} />
+              Hablar por WhatsApp
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER */}
       <footer style={{ borderTop: "1px solid #eef1f5", padding: "28px clamp(16px,5vw,64px)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -736,6 +965,15 @@ export default function Page() {
             <Link href="/privacidad" style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}>
               Política de privacidad
             </Link>
+            <span style={{ color: "#cfd5de", fontSize: 13.5 }}>·</span>
+            <a
+              href={WA_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#5d6578", fontSize: 13.5, textDecoration: "none" }}
+            >
+              WhatsApp
+            </a>
             <span style={{ color: "#cfd5de", fontSize: 13.5 }}>·</span>
             <a
               href={INSTAGRAM}
@@ -754,6 +992,27 @@ export default function Page() {
           </span>
         </div>
       </footer>
+
+      {/* En el celular el botón del hero se pierde al segundo scroll y el
+          siguiente recién aparece en Precios. Esta barra queda siempre a mano.
+          Solo en pantallas chicas: en escritorio ya está el del nav. */}
+      <div className="barra-movil">
+        <Link href="/registro" className="cta cta-fuerte" style={{ flex: 1, justifyContent: "center" }}>
+          Crear mi cuenta gratis
+        </Link>
+        <a
+          href={WA_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Escribinos por WhatsApp"
+          className="barra-movil-wa"
+        >
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="#25D366" aria-hidden focusable="false">
+            <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.39-1.47-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.14-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.01-1.04 2.48s1.06 2.87 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.71 2-1.4.25-.69.25-1.28.17-1.4-.07-.13-.27-.2-.57-.35z"/>
+            <path d="M12.04 2C6.6 2 2.17 6.43 2.17 11.87c0 1.74.46 3.44 1.32 4.94L2.09 22l5.33-1.38a9.83 9.83 0 0 0 4.62 1.17h.01c5.44 0 9.87-4.43 9.87-9.87 0-2.64-1.03-5.12-2.9-6.98A9.8 9.8 0 0 0 12.04 2zm0 1.79c2.16 0 4.19.84 5.72 2.37a8.03 8.03 0 0 1 2.37 5.71c0 4.46-3.63 8.09-8.09 8.09a8.1 8.1 0 0 1-4.12-1.13l-.3-.18-3.06.8.82-3-.19-.31a8.04 8.04 0 0 1-1.24-4.31c0-4.46 3.63-8.08 8.09-8.08z"/>
+          </svg>
+        </a>
+      </div>
     </div>
     </>
   );
