@@ -48,6 +48,13 @@ class EmpresaActualOut(BaseModel):
     # negocio de una silla nunca ve la palabra. Sale de la grilla de planes,
     # con el override de la ficha comercial si lo hay.
     limite_sucursales: int = 1
+    # El plan que tiene, para mostrarlo en el pie de la barra lateral.
+    plan_codigo: str = "gratuito"
+    plan_etiqueta: str = "Prueba"
+    # Las funciones que ese plan incluye ("membresias", "gift_cards", …). Lo
+    # que NO está acá se muestra con candado y con a dónde ir para tenerlo,
+    # en vez de esconderse: esconder una función no la vende.
+    funciones: list[str] = []
 
 
 class LandingConfig(BaseModel):

@@ -37,9 +37,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import planes
 from app.core.config import settings
 from app.core.crypto import hash_clave
-from app.models import Recurso, Usuario
+from app.models import Empresa, Recurso, Usuario
 from app.models.enums import RolUsuario
 from app.services import auditoria
 from app.services import sucursal as sucursal_svc
@@ -209,8 +210,50 @@ def _miembro_de(db: Session, empresa_id: int, usuario_id: int) -> Usuario:
     return u
 
 
+def _validar_cupo_usuarios(db: Session, empresa_id: int) -> None:
+    """El tope de cuentas del plan, aplicado al alta y a la reactivación.
+
+    Se cuentan los usuarios ACTIVOS: el empleado que se fue y quedó
+    desactivado no sigue ocupando un asiento, igual que un profesional
+    desactivado no ocupa lugar en la agenda.
+
+    POR QUÉ EL TOPE ES FLOJO
+    Un usuario no es lo mismo que un profesional. El profesional ocupa una
+    columna de la agenda y es lo que escala con el tamaño del negocio; el
+    usuario es simplemente quien entra con su clave, y puede ser una
+    recepcionista que no atiende a nadie. Apretar acá empuja a que compartan
+    una sola clave entre cuatro, y ahí se pierde saber quién cobró qué y quién
+    firmó el arqueo — que es peor para el negocio y para nosotros.
+    """
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        return
+    tope = planes.tope_usuarios(empresa.plan)
+    if tope is None:
+        return
+
+    usados = db.scalar(
+        select(func.count(Usuario.id)).where(
+            Usuario.empresa_id == empresa_id, Usuario.activo.is_(True)
+        )
+    ) or 0
+    if usados < tope:
+        return
+
+    lim = planes.limites_de(empresa.plan)
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"Tu plan {lim.etiqueta} incluye {tope} "
+        f"{'cuenta' if tope == 1 else 'cuentas'} y ya "
+        f"{'la tenés' if tope == 1 else 'las tenés'} en uso. Para sumar otra, "
+        "pasá al plan siguiente desde «Mi suscripción» — o desactivá a alguien "
+        "que ya no trabaje acá.",
+    )
+
+
 def crear_miembro(db: Session, empresa_id: int, datos) -> dict:
     """Da de alta un empleado. El rol ya viene acotado por el schema."""
+    _validar_cupo_usuarios(db, empresa_id)
     _email_libre(db, datos.email)
     u = Usuario(
         empresa_id=empresa_id,
@@ -260,6 +303,10 @@ def editar_miembro(
         )
 
     cambios = datos.model_dump(exclude_unset=True)
+    # Reactivar ocupa un asiento igual que dar de alta. Sin esto el tope se
+    # esquiva en dos pasos: desactivo a uno, creo al nuevo, reactivo al primero.
+    if cambios.get("activo") is True and not u.activo:
+        _validar_cupo_usuarios(db, empresa_id)
     if "email" in cambios and cambios["email"]:
         _email_libre(db, cambios["email"], excepto_id=u.id)
 

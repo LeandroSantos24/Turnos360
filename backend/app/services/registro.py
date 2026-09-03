@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.models import Empresa, Rubro, Usuario
 from app.models.enums import RolUsuario
+from app.services import catalogo_inicial as catalogo_svc
 from app.services import metodos_pago as metodos_pago_svc
 from app.services import sucursal as sucursal_svc
 
@@ -106,6 +107,11 @@ def registrar(db: Session, datos) -> tuple[Empresa, Usuario, str]:
     # solo un domingo a la noche encuentra la pantalla de cobro vacía y no
     # puede registrar el primer turno que atienda el lunes.
     metodos_pago_svc.sembrar(db, empresa.id)
+
+    # Y con los servicios de su rubro. Sin catálogo la agenda no tiene
+    # carriles y la página pública no muestra nada para reservar: el alta
+    # terminaría en una pantalla en blanco.
+    catalogo_svc.sembrar(db, empresa.id)
 
     dueno = Usuario(
         empresa_id=empresa.id,

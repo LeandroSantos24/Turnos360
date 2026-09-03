@@ -183,8 +183,10 @@ class Settings(BaseSettings):
     # Vive acá y no repartido por el código: cambiar el precio tiene que ser
     # tocar UN número, no salir a buscarlo por cinco archivos.
     # Si cambia, actualizar también frontend/src/lib/precios.ts (el número de
-    # la landing se compila en el bundle y no puede leer esta variable).
-    precio_lista_mensual: float = 14990
+    # la landing se compila en el bundle y no puede leer esta variable) Y
+    # backend/app/core/planes.py, que es la grilla de verdad — esta variable es
+    # el precio del PLAN DE ENTRADA, y los dos tienen que decir lo mismo.
+    precio_lista_mensual: float = 11900
 
     # --- Precio promocional (opcional) --------------------------------------
     # Estrategia de lanzamiento: si PROMO_ACTIVA=true, la landing muestra el
@@ -193,7 +195,7 @@ class Settings(BaseSettings):
     # solo el precio normal y no hay rastro de promoción en ningún lado.
     # Se prende y se apaga sin tocar código.
     promo_activa: bool = False
-    precio_promo_mensual: float = 11990
+    precio_promo_mensual: float = 9900
     promo_etiqueta: str = "Precio de lanzamiento"
 
     # --- Alerta de acceso al panel de super-admin ---------------------------

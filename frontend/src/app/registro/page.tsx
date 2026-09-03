@@ -55,6 +55,7 @@ const EMOJI: Record<string, string> = {
   nutricion: "🥗",
   psicologia: "🧠",
   kinesiologia: "🤸",
+  tatuajes: "🎨",
   veterinaria: "🐶",
 };
 

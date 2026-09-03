@@ -43,14 +43,14 @@ def _multi(db, ctx, tope=5):
 #  1. El tope del plan bloquea de verdad
 # ══════════════════════════════════════════════════════════════════════
 
-def test_el_plan_basico_no_puede_abrir_un_segundo_local(client, db, armar_empresa):
+def test_el_plan_inicial_no_puede_abrir_un_segundo_local(client, db, armar_empresa):
     a = armar_empresa()
-    a.empresa.plan = planes.Plan.BASICO.value
+    a.empresa.plan = planes.Plan.INICIAL.value
     db.commit()
 
     r = _crear(client, a)
     assert r.status_code == 409, r.text
-    assert "Básico" in r.json()["detail"], (
+    assert "Inicial" in r.json()["detail"], (
         "El mensaje tiene que decir QUÉ plan tiene y cuál necesita: si no, el "
         "dueño no sabe qué hacer con el error."
     )
@@ -74,7 +74,7 @@ def test_el_override_de_la_ficha_comercial_manda_sobre_la_grilla(
 ):
     """Un cliente con un trato especial no obliga a inventar un plan nuevo."""
     a = armar_empresa()
-    a.empresa.plan = planes.Plan.BASICO.value
+    a.empresa.plan = planes.Plan.INICIAL.value
     a.empresa.limite_sucursales = 2
     db.commit()
 
@@ -240,7 +240,7 @@ def test_el_panel_sabe_cuantos_locales_permite_el_plan(client, db, armar_empresa
     """Con tope 1 el menú «Sucursales» no se muestra. Es lo que protege al
     plan de entrada: el barbero de una silla nunca ve la palabra."""
     a = armar_empresa()
-    a.empresa.plan = planes.Plan.BASICO.value
+    a.empresa.plan = planes.Plan.INICIAL.value
     db.commit()
 
     r = client.get("/empresa/actual", headers=token_de(a.dueno))

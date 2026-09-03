@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
+from app.services import catalogo_inicial as catalogo_svc
 from app.services import metodos_pago as metodos_pago_svc
 from app.services import sucursal as sucursal_svc
 
@@ -190,6 +191,9 @@ def crear_empresa(db: Session, datos) -> Empresa:
 
     # Y ninguna empresa existe sin con qué cobrar. Ver services/metodos_pago.py.
     metodos_pago_svc.sembrar(db, empresa.id)
+
+    # Y con los servicios de su rubro. Ver services/catalogo_inicial.py.
+    catalogo_svc.sembrar(db, empresa.id)
 
     db.add(
         Usuario(

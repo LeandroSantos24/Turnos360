@@ -25,19 +25,27 @@ from app.models import Rubro, SuperAdmin
 from app.presets import (
     PRESET_BARBERIA,
     PRESET_ESTETICA,
+    PRESET_KINESIOLOGIA,
     PRESET_MEDICO,
     PRESET_NUTRICION,
+    PRESET_PSICOLOGIA,
     PRESET_SPA,
+    PRESET_TATUAJES,
     PRESET_UNAS,
 )
 
+# El orden es el que ve quien se registra en el desplegable de rubro: primero
+# los que más entran, no alfabético.
 RUBROS = [
     ("barberia", "Barbería / Peluquería", PRESET_BARBERIA),
-    ("medico", "Consultorio médico", PRESET_MEDICO),
-    ("nutricion", "Nutrición", PRESET_NUTRICION),
     ("unas", "Centro de uñas / Manicura", PRESET_UNAS),
     ("estetica", "Centro de estética", PRESET_ESTETICA),
     ("spa", "Spa & Masajes", PRESET_SPA),
+    ("tatuajes", "Tatuajes & Piercings", PRESET_TATUAJES),
+    ("nutricion", "Nutrición", PRESET_NUTRICION),
+    ("kinesiologia", "Kinesiología", PRESET_KINESIOLOGIA),
+    ("psicologia", "Psicología", PRESET_PSICOLOGIA),
+    ("medico", "Consultorio médico", PRESET_MEDICO),
 ]
 
 EMAIL_DEV = "admin@turnos360.com"
@@ -101,10 +109,22 @@ def run(rotar_clave: bool = False) -> None:
         else:
             rotada = False
 
-        # Catálogo de rubros (con sus presets de terminología/módulos)
+        # Catálogo de rubros (terminología, módulos, campos de ficha y los
+        # servicios con los que nace una empresa de ese rubro).
+        #
+        # El preset de un rubro que YA existe se actualiza, no se deja como
+        # está: es configuración nuestra, no del negocio —lo que cada empresa
+        # cambia vive en su `config_pack`, que pisa al preset y no se toca acá—.
+        # Sin esta actualización, agregar un servicio sugerido o corregir una
+        # duración solo le llegaría a las bases nuevas, y las que ya corrieron
+        # el seed alguna vez se quedarían con la versión vieja para siempre.
         for codigo, nombre, preset in RUBROS:
-            if db.query(Rubro).filter_by(codigo=codigo).first() is None:
+            rubro = db.query(Rubro).filter_by(codigo=codigo).first()
+            if rubro is None:
                 db.add(Rubro(codigo=codigo, nombre=nombre, preset=preset))
+            else:
+                rubro.nombre = nombre
+                rubro.preset = preset
 
         db.commit()
         print("Seed base OK.")
@@ -116,10 +136,7 @@ def run(rotar_clave: bool = False) -> None:
             print(f"  Super-admin: {email} / {CLAVE_DEV}  (clave de DESARROLLO)")
         else:
             print(f"  Super-admin: {email}  (con la clave de SUPERADMIN_PASS)")
-        print(
-            "  Rubros disponibles: barbería, médico, nutrición, uñas, "
-            "estética, spa"
-        )
+        print(f"  Rubros disponibles ({len(RUBROS)}): " + ", ".join(n for _, n, _ in RUBROS))
         print("  Entrá al panel /admin para crear tus empresas y usuarios.")
     finally:
         db.close()

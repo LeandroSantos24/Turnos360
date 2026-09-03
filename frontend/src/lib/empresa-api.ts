@@ -26,7 +26,27 @@ export interface ConfigEmpresa {
    * si la palabra aparece en pantalla.
    */
   limite_sucursales: number;
+  /** El plan contratado, para el pie de la barra lateral. */
+  plan_codigo: string;
+  plan_etiqueta: string;
+  /**
+   * Las funciones que ese plan incluye. Lo que NO está acá se muestra con
+   * candado y con a dónde ir para tenerlo — esconderlo no lo vende, y además
+   * deja al dueño sin saber que existe.
+   */
+  funciones: FuncionDePlan[];
 }
+
+/** Espejo de `Funcion` en backend/app/core/planes.py. */
+export type FuncionDePlan =
+  | "membresias"
+  | "gift_cards"
+  | "cupones"
+  | "campanas"
+  | "comisiones"
+  | "whatsapp"
+  | "multisucursal"
+  | "estadisticas_avanzadas";
 
 /** Trae la empresa actual + el preset de su rubro (GET /empresa/actual). */
 export function obtenerConfigEmpresa(): Promise<ConfigEmpresa> {

@@ -34,6 +34,16 @@ def obtener_config(db: Session, empresa_id: int) -> dict:
             empresa.plan if empresa else None,
             empresa.limite_sucursales if empresa else None,
         ),
+        # Qué incluye el plan. El panel lo usa para poner el candado en lo que
+        # no está incluido, en vez de dejar entrar y que la pantalla falle
+        # adentro. Se manda la lista completa de una y no un endpoint por
+        # función: son ocho banderas, entran en la misma respuesta que el panel
+        # ya pide al arrancar.
+        "plan_codigo": planes.plan_de(empresa.plan if empresa else None).value,
+        "plan_etiqueta": planes.limites_de(empresa.plan if empresa else None).etiqueta,
+        "funciones": sorted(
+            f.value for f in planes.limites_de(empresa.plan if empresa else None).funciones
+        ),
     }
 
 

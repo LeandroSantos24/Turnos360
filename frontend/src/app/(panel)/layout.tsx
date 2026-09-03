@@ -37,12 +37,17 @@ import {
   LineChart,
   Receipt,
   Building2,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 
 import { isLoggedIn, clearToken } from "@/lib/auth";
 import { getMe, UsuarioMe } from "@/lib/auth-api";
-import { obtenerConfigEmpresa, ConfigEmpresa } from "@/lib/empresa-api";
+import {
+  obtenerConfigEmpresa,
+  ConfigEmpresa,
+  FuncionDePlan,
+} from "@/lib/empresa-api";
 import { ConfigRubroProvider } from "@/lib/config-rubro";
 import { esDueno, type Rol } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -62,6 +67,16 @@ type NavItem = {
   // una sola silla nunca vea la palabra "sucursal": por debajo el sistema ya
   // es multisucursal, pero la pantalla no existe hasta que hace falta.
   soloMultisucursal?: boolean;
+  /**
+   * La función del plan que hace falta para entrar acá.
+   *
+   * Ojo con la diferencia: `moduloRequerido` ESCONDE (el preset de una
+   * nutricionista no tiene gift cards, y mostrárselas sería ruido — no las va
+   * a querer nunca). `funcionRequerida` MUESTRA CON CANDADO: el dueño de una
+   * barbería en plan Inicial sí querría membresías, solo que todavía no las
+   * pagó. Esconderlas no las vende y encima lo deja sin saber que existen.
+   */
+  funcionRequerida?: FuncionDePlan;
 };
 
 // Ítems del menú, agrupados como en TurnosPro.
@@ -77,16 +92,16 @@ const NAV: NavItem[] = [
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
   { href: "/equipo", label: "Equipo", icon: Users, grupo: "negocio", soloDueno: true },
   { href: "/sucursales", label: "Sucursales", icon: Building2, grupo: "negocio", soloDueno: true, soloMultisucursal: true },
-  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true },
-  { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards" },
+  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true, funcionRequerida: "membresias" },
+  { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards", funcionRequerida: "gift_cards" },
   { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
   // WhatsApp queda FUERA del menú para el lanzamiento: el circuito está
   // entero en el código pero no hay proveedor real conectado (WA_PROVEEDOR=
   // simulado), así que la pantalla no le sirve todavía a ningún dueño.
   // Para encenderlo más adelante —por empresa— alcanza con poner
   // "whatsapp": true en los módulos del preset de esa empresa.
-  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "negocio", soloDueno: true, moduloRequerido: "whatsapp" },
-  { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true },
+  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "negocio", soloDueno: true, moduloRequerido: "whatsapp", funcionRequerida: "whatsapp" },
+  { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true, funcionRequerida: "cupones" },
   { href: "/cuenta", label: "Mi cuenta", icon: UserCircle, grupo: "config" },
   { href: "/suscripcion", label: "Mi suscripción", icon: Receipt, grupo: "config", soloDueno: true },
   { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "negocio", soloDueno: true },
@@ -172,6 +187,8 @@ export default function PanelLayout({
 
   const dueno = esDueno(usuario.rol as Rol);
   const esProfesional = usuario.rol === "profesional";
+  // Set y no array: esto se consulta una vez por ítem del menú en cada render.
+  const funciones = new Set(config.funciones ?? []);
 
   // Mientras se concreta la redirección, no mostramos contenido de gestión
   // (evita el flash del dashboard del dueño antes de saltar a "Mi día").
@@ -255,6 +272,34 @@ export default function PanelLayout({
                         ? pathname === "/inicio"
                         : pathname.startsWith(item.href);
                     const Icono = item.icon;
+
+                    // Incluido en el plan, o no. Se MUESTRA igual: un candado
+                    // que se puede tocar y lleva a «Mi suscripción» le enseña
+                    // al dueño qué más hay; esconder la sección no vende nada
+                    // y encima lo deja sin saber que existe.
+                    const conCandado =
+                      item.funcionRequerida !== undefined &&
+                      !funciones.has(item.funcionRequerida);
+
+                    if (conCandado) {
+                      return (
+                        <Link
+                          key={item.href}
+                          href="/suscripcion"
+                          title={`${labelNav(item)} viene con el plan Pro`}
+                        >
+                          <div
+                            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+                            style={{ color: "rgba(255,255,255,0.3)" }}
+                          >
+                            <Icono size={17} className="shrink-0" />
+                            <span>{labelNav(item)}</span>
+                            <Lock size={13} className="ml-auto shrink-0" />
+                          </div>
+                        </Link>
+                      );
+                    }
+
                     return (
                       <Link key={item.href} href={item.href}>
                         <div
@@ -345,6 +390,18 @@ export default function PanelLayout({
                 style={{ color: "rgba(255,255,255,0.35)" }}
               >
                 {ROL_LABEL[usuario.rol as string] ?? usuario.rol}
+                {/* El plan, al lado del rol. Va acá y no en una pantalla
+                    aparte porque es el dato que explica por qué algunas
+                    secciones tienen candado: sin verlo, el candado parece un
+                    error del sistema en vez de una decisión de plan. */}
+                {dueno && config.plan_etiqueta && (
+                  <>
+                    {" · "}
+                    <span style={{ color: "hsl(168 100% 42%)" }}>
+                      {config.plan_etiqueta}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>

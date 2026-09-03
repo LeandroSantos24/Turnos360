@@ -1,48 +1,112 @@
-"""La grilla de planes: precios y límites, en UN solo lugar.
+"""La grilla de planes: precios, cupos y qué incluye cada uno, en UN solo lugar.
 
 POR QUÉ EXISTE ESTE ARCHIVO
 ───────────────────────────
 Antes el "plan" era un `String(20)` libre en `empresa.plan`, sin enum ni CHECK.
 Circulaban dos valores, `"gratuito"` y `"pro"`, y `"pro"` se escribía en un
 único lugar de todo el backend: como efecto lateral del botón "Renovar 30
-días". Los precios vivían en otro lado (config.py), los límites en otro
-(`empresa.limite_recursos`), y ninguno de los dos se hablaba con el plan.
+días". Los precios vivían en otro lado (config.py) y los límites en otro
+(`empresa.limite_recursos`), y ninguno se hablaba con el plan. Una empresa
+podía pagar la cuota por Mercado Pago durante un año y seguir figurando en
+`"gratuito"`; una del plan de 3 profesionales podía cargar 40 sin que nada se
+lo impidiera.
 
-Resultado: una empresa podía pagar la cuota por Mercado Pago durante un año y
-seguir figurando en `"gratuito"`, y una del plan de 3 profesionales podía cargar
-40 sin que nada se lo impidiera. El límite se pintaba en ámbar en el panel del
-super-admin y no bloqueaba absolutamente nada.
+LOS TRES EJES VAN SEPARADOS
+───────────────────────────
+Profesionales, usuarios y sucursales. Son tres cosas distintas y confundirlas
+sale caro:
 
-LOS DOS EJES VAN SEPARADOS
-──────────────────────────
-Profesionales por un lado, sucursales por el otro. Así el plan del medio se
-puede vender hoy, sin esperar a que multisucursal esté terminado.
+  · PROFESIONAL es quien ocupa una columna de la agenda — el que atiende. Es lo
+    que de verdad escala con el tamaño del negocio y lo que se cobra.
+  · USUARIO es quien entra al sistema con su clave. Un profesional que no toca
+    la computadora no necesita usuario; una recepcionista que no atiende a
+    nadie sí. Se limita por separado y con la mano floja: cobrar por asiento a
+    una peluquería de barrio es la forma más rápida de que compartan una clave
+    entre cuatro, que es peor para todos —empezando por la trazabilidad de la
+    caja—.
+  · SUCURSAL es un local con su propia caja, su equipo y su agenda.
 
-EL PLAN BÁSICO ES EL ESTRELLA
-─────────────────────────────
-Es el criterio de aceptación de todo lo que se construya: el negocio de una
-sola sucursal y tres profesionales tiene que seguir viendo la aplicación
-exactamente igual de simple. Los límites de arriba no se le muestran hasta que
-los toca.
+EL PRECIO ENTRA POR DEBAJO DE LA COMPETENCIA
+────────────────────────────────────────────
+Ágora —el competidor directo en Argentina— cobra $11.900 con plan único.
+Inicial sale lo mismo y da la agenda completa con página de reservas y señas;
+el salto a Pro se paga por el equipo más grande y por lo que hace ganar plata
+(membresías, gift cards, cupones, campañas), y el salto a Multi por lo que
+ningún competidor del segmento tiene terminado: varios locales de verdad.
+
+EL PLAN DE ENTRADA ES EL CRITERIO DE ACEPTACIÓN
+───────────────────────────────────────────────
+Todo lo que se construya tiene que dejar al negocio de un solo local y dos
+profesionales viendo la aplicación exactamente igual de simple. Los límites de
+arriba no se le muestran hasta que los toca.
 """
 
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Plan(str, enum.Enum):
     """Los planes que se pueden contratar.
 
-    `GRATUITO` no es un plan que se venda: es el estado de una empresa en
-    período de prueba o dada de alta a dedo por el super-admin. Se le dan los
-    mismos límites que al Básico para que la prueba sea representativa de lo
-    que va a pagar.
+    `GRATUITO` no se vende: es el estado de una empresa en período de prueba o
+    dada de alta a dedo por el super-admin. Se le dan los cupos y las funciones
+    del plan MÁS ALTO a propósito — una prueba recortada no deja probar
+    justamente lo que uno querría vender, y el negocio se va sin haber visto
+    la mitad del producto. Al vencer la prueba cae a Inicial.
     """
 
     GRATUITO = "gratuito"
-    BASICO = "basico"
+    INICIAL = "inicial"
     PRO = "pro"
     MULTI = "multi"
+
+
+class Funcion(str, enum.Enum):
+    """Lo que un plan habilita, además de los cupos.
+
+    Son las que se pueden apagar sin romper el producto: apagar la agenda no
+    tiene sentido —es para lo que se contrata—, apagar las gift cards sí.
+
+    La regla al elegir qué va en cada plan: en Inicial entra todo lo que hace
+    falta para ATENDER (agenda, página de reservas, señas, recordatorios,
+    caja, clientes). Lo que entra en Pro es lo que hace falta para VENDER MÁS
+    a los que ya son clientes.
+    """
+
+    MEMBRESIAS = "membresias"
+    GIFT_CARDS = "gift_cards"
+    CUPONES = "cupones"
+    CAMPANAS = "campanas"          # cumpleaños, inactivos, reseñas
+    COMISIONES = "comisiones"      # liquidación por profesional
+    WHATSAPP = "whatsapp"
+    MULTISUCURSAL = "multisucursal"
+    ESTADISTICAS_AVANZADAS = "estadisticas_avanzadas"
+
+
+# Lo que ya viene en Inicial. Se nombra en vez de dejarlo implícito para que
+# se lea de un vistazo qué es "lo básico".
+DE_INICIAL = frozenset(
+    {
+        Funcion.CAMPANAS,  # los recordatorios anti-ausencias son el corazón
+    }
+)
+
+DE_PRO = DE_INICIAL | frozenset(
+    {
+        Funcion.MEMBRESIAS,
+        Funcion.GIFT_CARDS,
+        Funcion.CUPONES,
+        Funcion.COMISIONES,
+        Funcion.WHATSAPP,
+    }
+)
+
+DE_MULTI = DE_PRO | frozenset(
+    {
+        Funcion.MULTISUCURSAL,
+        Funcion.ESTADISTICAS_AVANZADAS,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -51,55 +115,85 @@ class Limites:
     precio: float
     # None = sin tope. Se cuentan los recursos ACTIVOS de tipo persona.
     profesionales: int | None
+    # None = sin tope. Se cuentan los usuarios ACTIVOS.
+    usuarios: int | None
     sucursales: int
     resumen: str
+    # Para la landing: la frase de una línea que dice para quién es.
+    para_quien: str
+    funciones: frozenset[Funcion] = field(default_factory=frozenset)
+
+    def incluye(self, funcion: Funcion) -> bool:
+        return funcion in self.funciones
 
 
 GRILLA: dict[Plan, Limites] = {
     Plan.GRATUITO: Limites(
         etiqueta="Prueba",
         precio=0,
-        profesionales=3,
-        sucursales=1,
-        resumen="3 profesionales · 1 local",
+        # La prueba da los cupos del plan más alto: que el negocio cargue todo
+        # su equipo y sus dos locales y VEA el producto andando con sus datos
+        # reales. Un cupo apretado durante la prueba es una forma cara de que
+        # se vaya sin haber probado nada.
+        profesionales=None,
+        usuarios=None,
+        sucursales=2,
+        resumen="Todo desbloqueado mientras dure",
+        para_quien="Para probarlo con tus turnos de verdad, sin tarjeta.",
+        funciones=DE_MULTI,
     ),
-    Plan.BASICO: Limites(
-        etiqueta="Básico",
-        precio=14990,
-        profesionales=3,
+    Plan.INICIAL: Limites(
+        etiqueta="Inicial",
+        precio=11900,
+        profesionales=2,
+        usuarios=3,
         sucursales=1,
-        resumen="3 profesionales · 1 local",
+        resumen="2 profesionales · 1 local",
+        para_quien="El que atiende solo o con una persona más.",
+        funciones=DE_INICIAL,
     ),
     Plan.PRO: Limites(
         etiqueta="Pro",
-        precio=24990,
-        profesionales=10,
+        precio=19900,
+        profesionales=8,
+        usuarios=10,
         sucursales=1,
-        resumen="10 profesionales · 1 local",
+        resumen="8 profesionales · 1 local",
+        para_quien="El local con equipo, que ya quiere vender más a los que tiene.",
+        funciones=DE_PRO,
     ),
     Plan.MULTI: Limites(
         etiqueta="Multi",
-        precio=35990,
+        precio=32900,
         profesionales=None,
+        usuarios=None,
         sucursales=5,
         resumen="Profesionales ilimitados · hasta 5 locales",
+        para_quien="El que abrió el segundo local y necesita compararlos.",
+        funciones=DE_MULTI,
     ),
 }
 
 # El plan con el que arranca quien paga por primera vez viniendo de la prueba.
-PLAN_DE_ENTRADA = Plan.BASICO
+PLAN_DE_ENTRADA = Plan.INICIAL
 
 
 def plan_de(valor: str | None) -> Plan:
     """Convierte el string de la base en un Plan, sin explotar nunca.
 
     La columna es texto libre y estuvo así meses: puede haber cualquier cosa
-    escrita ahí. Un valor que no reconocemos se trata como GRATUITO, que es el
-    más restrictivo — nunca al revés, porque equivocarse hacia arriba sería
+    escrita ahí. Un valor que no reconocemos se trata como GRATUITO, que es lo
+    que corresponde — nunca hacia arriba, porque equivocarse hacia arriba sería
     regalar un plan que nadie pagó.
+
+    `"basico"` se mapea a INICIAL: es el nombre viejo del mismo plan, y las
+    empresas que lo tengan escrito en la base no se enteran del cambio.
     """
+    crudo = str(valor or "").strip().lower()
+    if crudo == "basico":
+        return Plan.INICIAL
     try:
-        return Plan(str(valor or "").strip().lower())
+        return Plan(crudo)
     except ValueError:
         return Plan.GRATUITO
 
@@ -122,22 +216,42 @@ def tope_profesionales(plan: str | None, override: int | None) -> int | None:
     return limites_de(plan).profesionales
 
 
+def tope_usuarios(plan: str | None, override: int | None = None) -> int | None:
+    """Cuántas cuentas con clave puede tener. None = sin tope."""
+    if override is not None:
+        return override
+    return limites_de(plan).usuarios
+
+
 def tope_sucursales(plan: str | None, override: int | None = None) -> int:
     if override is not None:
         return override
     return limites_de(plan).sucursales
 
 
+def incluye(plan: str | None, funcion: Funcion) -> bool:
+    """¿El plan de esta empresa incluye esta función?
+
+    Se pregunta con el enum y no con un string para que un typo sea un error
+    de Python y no un `False` silencioso — que en una función de gating
+    significaría dejar afuera a alguien que pagó.
+    """
+    return limites_de(plan).incluye(funcion)
+
+
 def para_mostrar() -> list[dict]:
-    """La grilla como la consume la landing y la pantalla de suscripción."""
+    """La grilla como la consumen la landing y la pantalla de suscripción."""
     return [
         {
             "codigo": p.value,
             "etiqueta": lim.etiqueta,
             "precio": lim.precio,
             "profesionales": lim.profesionales,
+            "usuarios": lim.usuarios,
             "sucursales": lim.sucursales,
             "resumen": lim.resumen,
+            "para_quien": lim.para_quien,
+            "funciones": sorted(f.value for f in lim.funciones),
         }
         for p, lim in GRILLA.items()
         if p is not Plan.GRATUITO  # la prueba no se vende

@@ -16,7 +16,7 @@
  */
 
 /** Precio normal, de lista. El que se cobra cuando no hay promoción. */
-export const PRECIO_NORMAL = 14990;
+export const PRECIO_NORMAL = 11900;
 
 /**
  * Promoción, apagada por defecto.
@@ -31,7 +31,7 @@ export const PRECIO_NORMAL = 14990;
  * con qué precio nacen las empresas nuevas.
  */
 export const PROMO_ACTIVA = false;
-export const PRECIO_PROMO = 11990;
+export const PRECIO_PROMO = 9900;
 export const PROMO_ETIQUETA = "Precio de lanzamiento";
 
 /** El precio que se cobra hoy. */
@@ -69,24 +69,28 @@ export const PLANES = [
     codigo: "gratuito",
     etiqueta: "Prueba",
     precio: 0,
-    resumen: "3 profesionales · 1 local",
+    resumen: "Todo desbloqueado mientras dure",
+    paraQuien: "Para probarlo con tus turnos de verdad, sin tarjeta.",
   },
   {
-    codigo: "basico",
-    etiqueta: "Básico",
-    precio: 14990,
-    resumen: "3 profesionales · 1 local",
+    codigo: "inicial",
+    etiqueta: "Inicial",
+    precio: 11900,
+    resumen: "2 profesionales · 3 cuentas · 1 local",
+    paraQuien: "El que atiende solo o con una persona más.",
   },
   {
     codigo: "pro",
     etiqueta: "Pro",
-    precio: 24990,
-    resumen: "10 profesionales · 1 local",
+    precio: 19900,
+    resumen: "8 profesionales · 10 cuentas · 1 local",
+    paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
   },
   {
     codigo: "multi",
     etiqueta: "Multi",
-    precio: 35990,
+    precio: 32900,
     resumen: "Profesionales ilimitados · hasta 5 locales",
+    paraQuien: "El que abrió el segundo local y necesita compararlos.",
   },
 ];

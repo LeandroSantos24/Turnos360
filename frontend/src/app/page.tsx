@@ -1,7 +1,7 @@
 "use client";
 // Landing Turnos360 — reemplaza app/page.tsx
 // Copiá las imágenes a /public/img/ con estos nombres (ver README-integracion.md)
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { WA_LINK_DEMO as WA_LINK, INSTAGRAM, EMAIL_CONTACTO } from "@/lib/contacto";
@@ -47,7 +47,7 @@ const shots = [
 
 const steps = [
   { num: "01", title: "Creás tu cuenta", body: "Elegís tu rubro, el nombre del negocio y la dirección de tu página. Dos minutos y ya estás adentro, con 14 días gratis." },
-  { num: "02", title: "Cargás tus servicios y tu equipo", body: "Con tus precios y tus horarios. Si preferís que lo hagamos nosotros, escribinos y lo dejamos andando con vos." },
+  { num: "02", title: "Corregís precios y sumás a tu equipo", body: "Los servicios típicos de tu rubro ya vienen cargados con su duración y su carril de agenda: solo ponés tus precios y tus horarios." },
   { num: "03", title: "Tus clientes reservan solos", body: "Compartís tu link, el sistema cobra la seña, manda recordatorios y vos ves los números cada noche." },
 ];
 
@@ -67,9 +67,12 @@ const rubros: { emoji: string; label: string; img?: string }[] = [
   { emoji: "✂️", label: "Peluquerías", img: "/img/rubro-peluqueria.jpg" },
   { emoji: "💅", label: "Salones de uñas", img: "/img/rubro-unas.jpg" },
   { emoji: "✨", label: "Centros de estética", img: "/img/rubro-estetica.jpg" },
-  { emoji: "🧖", label: "Spa", img: "/img/rubro-spa.jpg" },
+  { emoji: "🧖", label: "Spa y masajes", img: "/img/rubro-spa.jpg" },
+  { emoji: "🎨", label: "Tatuajes" },
   { emoji: "🥗", label: "Nutrición", img: "/img/rubro-nutricion.jpg" },
-  { emoji: "🧑‍⚕️", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
+  { emoji: "🤸", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
+  { emoji: "🧠", label: "Psicología" },
+  { emoji: "🩺", label: "Consultorios" },
 ];
 
 /**
@@ -86,17 +89,70 @@ const locales = [
   { title: "Tu cliente elige dónde", body: "La página de reservas muestra los locales abiertos con su dirección, y cada uno puede tener su propio precio." },
 ];
 
-const planItems = [
+/**
+ * Los tres planes, espejo de backend/app/core/planes.py.
+ *
+ * `incluye` es lo que ESE plan suma sobre el anterior, no la lista completa:
+ * repetir las nueve líneas en las tres columnas hace que las tres se lean
+ * iguales y el que compara no encuentra la diferencia, que es lo único que
+ * está buscando. Arriba de cada lista se dice "todo lo de X, más:".
+ */
+const BASE_INCLUIDA = [
   "Agenda con carriles paralelos",
   "Página de reservas propia (tu link y tu QR)",
   "Seña online con Mercado Pago",
   "Recordatorios automáticos anti-ausencias",
   "Caja con apertura, cierre y arqueo",
-  "Comisiones por profesional",
-  "Membresías, gift cards y cupones",
-  "Estadísticas y ficha de cada cliente",
+  "Ficha y historial de cada cliente",
   "Soporte por WhatsApp",
 ];
+
+const planes = [
+  {
+    codigo: "inicial",
+    nombre: "Inicial",
+    precio: 11900,
+    paraQuien: "El que atiende solo o con una persona más.",
+    cupos: ["2 profesionales", "3 cuentas con clave", "1 local"],
+    tituloLista: "Todo lo que hace falta para atender:",
+    incluye: BASE_INCLUIDA,
+    destacado: false,
+  },
+  {
+    codigo: "pro",
+    nombre: "Pro",
+    precio: 19900,
+    paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
+    cupos: ["8 profesionales", "10 cuentas con clave", "1 local"],
+    tituloLista: "Todo lo de Inicial, más:",
+    incluye: [
+      "Membresías y abonos mensuales",
+      "Gift cards con QR",
+      "Cupones de descuento",
+      "Comisiones por profesional",
+      "WhatsApp con recordatorios",
+    ],
+    destacado: true,
+  },
+  {
+    codigo: "multi",
+    nombre: "Multi",
+    precio: 32900,
+    paraQuien: "El que abrió el segundo local y necesita compararlos.",
+    cupos: ["Profesionales ilimitados", "Cuentas ilimitadas", "Hasta 5 locales"],
+    tituloLista: "Todo lo de Pro, más:",
+    incluye: [
+      "Una caja por local, con su arqueo",
+      "Cada local con su equipo y su agenda",
+      "Precio propio por local",
+      "Comparación de locales en un mismo gráfico",
+      "Tu cliente elige a qué local va",
+    ],
+    destacado: false,
+  },
+];
+
+const enPesos = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
 const fotos = [
   { src: "/img/foto-barberia.jpg", alt: "Barbería" },
@@ -105,12 +161,14 @@ const fotos = [
 ];
 
 const faqs = [
-  { q: "¿Tengo que saber de computación?", a: "No. Nosotros damos de alta tu negocio, cargamos tus servicios, tu equipo y tu página. Vos entrás y ya está andando. Si algo no se entiende, nos escribís por WhatsApp y lo resolvemos." },
+  { q: "¿Tengo que saber de computación?", a: "No. Te das de alta en dos minutos eligiendo tu rubro, y ya entrás con tus servicios típicos cargados, tus métodos de cobro y tu página lista: solo corregís los precios con los tuyos. Si preferís que lo dejemos configurado nosotros, escribinos por WhatsApp y lo hacemos con vos, sin cargo." },
   { q: "¿Mis clientes tienen que descargar una app?", a: "No. Reservan desde el link de tu página, en el navegador del celular. Compartís ese link en tu Instagram o tu estado de WhatsApp y listo." },
   { q: "¿Me cobran comisión por cada turno?", a: "Cero. Pagás la cuota mensual y nada más. Si cobrás la seña con Mercado Pago, la plata va directo a tu cuenta y la única comisión es la de Mercado Pago, que no tocamos." },
   { q: "¿Sirve si tengo varios barberos trabajando a la vez?", a: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada." },
   { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
-  { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis. Arrancamos por WhatsApp: te damos de alta el negocio con tus servicios, tu equipo y tu página, y lo usás con clientes reales. Recién al día ${DIAS_PRUEBA} decidís si seguís. No pedimos tarjeta.` },
+  { q: "¿Qué pasa si me queda chico el plan?", a: "Cambiás de plan cuando quieras desde «Mi suscripción» y se aplica al toque: no hay que migrar nada ni volver a cargar tus datos. Y si un mes bajás de plan, no perdés nada de lo que ya tenías cargado — simplemente no podés sumar más hasta volver a subir." },
+  { q: "¿Cuál plan me conviene?", a: "Contá cuántas personas atienden a la vez. Hasta dos, Inicial. Si tenés un equipo y querés vender membresías, gift cards o cupones, Pro. Si tenés más de un local, Multi. Durante la prueba tenés todo desbloqueado, así que probás las tres cosas y después elegís sabiendo." },
+  { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis con TODO desbloqueado —incluido lo de los planes de arriba— para que lo pruebes con clientes reales antes de elegir. No pedimos tarjeta: te das de alta solo y al día ${DIAS_PRUEBA} decidís si seguís.` },
 ];
 
 /**
@@ -205,6 +263,46 @@ function Monogram({ size = 30, invert = false }: { size?: number; invert?: boole
 export default function Page() {
   const [tab, setTab] = useState(0);
   const [faq, setFaq] = useState(-1);
+
+  /**
+   * Enciende los bloques `.revela` cuando entran en pantalla.
+   *
+   * Con IntersectionObserver y no con un listener de scroll: el listener
+   * corre en el hilo principal en cada píxel y en un celular de gama media
+   * se nota en el scroll de una página tan larga como esta.
+   *
+   * `unobserve` después de encender: una vez que apareció, no hay nada más
+   * que observar, y dejar 30 entradas vivas hasta que se cierre la pestaña es
+   * trabajo que no sirve.
+   *
+   * rootMargin negativo abajo: el bloque se enciende cuando ya entró de
+   * verdad (12 % adentro), no cuando asoma un píxel — así el movimiento se ve
+   * y no pasa desapercibido arriba del pliegue.
+   */
+  useEffect(() => {
+    const bloques = document.querySelectorAll<HTMLElement>(".revela");
+
+    // Sin soporte (o con reduced-motion), se muestran y listo: la página
+    // nunca puede quedar invisible por un efecto decorativo.
+    if (typeof IntersectionObserver === "undefined") {
+      bloques.forEach((b) => b.classList.add("visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entradas) => {
+        for (const e of entradas) {
+          if (!e.isIntersecting) continue;
+          e.target.classList.add("visible");
+          observer.unobserve(e.target);
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    );
+
+    bloques.forEach((b) => observer.observe(b));
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <>
@@ -368,6 +466,107 @@ export default function Page() {
         }
         .cta-oscuro:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.4); }
 
+        /* Las tarjetas de funciones estaban absolutamente quietas: un borde
+           de 1px y nada más. Un elemento que no reacciona al mouse se lee
+           como una imagen, no como parte de una página. */
+        .tarjeta-hover {
+          transition: transform .26s cubic-bezier(.32,.72,0,1),
+                      box-shadow .26s cubic-bezier(.32,.72,0,1),
+                      border-color .26s cubic-bezier(.32,.72,0,1);
+        }
+        .tarjeta-hover:hover {
+          transform: translateY(-3px);
+          border-color: #bfe6d8 !important;
+          box-shadow: 0 18px 40px -14px rgba(18,184,134,.24);
+        }
+
+        /* ── Grilla de planes ────────────────────────────────────────────
+           Tres columnas iguales en escritorio, una sola apilada en el
+           celular. El destacado se levanta 12px sobre los otros dos: es la
+           forma más barata de decir "este" sin escribirlo. */
+        .grilla-planes {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+          align-items: stretch;
+        }
+        .plan {
+          display: flex;
+          flex-direction: column;
+          background: #fff;
+          border: 1px solid #e6eaf0;
+          border-radius: 22px;
+          padding: 28px 26px;
+          position: relative;
+          box-shadow: 0 1px 2px rgba(28,34,44,.05), 0 8px 24px -8px rgba(28,34,44,.08);
+          transition: transform .28s cubic-bezier(.32,.72,0,1),
+                      box-shadow .28s cubic-bezier(.32,.72,0,1),
+                      border-color .28s cubic-bezier(.32,.72,0,1);
+        }
+        .plan:hover {
+          transform: translateY(-4px);
+          border-color: #bfe6d8;
+          box-shadow: 0 2px 4px rgba(28,34,44,.06), 0 22px 48px -12px rgba(18,184,134,.20);
+        }
+        .plan-destacado {
+          border: 2px solid #12b886;
+          transform: translateY(-12px);
+          box-shadow: 0 24px 60px -14px rgba(18,184,134,.28);
+        }
+        .plan-destacado:hover { transform: translateY(-16px); }
+        .plan-cinta {
+          position: absolute;
+          top: -13px; left: 50%; transform: translateX(-50%);
+          background: #12b886; color: #fff;
+          font-size: 12.5px; font-weight: 700; letter-spacing: .01em;
+          padding: 5px 16px; border-radius: 999px;
+          white-space: nowrap;
+          box-shadow: 0 6px 16px rgba(18,184,134,.34);
+        }
+
+        /* Los cupos: el dato por el que se elige un plan. Van arriba, con
+           fondo propio, para que no se pierdan entre las funciones. */
+        .plan-cupos {
+          display: flex; flex-wrap: wrap; gap: 7px;
+          margin: 20px 0 22px;
+          padding: 14px 0;
+          border-top: 1px solid #eef1f5;
+          border-bottom: 1px solid #eef1f5;
+        }
+        .plan-cupo {
+          font-size: 13px; font-weight: 600; color: #0e8371;
+          background: #eef9f4; border: 1px solid #d3efe4;
+          padding: 4px 11px; border-radius: 999px;
+        }
+
+        @media (max-width: 940px) {
+          .grilla-planes { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; gap: 26px; }
+          /* Apilados, levantar el del medio deja un hueco raro arriba y otro
+             abajo. La cinta sola alcanza para distinguirlo. */
+          .plan-destacado, .plan-destacado:hover { transform: none; }
+          .plan:hover { transform: none; }
+        }
+
+        /* ── Revelado al hacer scroll ────────────────────────────────────
+           La página entera aparecía de golpe, entera, quieta. Eso es lo que
+           se lee como "plana": no le falta color, le falta que las cosas
+           lleguen. Cada bloque sube 18px y se enciende cuando entra en
+           pantalla, escalonado con --demora.
+
+           Se hace con IntersectionObserver y no con scroll listeners: el
+           observer no corre en el hilo principal en cada píxel de scroll. */
+        .revela {
+          opacity: 0;
+          transform: translateY(18px);
+          transition: opacity .6s cubic-bezier(.32,.72,0,1),
+                      transform .6s cubic-bezier(.32,.72,0,1);
+          transition-delay: var(--demora, 0ms);
+        }
+        .revela.visible {
+          opacity: 1;
+          transform: none;
+        }
+
         /* ── Barra fija del celular ──────────────────────────────────────── */
         .barra-movil { display: none; }
         @media (max-width: 720px) {
@@ -458,6 +657,11 @@ export default function Page() {
 
         @media (prefers-reduced-motion: reduce) {
           .cinta-rubros, .flota { animation: none !important; }
+          /* Sin el reset, quien pidió menos movimiento se quedaría con la
+             página INVISIBLE: .revela arranca en opacity 0 y lo que la
+             enciende es justamente la transición. */
+          .revela { opacity: 1 !important; transform: none !important; transition: none !important; }
+          .plan, .plan:hover, .plan-destacado, .plan-destacado:hover { transform: none !important; transition: none !important; }
           .visor-panel, .visor-img { transition: none !important; }
           .visor-flecha { transition: none !important; }
           .visor-panel:hover { transform: none !important; }
@@ -466,7 +670,18 @@ export default function Page() {
 
     <div style={{ fontFamily: font.texto, color: "#1c222c", background: "#fff", minWidth: 320, overflowX: "hidden" }}>
       {/* NAV */}
-      <nav className="nav-barra" style={{ gap: 16, padding: "12px clamp(16px,5vw,64px)", borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
+      {/* La barra pinta el fondo a todo el ancho (si no, el blur cortaría en
+          seco a los costados), pero su CONTENIDO va dentro del mismo
+          contenedor de 1120 que el resto de la página.
+
+          Antes la barra usaba solo el padding lateral y el contenido llevaba
+          además `maxWidth: 1200; margin: 0 auto`. En una pantalla ancha eso
+          dejaba el logo 112 px más a la izquierda que el título del hero: los
+          dos elementos más grandes de la primera pantalla, sin alinear. Es
+          exactamente lo que se ve como "descuadrado" aunque no se sepa
+          nombrar. */}
+      <header style={{ borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
+      <nav className="nav-barra" style={{ gap: 16, padding: "12px clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/img/logo.png" alt="Turnos360" style={{ width: 38, height: 38, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
@@ -493,9 +708,10 @@ export default function Page() {
           </Link>
         </div>
       </nav>
+      </header>
 
       {/* HERO */}
-      <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)", padding: "clamp(48px,8vw,96px) clamp(16px,5vw,64px) clamp(40px,6vw,72px)", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)", padding: "clamp(48px,8vw,96px) clamp(16px,5vw,64px) clamp(40px,6vw,72px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ flex: "1 1 420px", minWidth: 300 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#eef9f4", color: "#0e8371", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>Hecho en Argentina para negocios que trabajan con turnos</div>
           <h1 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(34px,5vw,54px)", lineHeight: 1.08, margin: "0 0 20px" }}>Los que reservan y no vienen te están costando plata.</h1>
@@ -563,10 +779,10 @@ export default function Page() {
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* INTEGRACIONES */}
-      <section style={{ padding: "8px clamp(16px,5vw,64px) 56px", maxWidth: 1200, margin: "0 auto" }}>
+      <section style={{ padding: "8px clamp(16px,5vw,64px) 56px", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "clamp(24px,4vw,56px)", borderTop: "1px solid #eef1f5", paddingTop: 32 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#8b93a7", letterSpacing: "0.06em", textTransform: "uppercase" }}>Se integra con</span>
           <img src="/img/mercado-pago.png" alt="Mercado Pago" style={{ height: 44, opacity: 0.85 }} />
@@ -578,7 +794,7 @@ export default function Page() {
 
       {/* PROBLEMA */}
       <section style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,88px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(24px,4vw,56px)", marginBottom: 40 }}>
             <div style={{ flex: "1 1 380px", minWidth: 280 }}>
               <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 640 }}>Si manejás el negocio con libreta y WhatsApp, esto te suena.</h2>
@@ -587,8 +803,8 @@ export default function Page() {
             <img src="/img/duena-notebook.jpg" alt="Dueña revisando sus números en Turnos360" style={{ flex: "1 1 320px", minWidth: 280, maxWidth: 440, width: "100%", borderRadius: 20, objectFit: "cover", aspectRatio: "3 / 2", boxShadow: "0 20px 48px rgba(28,34,44,0.14)" }} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-            {pains.map((p) => (
-              <div key={p.num} style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 18, padding: 24 }}>
+            {pains.map((p, i) => (
+              <div key={p.num} className="revela" style={{ background: "#fff", border: "1px solid #e9ecf1", borderRadius: 18, padding: 24, "--demora": `${i * 70}ms` } as React.CSSProperties}>
                 <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 26, color: "#12b886", marginBottom: 12 }}>{p.num}</div>
                 <div style={{ fontWeight: 700, fontSize: 16.5, marginBottom: 8 }}>{p.title}</div>
                 <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{p.body}</div>
@@ -599,13 +815,13 @@ export default function Page() {
       </section>
 
       {/* FUNCIONALIDADES */}
-      <section id="funciones" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
+      <section id="funciones" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "inline-flex", background: "#fff7ec", color: "#b45309", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 16 }}>Lo que la agenda común no hace</div>
         <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", maxWidth: 620 }}>Anotar turnos lo hace cualquiera. Esto es lo que te diferencia.</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 0 40px", maxWidth: 600 }}>Turnos360 te dice cuánto ganaste, quién te lo generó y qué clientes dejaron de venir.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-          {features.map((f) => (
-            <div key={f.title} style={{ border: "1px solid #e9ecf1", borderRadius: 18, padding: 26, background: "#fff" }}>
+          {features.map((f, i) => (
+            <div key={f.title} className="revela tarjeta-hover" style={{ border: "1px solid #e9ecf1", borderRadius: 18, padding: 26, background: "#fff", "--demora": `${i * 70}ms` } as React.CSSProperties}>
               <div style={{ width: 42, height: 42, borderRadius: 12, background: "#eef9f4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, marginBottom: 16, color: "#0e8371", fontWeight: 700, fontFamily: font.titulo }}>{f.glyph}</div>
               <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{f.title}</div>
               <div style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.55 }}>{f.body}</div>
@@ -616,7 +832,7 @@ export default function Page() {
 
       {/* PANEL / TABS */}
       <section style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto", textAlign: "center" }}>
           <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Todo el negocio en un solo lugar</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 8px", maxWidth: 560 }}>Agenda, clientes, caja y estadísticas desde el celular o la compu. Estas son pantallas reales del sistema.</p>
           <img src="/img/notebook-mockup.png" alt="Turnos360 en una notebook" style={{ width: "100%", maxWidth: 720, mixBlendMode: "multiply", display: "block", margin: "0 auto 8px" }} />
@@ -690,7 +906,7 @@ export default function Page() {
       </section>
 
       {/* COMPARTIR / REDES */}
-      <section style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto" }}>
+      <section style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,72px)" }}>
           <div style={{ flex: "1 1 360px", minWidth: 280 }}>
             <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 16px" }}>Tu página de reservas, donde quieras</h2>
@@ -746,7 +962,7 @@ export default function Page() {
 
       {/* MULTISUCURSAL */}
       <section id="sucursales" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "clamp(32px,5vw,64px)" }}>
           <div style={{ flex: "1 1 420px", minWidth: 300 }}>
             <div style={{ display: "inline-flex", background: "#eef2ff", color: "#4338ca", fontSize: 13, fontWeight: 700, padding: "6px 14px", borderRadius: 999, marginBottom: 16 }}>Para los que tienen más de un local</div>
             <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Dos locales, dos cajas, un solo panel.</h2>
@@ -754,8 +970,8 @@ export default function Page() {
               Cuando abrís el segundo local, la mayoría de los sistemas te obliga a pagar dos cuentas y a sumar los números a mano. Acá cada sucursal tiene su caja, su equipo y su agenda, y vos las ves todas juntas.
             </p>
             <div style={{ display: "grid", gap: 18 }}>
-              {locales.map((l) => (
-                <div key={l.title} style={{ display: "flex", gap: 12 }}>
+              {locales.map((l, i) => (
+                <div key={l.title} className="revela" style={{ display: "flex", gap: 12, "--demora": `${i * 70}ms` } as React.CSSProperties}>
                   <span style={{ color: "#12b886", fontWeight: 700, fontSize: 17, lineHeight: 1.45, flexShrink: 0 }}>✓</span>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 16.5, marginBottom: 4 }}>{l.title}</div>
@@ -803,12 +1019,12 @@ export default function Page() {
 
       {/* COMO FUNCIONA */}
       <section id="como-funciona" style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px", color: "#fff" }}>Andando en la misma tarde</h2>
           <p style={{ color: "#8b93a7", fontSize: 17, margin: "0 0 44px", maxWidth: 560 }}>Te das de alta solo, en dos minutos y sin tarjeta. Y si preferís que lo carguemos nosotros, también: escribinos y lo dejamos listo con vos.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
-            {steps.map((s) => (
-              <div key={s.num} style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: 28, background: "rgba(255,255,255,0.04)" }}>
+            {steps.map((s, i) => (
+              <div key={s.num} className="revela" style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: 28, background: "rgba(255,255,255,0.04)", "--demora": `${i * 90}ms` } as React.CSSProperties}>
                 <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 14, color: "#8bc540", letterSpacing: "0.12em", marginBottom: 14 }}>PASO {s.num}</div>
                 <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 21, color: "#fff", marginBottom: 10 }}>{s.title}</div>
                 <div style={{ color: "#b8bfcc", fontSize: 15, lineHeight: 1.6 }}>{s.body}</div>
@@ -823,7 +1039,7 @@ export default function Page() {
       </section>
 
       {/* RUBROS */}
-      <section id="rubros" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+      <section id="rubros" style={{ padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto", textAlign: "center" }}>
         <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Hecho para tu rubro</h2>
         <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 36px", maxWidth: 520 }}>Servicios con duración, profesional y precio. Si trabajás con turnos, Turnos360 es para vos.</p>
         {/* Cinta continua en vez de grilla.
@@ -859,54 +1075,105 @@ export default function Page() {
       </section>
 
       {/* PRECIOS */}
-      <section id="precios" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Un solo plan, todo incluido</h2>
-          <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 40px", maxWidth: 520 }}>Sin niveles, sin funciones bloqueadas, sin sorpresas. Todo lo que viste en esta página está adentro.</p>
-          <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "2px solid #12b886", borderRadius: 24, padding: "clamp(28px,4vw,40px)", boxShadow: "0 24px 60px rgba(18,184,134,0.14)", textAlign: "left" }}>
-            <div style={{ display: "inline-flex", background: "#8bc540", color: "#1c222c", fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 999, marginBottom: 20 }}>{DIAS_PRUEBA} días de prueba gratis</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-              {PROMO_ACTIVA && (
-                <span style={{ color: "#9aa3b2", fontSize: 22, fontWeight: 600, textDecoration: "line-through" }}>
-                  {PRECIO_NORMAL_TEXTO}
-                </span>
-              )}
-              <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(40px,5vw,52px)" }}>{PRECIO_MENSUAL_TEXTO}</span>
-              <span style={{ color: "#5d6578", fontSize: 17, fontWeight: 500 }}>/ mes</span>
-            </div>
-            {PROMO_ACTIVA && (
-              <div style={{ display: "inline-flex", background: "#fff4e0", color: "#9a6212", fontWeight: 700, fontSize: 12.5, padding: "5px 12px", borderRadius: 999, marginBottom: 10 }}>
-                {PROMO_ETIQUETA}
-              </div>
-            )}
-            <div style={{ color: "#8b93a7", fontSize: 14, marginBottom: 24 }}>Precio en pesos argentinos. Cancelás cuando quieras.</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 11, marginBottom: 28 }}>
-              {planItems.map((it) => (
-                <div key={it} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: "#1c222c" }}>
-                  <span style={{ color: "#12b886", fontWeight: 700, flexShrink: 0 }}>✓</span>{it}
-                </div>
-              ))}
-            </div>
-            <Link href="/registro" className="cta cta-fuerte" style={{ width: "100%" }}>
-              Probalo gratis {DIAS_PRUEBA} días
-              <span aria-hidden className="cta-flecha">→</span>
-            </Link>
-            <p style={{ color: "#8b93a7", fontSize: 13, textAlign: "center", margin: "14px 0 0", lineHeight: 1.55 }}>
-              Te das de alta solo, sin tarjeta.{" "}
-              <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: "#0e8371", fontWeight: 600 }}>
-                O que te lo configuremos gratis
-              </a>
-              .
+      <section id="precios" style={{ background: "#f8f9fb", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)", position: "relative", overflow: "hidden" }}>
+        {/* Dos halos muy diluidos detrás de las tarjetas. Sin esto la sección
+            es un rectángulo gris y las tres tarjetas flotan sin apoyarse en
+            nada — que es la sensación exacta de "plano". */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(620px 320px at 20% 0%, rgba(18,184,134,0.10), transparent 62%), radial-gradient(560px 300px at 82% 12%, rgba(139,197,64,0.10), transparent 60%)", pointerEvents: "none" }} />
+        <div style={{ maxWidth: 1120, margin: "0 auto", position: "relative" }}>
+          <div style={{ textAlign: "center", marginBottom: 44 }}>
+            <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>
+              Elegí por el tamaño de tu equipo
+            </h2>
+            <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto", maxWidth: 560 }}>
+              Los tres traen la agenda completa, tu página de reservas y las señas.
+              Lo que cambia es cuánta gente entra y qué más podés vender.
             </p>
           </div>
+
+          <div className="grilla-planes">
+            {planes.map((p, i) => (
+              <div
+                key={p.codigo}
+                className={`plan revela ${p.destacado ? "plan-destacado" : ""}`}
+                style={{ "--demora": `${i * 90}ms` } as React.CSSProperties}
+              >
+                {p.destacado && <div className="plan-cinta">El que más eligen</div>}
+
+                <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 21, marginBottom: 4 }}>
+                  {p.nombre}
+                </div>
+                <p style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.5, margin: "0 0 18px", minHeight: 44 }}>
+                  {p.paraQuien}
+                </p>
+
+                <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                  {PROMO_ACTIVA && p.codigo === "inicial" && (
+                    <span style={{ color: "#9aa3b2", fontSize: 19, fontWeight: 600, textDecoration: "line-through" }}>
+                      {PRECIO_NORMAL_TEXTO}
+                    </span>
+                  )}
+                  <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(32px,3.6vw,42px)", letterSpacing: "-0.02em" }}>
+                    {enPesos(p.precio)}
+                  </span>
+                  <span style={{ color: "#5d6578", fontSize: 16, fontWeight: 500 }}>/ mes</span>
+                </div>
+                {PROMO_ACTIVA && p.codigo === "inicial" && (
+                  <div style={{ display: "inline-flex", background: "#fff4e0", color: "#9a6212", fontWeight: 700, fontSize: 12, padding: "4px 11px", borderRadius: 999, marginTop: 8 }}>
+                    {PROMO_ETIQUETA}
+                  </div>
+                )}
+
+                {/* Los cupos arriba y separados de las funciones: es el dato
+                    por el que se elige un plan, y enterrado en una lista de
+                    nueve renglones no se encuentra. */}
+                <div className="plan-cupos">
+                  {p.cupos.map((c) => (
+                    <div key={c} className="plan-cupo">{c}</div>
+                  ))}
+                </div>
+
+                <p style={{ color: "#8b93a7", fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 12px" }}>
+                  {p.tituloLista}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26, flex: 1 }}>
+                  {p.incluye.map((it) => (
+                    <div key={it} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 14.5, lineHeight: 1.45, color: "#2a3140" }}>
+                      <span aria-hidden style={{ color: "#12b886", fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+                      {it}
+                    </div>
+                  ))}
+                </div>
+
+                <Link
+                  href="/registro"
+                  className={`cta ${p.destacado ? "cta-fuerte" : "cta-suave"}`}
+                  style={{ width: "100%" }}
+                >
+                  Probalo {DIAS_PRUEBA} días gratis
+                  <span aria-hidden className="cta-flecha">→</span>
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ color: "#8b93a7", fontSize: 14, textAlign: "center", margin: "28px auto 0", maxWidth: 620, lineHeight: 1.6 }}>
+            {DIAS_PRUEBA} días gratis con <b style={{ color: "#5d6578" }}>todo desbloqueado</b>, sin
+            tarjeta. Precios en pesos, cancelás cuando quieras. Cambiás de plan
+            cuando te queda chico.{" "}
+            <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: "#0e8371", fontWeight: 600 }}>
+              O que te lo configuremos gratis
+            </a>
+            .
+          </p>
         </div>
       </section>
 
       {/* GALERIA */}
-      <section style={{ padding: "0 clamp(16px,5vw,64px) clamp(48px,7vw,80px)", maxWidth: 1100, margin: "0 auto" }}>
+      <section style={{ padding: "0 clamp(16px,5vw,64px) clamp(48px,7vw,80px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-          {fotos.map((f) => (
-            <img key={f.src} src={f.src} alt={f.alt} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: 20 }} />
+          {fotos.map((f, i) => (
+            <img key={f.src} src={f.src} alt={f.alt} className="revela" style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: 20, "--demora": `${i * 80}ms` } as React.CSSProperties} />
           ))}
         </div>
       </section>
