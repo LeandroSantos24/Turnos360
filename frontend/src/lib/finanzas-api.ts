@@ -12,17 +12,31 @@ export interface MetodoPago {
   nombre: string;
   comision_pct: number;
   activo: boolean;
+  /** Cuál de los cinco de fábrica es. null = método propio del negocio. */
+  clave: ClaveMetodo | null;
+  orden: number;
+  /** Lo que el cliente lee al elegir este medio al reservar. */
+  instrucciones: string | null;
 }
+
+export type ClaveMetodo =
+  | "efectivo"
+  | "debito"
+  | "credito"
+  | "transferencia"
+  | "mp_qr";
 
 export interface MetodoPagoCrear {
   nombre: string;
   comision_pct?: number;
+  instrucciones?: string | null;
 }
 
 export interface MetodoPagoEditar {
   nombre?: string;
   comision_pct?: number;
   activo?: boolean;
+  instrucciones?: string | null;
 }
 
 export function listarMetodos(): Promise<MetodoPago[]> {

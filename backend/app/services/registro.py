@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave
 from app.models import Empresa, Rubro, Usuario
 from app.models.enums import RolUsuario
+from app.services import metodos_pago as metodos_pago_svc
 from app.services import sucursal as sucursal_svc
 
 log = logging.getLogger("turnos360.registro")
@@ -100,6 +101,11 @@ def registrar(db: Session, datos) -> tuple[Empresa, Usuario, str]:
     db.flush()
 
     principal = sucursal_svc.crear_principal(db, empresa)
+
+    # Los cinco métodos de cobro de siempre. Sin esto, alguien que se registra
+    # solo un domingo a la noche encuentra la pantalla de cobro vacía y no
+    # puede registrar el primer turno que atienda el lunes.
+    metodos_pago_svc.sembrar(db, empresa.id)
 
     dueno = Usuario(
         empresa_id=empresa.id,

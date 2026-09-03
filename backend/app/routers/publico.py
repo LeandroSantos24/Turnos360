@@ -253,18 +253,19 @@ def registro(request: Request, datos: RegistroIn, db: DB) -> RegistroOut:
 
     empresa, dueno, token = svc_registro.registrar(db, datos)
 
-    try:
-        from app.tasks.emails import enviar_verificacion_email
+    # encolar() y no .delay(): sin un worker escuchando, el mensaje se quedaba
+    # en la cola y el alta terminaba «bien» con un email que no salía nunca.
+    # Sin ese email la vidriera del negocio no se enciende: es el paso que
+    # separa a alguien que se registró de alguien que puede empezar a vender.
+    from app.core.cola import Resultado, encolar
+    from app.tasks.emails import enviar_verificacion_email
 
-        enviar_verificacion_email.delay(dueno.id, token)
-    except Exception:
+    if encolar(enviar_verificacion_email, dueno.id, token) is Resultado.FALLO:
         # El alta ya está hecha y el usuario está adentro: no se le puede
         # devolver un error por esto. Pero tiene que quedar en los logs,
         # porque sin el email su vidriera no se enciende nunca y va a
-        # escribir preguntando por qué.
-        log.exception(
-            "No se pudo encolar el email de verificación (usuario %s)", dueno.id
-        )
+        # escribir preguntando por qué. Desde el panel puede pedir el reenvío.
+        log.error("No se pudo mandar el email de verificación (usuario %s)", dueno.id)
 
     tv = int(dueno.token_version or 0)
     return RegistroOut(

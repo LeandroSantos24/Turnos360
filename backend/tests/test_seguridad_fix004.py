@@ -203,8 +203,22 @@ def test_la_prueba_de_campana_ignora_el_destino_que_manden(
     capturado = {}
 
     class TareaFalsa:
+        """Imita a una tarea de Celery de verdad: tiene .delay() Y .run().
+
+        Las dos hacen falta desde que el envío usa `app.core.cola.encolar()`,
+        que cae a ejecutar en línea cuando no hay worker escuchando —que es
+        justo el caso en los tests—. Un doble con solo .delay() haría pasar
+        este test por el camino equivocado, o directamente fallar.
+        """
+
+        name = "app.tasks.emails.enviar_prueba_campana"
+
         @staticmethod
         def delay(empresa_id, tipo, destino):
+            capturado["destino"] = destino
+
+        @staticmethod
+        def run(empresa_id, tipo, destino):
             capturado["destino"] = destino
 
     import app.tasks.emails as emails_mod

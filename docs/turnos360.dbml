@@ -611,10 +611,14 @@ Table metodo_pago {
   nombre varchar(60) [not null]
   comision_pct numeric(5, 2) [not null]
   activo boolean [not null]
+  clave varchar(20)
+  orden integer [not null]
+  instrucciones varchar(1000)
   empresa_id integer [ref: > empresa.id, not null]
 
   Indexes {
     empresa_id [name: 'ix_metodo_pago_empresa_id']
+    (empresa_id, clave) [name: 'uq_metodo_pago_clave', unique]
   }
 }
 

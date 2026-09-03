@@ -140,3 +140,265 @@ select option {
   background-color: hsl(var(--card));
   color: hsl(var(--foreground));
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SISTEMA VISUAL DEL PANEL
+   ═══════════════════════════════════════════════════════════════════════
+   Por qué existe esta sección
+   ───────────────────────────
+   Arriba están los colores de shadcn (fondo, texto, borde, primary). Con eso
+   se pinta una interfaz correcta y absolutamente plana: todas las tarjetas con
+   el mismo borde de 1px, ninguna sombra, ningún estado intermedio entre
+   "quieto" y "clickeado", y el mismo gris para el fondo de la página que para
+   el de una tarjeta apagada. Es el look que se reconoce a diez metros como
+   generado, y no porque le falte color: porque no hay JERARQUÍA. Todo grita
+   igual de fuerte, así que nada guía la vista.
+
+   Lo que sigue son las piezas que faltaban. Son variables y clases, no
+   componentes: cualquier pantalla las usa sin importar nada.
+
+     · ELEVACIÓN — cuatro escalones de sombra, no uno. Una tarjeta apoyada, un
+       menú flotando y un diálogo encima de todo no pueden proyectar la misma
+       sombra, porque la sombra es lo que dice a qué distancia está cada cosa.
+     · SUPERFICIES — el fondo de la página deja de ser gris plano y pasa a
+       tener dos halos muy suaves del color de marca. Es lo que hace que una
+       tarjeta blanca se vea apoyada sobre algo en vez de recortada.
+     · MOVIMIENTO — una curva de easing y tres duraciones. Lo que se mueve
+       tiene que moverse siempre igual: la coherencia del movimiento se nota
+       aunque nadie sepa nombrarla.
+     · ACENTOS — seis colores para las cajitas de ícono. Sin esto todas las
+       secciones tienen el mismo ícono teal y la barra lateral es una lista
+       gris.
+
+   Todo respeta prefers-reduced-motion al final del archivo. */
+
+@layer base {
+  :root {
+    /* ── Elevación ──────────────────────────────────────────────────────
+       Sombras de dos capas: una corta y opaca que apoya el objeto en el
+       fondo, y una larga y difusa que da la altura. Con una sola capa las
+       sombras se ven sucias, como una mancha gris debajo. */
+    --sombra-apoyo:
+      0 1px 2px -1px hsl(222 47% 11% / 0.06),
+      0 1px 3px hsl(222 47% 11% / 0.05);
+    --sombra-tarjeta:
+      0 1px 2px -1px hsl(222 47% 11% / 0.07),
+      0 4px 12px -2px hsl(222 47% 11% / 0.06);
+    --sombra-flotante:
+      0 2px 4px -2px hsl(222 47% 11% / 0.08),
+      0 12px 28px -6px hsl(222 47% 11% / 0.12);
+    --sombra-dialogo:
+      0 4px 8px -4px hsl(222 47% 11% / 0.12),
+      0 24px 56px -12px hsl(222 47% 11% / 0.22);
+
+    /* Anillo teal para lo que está seleccionado o activo. */
+    --sombra-foco: 0 0 0 3px hsl(var(--teal) / 0.16);
+
+    /* ── Movimiento ─────────────────────────────────────────────────────
+       Una sola curva para todo. Es una salida suave con un apenas de
+       adelanto al final: se siente viva sin rebotar. */
+    --curva: cubic-bezier(0.32, 0.72, 0, 1);
+    --rapido: 130ms;
+    --normal: 220ms;
+    --lento: 420ms;
+
+    /* ── Acentos ────────────────────────────────────────────────────────
+       Para las cajitas de ícono de cada sección. Son tonos, no colores de
+       estado: no significan "bien" ni "error", solo distinguen. */
+    --acento-teal: 168 100% 42%;
+    --acento-violeta: 258 90% 66%;
+    --acento-ambar: 38 92% 50%;
+    --acento-rosa: 340 82% 62%;
+    --acento-cielo: 199 89% 48%;
+    --acento-lima: 142 71% 45%;
+
+    /* Fondo de la página: gris con dos halos de marca, muy diluidos.
+       Los porcentajes son bajos a propósito — si se notan, están mal. */
+    --halo-superficie:
+      radial-gradient(900px 420px at 12% -8%, hsl(var(--teal) / 0.07), transparent 60%),
+      radial-gradient(760px 380px at 92% 6%, hsl(var(--acento-violeta) / 0.06), transparent 62%);
+  }
+
+  .dark {
+    /* En oscuro la sombra sola no separa nada (negro sobre negro no se ve),
+       así que cada escalón suma un borde de luz arriba: es lo que hace que
+       una tarjeta se lea como una superficie levantada y no como un agujero. */
+    --sombra-apoyo:
+      0 1px 2px hsl(0 0% 0% / 0.4),
+      inset 0 1px 0 hsl(0 0% 100% / 0.04);
+    --sombra-tarjeta:
+      0 2px 8px hsl(0 0% 0% / 0.45),
+      inset 0 1px 0 hsl(0 0% 100% / 0.05);
+    --sombra-flotante:
+      0 12px 32px hsl(0 0% 0% / 0.55),
+      inset 0 1px 0 hsl(0 0% 100% / 0.06);
+    --sombra-dialogo:
+      0 24px 64px hsl(0 0% 0% / 0.7),
+      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+    --sombra-foco: 0 0 0 3px hsl(var(--teal) / 0.26);
+    --halo-superficie:
+      radial-gradient(900px 420px at 12% -8%, hsl(var(--teal) / 0.10), transparent 60%),
+      radial-gradient(760px 380px at 92% 6%, hsl(var(--acento-violeta) / 0.09), transparent 62%);
+  }
+}
+
+@layer components {
+  /* Fondo de una pantalla del panel. Va en el contenedor de la página. */
+  .superficie {
+    background-image: var(--halo-superficie);
+    background-attachment: fixed;
+  }
+
+  /* ── Tarjeta ────────────────────────────────────────────────────────
+     La unidad de todo el panel. `.tarjeta-viva` agrega la reacción al
+     mouse: una tarjeta que se puede tocar tiene que avisarlo antes de que
+     la toquen. Es el detalle que más separa una interfaz que se siente
+     hecha de una que se siente autogenerada. */
+  .tarjeta {
+    border-radius: 1rem;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card));
+    box-shadow: var(--sombra-tarjeta);
+  }
+
+  .tarjeta-viva {
+    transition:
+      box-shadow var(--normal) var(--curva),
+      border-color var(--normal) var(--curva),
+      transform var(--normal) var(--curva);
+  }
+  .tarjeta-viva:hover {
+    border-color: hsl(var(--teal) / 0.4);
+    box-shadow: var(--sombra-flotante);
+    transform: translateY(-2px);
+  }
+  .tarjeta-viva:active {
+    transform: translateY(0);
+    transition-duration: var(--rapido);
+  }
+
+  /* Tarjeta elegida (una plantilla, un medio de cobro activo). */
+  .tarjeta-elegida {
+    border-color: hsl(var(--teal));
+    box-shadow: var(--sombra-tarjeta), var(--sombra-foco);
+  }
+
+  /* ── Cajita de ícono ────────────────────────────────────────────────
+     El cuadradito de color al lado de un título de sección. Se le pasa el
+     tono por --tono: <span class="cajita" style="--tono: var(--acento-rosa)"> */
+  .cajita {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 0.75rem;
+    color: hsl(var(--tono, var(--acento-teal)));
+    background-image: linear-gradient(
+      145deg,
+      hsl(var(--tono, var(--acento-teal)) / 0.18),
+      hsl(var(--tono, var(--acento-teal)) / 0.08)
+    );
+    box-shadow: inset 0 0 0 1px hsl(var(--tono, var(--acento-teal)) / 0.18);
+  }
+
+  /* ── Título de pantalla ─────────────────────────────────────────────
+     Dos pesos en la misma línea: "Tus" liviano, "cobros" fuerte. Le da un
+     centro de gravedad al encabezado, que si no es un renglón parejo más. */
+  .titulo-pantalla {
+    font-family: var(--fuente-titulos);
+    font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.022em;
+    font-weight: 400;
+    color: hsl(var(--foreground));
+  }
+  .titulo-pantalla b,
+  .titulo-pantalla strong {
+    font-weight: 700;
+  }
+
+  /* ── Entrada en pantalla ────────────────────────────────────────────
+     Aparecer de golpe se lee como un salto; aparecer subiendo apenas se lee
+     como que la pantalla se armó. --demora escalona los elementos de una
+     lista para que entren en cascada y no todos juntos. */
+  .aparece {
+    animation: aparece var(--lento) var(--curva) both;
+    animation-delay: var(--demora, 0ms);
+  }
+
+  @keyframes aparece {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ── Estado vacío ───────────────────────────────────────────────────
+     Una pantalla sin datos es la PRIMERA que ve todo el mundo. Dejarla como
+     un renglón de texto gris es desaprovechar el único momento en que
+     tenemos toda la atención. */
+  .vacio {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 4rem 2rem;
+    text-align: center;
+  }
+  .vacio-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    margin-bottom: 0.75rem;
+    border-radius: 1.25rem;
+    color: hsl(var(--tono, var(--acento-teal)));
+    background-image: linear-gradient(
+      145deg,
+      hsl(var(--tono, var(--acento-teal)) / 0.2),
+      hsl(var(--tono, var(--acento-teal)) / 0.06)
+    );
+    box-shadow:
+      inset 0 0 0 1px hsl(var(--tono, var(--acento-teal)) / 0.2),
+      0 0 0 12px hsl(var(--tono, var(--acento-teal)) / 0.05);
+  }
+
+  /* ── Píldora de estado ──────────────────────────────────────────────
+     "Activo", "Plan Pro", "3 de 5 locales". Chico, redondo y del tono que
+     le toque. */
+  .pildora {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.5rem;
+    color: hsl(var(--tono, var(--acento-teal)));
+    background-color: hsl(var(--tono, var(--acento-teal)) / 0.12);
+    box-shadow: inset 0 0 0 1px hsl(var(--tono, var(--acento-teal)) / 0.2);
+  }
+}
+
+/* Quien pidió menos movimiento recibe menos movimiento. No es un extra de
+   accesibilidad: para alguien con sensibilidad vestibular, una interfaz que
+   se mueve sola marea de verdad. */
+@media (prefers-reduced-motion: reduce) {
+  .aparece {
+    animation: none;
+  }
+  .tarjeta-viva,
+  .tarjeta-viva:hover,
+  .tarjeta-viva:active {
+    transform: none;
+    transition-duration: 0.01ms;
+  }
+}

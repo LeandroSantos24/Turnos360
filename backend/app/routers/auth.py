@@ -182,18 +182,20 @@ def reenviar_verificacion(
     if token is None:
         return {"ok": True, "detalle": "Tu email ya está verificado."}
 
-    try:
-        from app.tasks.emails import enviar_verificacion_email
+    # encolar() y no .delay(): si no hay worker escuchando la cola, el mensaje
+    # se quedaría ahí para siempre y esta función igual contestaría «te lo
+    # mandamos». Justamente acá, donde la persona está mirando la pantalla
+    # esperando el mail, esa mentira es lo peor que puede pasar.
+    from app.core.cola import Resultado, encolar
+    from app.tasks.emails import enviar_verificacion_email
 
-        enviar_verificacion_email.delay(usuario.id, token)
-    except Exception:
-        log.exception(
-            "No se pudo encolar el reenvío de verificación (usuario %s)", usuario.id
-        )
+    resultado = encolar(enviar_verificacion_email, usuario.id, token)
+    if resultado is Resultado.FALLO:
+        log.error("No se pudo mandar el reenvío de verificación (usuario %s)", usuario.id)
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "No pudimos mandar el email ahora. Probá en un rato.",
-        ) from None
+        )
 
     return {
         "ok": True,
@@ -222,16 +224,16 @@ def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> d
             minutes=60
         )
         db.commit()
-        try:
-            from app.tasks.emails import enviar_reset_password
+        # encolar(): sin worker, el link de restablecimiento se quedaba en la
+        # cola y la persona esperaba un mail que no iba a llegar. Como acá la
+        # respuesta es siempre la misma (no revelamos si el email existe), este
+        # es el único lugar donde el problema se puede ver.
+        from app.core.cola import Resultado, encolar
+        from app.tasks.emails import enviar_reset_password
 
-            enviar_reset_password.delay(usuario.id, token)
-        except Exception:
-            # La respuesta al usuario no cambia (no revelamos nada), pero esto
-            # TIENE que quedar en los logs: si el broker está caído, el email
-            # nunca se encoló y alguien se tiene que enterar.
-            log.exception(
-                "No se pudo encolar el email de restablecimiento (usuario %s)",
+        if encolar(enviar_reset_password, usuario.id, token) is Resultado.FALLO:
+            log.error(
+                "No se pudo mandar el email de restablecimiento (usuario %s)",
                 usuario.id,
             )
     return {"detalle": "Si el email está registrado, te enviamos un link para restablecer la contraseña."}

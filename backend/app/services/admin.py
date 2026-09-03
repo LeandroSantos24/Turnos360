@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
+from app.services import metodos_pago as metodos_pago_svc
 from app.services import sucursal as sucursal_svc
 
 log = logging.getLogger(__name__)
@@ -186,6 +187,9 @@ def crear_empresa(db: Session, datos) -> Empresa:
     # Ninguna empresa existe sin un local. Ver services/sucursal.py: es lo que
     # permite que todo el sistema filtre por sucursal sin ramas ni NULLs.
     principal = sucursal_svc.crear_principal(db, empresa)
+
+    # Y ninguna empresa existe sin con qué cobrar. Ver services/metodos_pago.py.
+    metodos_pago_svc.sembrar(db, empresa.id)
 
     db.add(
         Usuario(

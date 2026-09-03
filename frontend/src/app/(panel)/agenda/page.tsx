@@ -3,7 +3,7 @@
 /**
  * Agenda visual (/agenda).
  *
- * Vista principal: la GRILLA DE CARRILES (Corte/Tintura/Barba) donde se ven los
+ * Vista principal: la GRILLA DE CARRILES (una columna por grupo de servicio) donde se ven los
  * turnos en sus columnas y se crea con clic en un hueco. Debajo, la lista de
  * turnos (vista alternativa, por ahora). El botón "Nuevo turno" y el clic en
  * hueco abren el mismo diálogo (con sobreturno inteligente).

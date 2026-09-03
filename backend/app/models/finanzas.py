@@ -60,14 +60,64 @@ class CategoriaFinanciera(TenantMixin, Base):
 
 
 class MetodoPago(TenantMixin, Base):
-    """D-14: métodos por empresa con comisión configurable."""
+    """Cómo cobra el negocio, con la comisión que le descuenta cada medio.
+
+    CADA EMPRESA NACE CON LOS CINCO DE SIEMPRE
+    ──────────────────────────────────────────
+    Efectivo, débito, crédito, transferencia y QR de Mercado Pago se siembran
+    en el alta (ver `app.services.metodos_pago`). Antes la tabla arrancaba
+    vacía y la pantalla decía «Todavía no cargaste métodos. Empezá con
+    Efectivo, Débito, Transferencia…»: le pedíamos a alguien que acaba de
+    entrar que tipee de memoria los mismos cinco nombres que tipea todo el
+    mundo, y encima que adivine la comisión de cada uno. El que no los cargaba
+    no podía cobrar nada, que es lo primero que quiere hacer.
+
+    `clave` DISTINGUE LOS DE FÁBRICA DE LOS PROPIOS
+    ───────────────────────────────────────────────
+    Los cinco sembrados tienen clave ('efectivo', 'debito', …) y los que crea
+    el dueño la tienen en NULL. Sirve para dos cosas concretas: la pantalla les
+    puede poner su ícono y su texto de ayuda, y el sistema puede encontrar «el
+    de Mercado Pago» de esta empresa sin buscarlo por nombre —que es lo que
+    hacía antes y se rompía si alguien lo renombraba «MP» o le corregía la
+    mayúscula—.
+
+    NINGUNO SE PUEDE BORRAR DE VERDAD, SOLO APAGAR
+    ──────────────────────────────────────────────
+    Un método borrado deja cobros históricos apuntando a un id que ya no
+    existe, y la caja de marzo pasa a tener plata «sin método». Por eso la
+    pantalla apaga (`activo = False`) en vez de borrar: el método desaparece
+    de los desplegables de cobro y sigue explicando los movimientos viejos.
+    """
 
     __tablename__ = "metodo_pago"
+    __table_args__ = (
+        # Una empresa no puede tener dos «efectivo». Los propios (clave NULL)
+        # no entran al índice: ahí el dueño puede llamarles como quiera.
+        Index(
+            "uq_metodo_pago_clave",
+            "empresa_id",
+            "clave",
+            unique=True,
+            postgresql_where=text("clave IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(60))
     comision_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Cuál de los cinco de fábrica es. NULL = método propio del negocio.
+    clave: Mapped[str | None] = mapped_column(String(20))
+
+    # Orden en que se listan y se ofrecen al cobrar. Los de fábrica vienen en
+    # el orden en que se usan de verdad en un mostrador: primero efectivo.
+    orden: Mapped[int] = mapped_column(Integer, default=100, server_default=text("100"))
+
+    # Lo que el cliente ve al elegir este medio en la página de reservas:
+    # el alias y el CBU para transferir, o "se abona al llegar". Vacío = no se
+    # muestra nada.
+    instrucciones: Mapped[str | None] = mapped_column(String(1000))
 
 
 class MovimientoFinanciero(TenantMixin, Base):

@@ -153,12 +153,18 @@ def probar_campana(
     # casilla oficial de Turnos360 (phishing con marca propia), y de paso
     # quemar la cuota diaria de envíos que comparten todos los negocios.
     destino = usuario.email
-    try:
-        from app.tasks.emails import enviar_prueba_campana
+    # encolar(): «Enviarme una prueba» existe para que el dueño VEA el mail
+    # antes de dejar la campaña andando. Si se encola sin worker, ve un cartel
+    # verde y ningún mail, y la conclusión que saca es que las campañas no
+    # funcionan.
+    from app.core.cola import Resultado, encolar
+    from app.tasks.emails import enviar_prueba_campana
 
-        enviar_prueba_campana.delay(empresa_id, tipo, destino)
-    except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo encolar el envío")
+    resultado = encolar(enviar_prueba_campana, empresa_id, tipo, destino)
+    if resultado is Resultado.FALLO:
+        raise HTTPException(status_code=503, detail="No se pudo mandar la prueba")
+    if resultado is Resultado.EN_LINEA:
+        return {"detalle": f"Te mandamos la prueba a {destino}."}
     return {"detalle": f"Te mandamos la prueba a {destino}. Puede tardar un minuto."}
 
 

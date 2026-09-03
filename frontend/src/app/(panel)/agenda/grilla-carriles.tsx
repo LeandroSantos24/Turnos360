@@ -3,7 +3,10 @@
 /**
  * Grilla de carriles de la agenda.
  *
- * 3 columnas fijas (Corte / Tintura / Barba) × filas cada 30 min.
+ * Una columna por carril (los grupos de servicio del negocio) × filas cada
+ * 30 min. Las columnas NO son fijas ni de ningún rubro: las arma
+ * carrilesDeGrupos() a partir del catálogo, y un negocio sin servicios ve una
+ * sola columna "General".
  * Cada turno se posiciona en su columna (según servicio_grupo) y a su hora,
  * con alto proporcional a la duración. Los turnos que se solapan en el tiempo
  * (ej. original + sobreturno) se reparten el ancho lado a lado.

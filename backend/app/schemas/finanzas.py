@@ -15,12 +15,18 @@ from app.models.enums import EstadoCaja, TipoMovimiento
 class MetodoPagoCrear(BaseModel):
     nombre: str = Field(min_length=1, max_length=60)
     comision_pct: float = Field(default=0, ge=0, le=100)
+    instrucciones: str | None = Field(default=None, max_length=1000)
 
 
 class MetodoPagoEditar(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=60)
     comision_pct: float | None = Field(default=None, ge=0, le=100)
     activo: bool | None = None
+    instrucciones: str | None = Field(default=None, max_length=1000)
+    # `clave` y `orden` no están a propósito: los pone el sembrado del alta y
+    # son lo que le permite al sistema encontrar «el de Mercado Pago» de esta
+    # empresa. Si se pudieran editar desde la pantalla, ese match volvería a
+    # ser tan frágil como cuando se hacía por nombre.
 
 
 class MetodoPagoOut(BaseModel):
@@ -28,6 +34,11 @@ class MetodoPagoOut(BaseModel):
     nombre: str
     comision_pct: float
     activo: bool
+    # NULL = método propio del negocio. La pantalla lo usa para decidir el
+    # ícono, el texto de ayuda y si deja renombrarlo.
+    clave: str | None = None
+    orden: int = 100
+    instrucciones: str | None = None
 
     model_config = {"from_attributes": True}
 

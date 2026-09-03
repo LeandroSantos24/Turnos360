@@ -36,11 +36,18 @@ from app.services import sucursal as sucursal_svc
 # ─────────────────────────── Métodos de pago ────────────────────────────────
 
 def listar_metodos(db: Session, empresa_id: int) -> list[MetodoPago]:
+    """Los métodos del negocio, en el orden del mostrador.
+
+    Antes se ordenaban alfabético y la lista arrancaba con «Crédito», que es
+    justo el que menos se toca. Ahora manda `orden`: los cinco de fábrica
+    vienen numerados de 10 en 10 en el orden en que se usan de verdad, y los
+    que agrega el dueño caen al final (orden 100) alfabéticamente entre sí.
+    """
     return list(
         db.scalars(
             select(MetodoPago)
             .where(MetodoPago.empresa_id == empresa_id)
-            .order_by(MetodoPago.nombre)
+            .order_by(MetodoPago.orden, MetodoPago.nombre)
         )
     )
 
@@ -71,6 +78,30 @@ def editar_metodo(
 
 
 def borrar_metodo(db: Session, empresa_id: int, metodo_id: int) -> bool:
+    """Saca un método de circulación. Devuelve False si no existe.
+
+    NO SIEMPRE BORRA, Y ESA ES LA GRACIA
+    ────────────────────────────────────
+    Antes esto era un `db.delete()` a secas, y tenía dos finales malos según
+    el método que tocaras:
+
+      · Con cobros hechos, `movimiento_financiero` y `pago` guardan
+        `metodo_pago_id`. El DELETE choca contra la clave foránea y sale un
+        500 sin explicación. Y si algún día esa FK se aflojara, sería peor: la
+        caja de marzo pasaría a tener plata sin método, sin que nadie se
+        entere.
+      · Sin cobros, borraba de verdad — incluido cualquiera de los cinco de
+        fábrica. El negocio que borraba «Efectivo» porque ese mes no lo usó se
+        quedaba sin la forma de cobro más común y sin manera obvia de
+        recuperarla.
+
+    Ahora la regla es una sola y se explica en una línea: **un método con
+    historia, o uno de fábrica, se apaga; uno propio y sin usar se borra.**
+
+    Apagado (`activo = False`) el método desaparece de los desplegables de
+    cobro y sigue explicando los movimientos viejos, que es lo que uno espera
+    de un dato contable.
+    """
     m = db.scalar(
         select(MetodoPago).where(
             MetodoPago.id == metodo_id, MetodoPago.empresa_id == empresa_id
@@ -78,7 +109,22 @@ def borrar_metodo(db: Session, empresa_id: int, metodo_id: int) -> bool:
     )
     if m is None:
         return False
-    db.delete(m)
+
+    tiene_historia = bool(
+        db.scalar(
+            select(MovimientoFinanciero.id)
+            .where(MovimientoFinanciero.metodo_pago_id == metodo_id)
+            .limit(1)
+        )
+        or db.scalar(
+            select(Pago.id).where(Pago.metodo_pago_id == metodo_id).limit(1)
+        )
+    )
+
+    if tiene_historia or m.clave is not None:
+        m.activo = False
+    else:
+        db.delete(m)
     db.commit()
     return True
 
@@ -725,32 +771,50 @@ def detalle_caja(db: Session, empresa_id: int, caja_id: int) -> dict | None:
 # Señas de reserva (Mercado Pago)
 # ============================================================
 
-METODO_MP = "Mercado Pago"
+METODO_MP = "QR Mercado Pago"
+CLAVE_MP = "mp_qr"
 
 
 def _metodo_mercado_pago(db: Session, empresa_id: int) -> MetodoPago:
     """Devuelve (o crea) el método de pago con el que se acreditan las señas.
 
     La seña entra SIEMPRE por Mercado Pago: es la única pasarela integrada.
-    Se busca por nombre y, si el negocio todavía no lo tiene cargado, se crea
-    solo. Sin esto, el primer negocio que active señas sin haber pasado por
-    Finanzas → Métodos vería el cobro rebotar, y perder el registro de una
-    seña ya cobrada es peor que crear un método de más.
 
-    La comisión arranca en 0: la que MP retiene depende del plazo de
-    acreditación que eligió cada negocio, y adivinarla daría un neto falso.
-    El dueño la ajusta en Finanzas → Métodos y desde ahí se aplica sola.
+    SE BUSCA POR CLAVE, NO POR NOMBRE
+    Antes se buscaba `lower(nombre) == "mercado pago"`. Ese match se rompe en
+    cuanto alguien renombra su método «MP», «Mercado Pago QR» o le corrige un
+    acento — cosas que la pantalla de métodos deja hacer. Y cuando se rompía no
+    daba error: creaba un método NUEVO, y el negocio terminaba con dos «Mercado
+    Pago» y la plata de las señas repartida entre los dos, uno en la caja y el
+    otro en ningún lado.
+
+    La clave `mp_qr` la pone el sembrado del alta, no la ve nadie y no se puede
+    editar desde la pantalla. Por eso el match aguanta.
+
+    El fallback de crear el método sigue existiendo para las empresas dadas de
+    alta antes del sembrado: perder el registro de una seña ya cobrada es peor
+    que crear un método de más.
     """
-    metodo = db.scalar(
-        select(MetodoPago).where(
-            MetodoPago.empresa_id == empresa_id,
-            func.lower(MetodoPago.nombre) == METODO_MP.lower(),
-        )
+    from app.services import metodos_pago as svc_metodos
+
+    metodo = svc_metodos.por_clave(db, empresa_id, CLAVE_MP)
+    if metodo is not None:
+        return metodo
+
+    # Empresa vieja, anterior al sembrado: se le siembran los cinco de una vez
+    # en vez de dejarle solo el de Mercado Pago suelto.
+    svc_metodos.sembrar(db, empresa_id)
+    metodo = svc_metodos.por_clave(db, empresa_id, CLAVE_MP)
+    if metodo is not None:
+        return metodo
+
+    # Cinturón y tiradores: si el sembrado no lo dejó (algo muy raro), se crea
+    # a mano antes que perder la seña.
+    metodo = MetodoPago(
+        empresa_id=empresa_id, nombre=METODO_MP, clave=CLAVE_MP, comision_pct=0
     )
-    if metodo is None:
-        metodo = MetodoPago(empresa_id=empresa_id, nombre=METODO_MP, comision_pct=0)
-        db.add(metodo)
-        db.flush()
+    db.add(metodo)
+    db.flush()
     return metodo
 
 
