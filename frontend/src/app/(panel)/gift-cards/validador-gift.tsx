@@ -92,7 +92,7 @@ export function ValidadorGift({ onCanjeada }: { onCanjeada: () => void }) {
     <div className="rounded-2xl border bg-card p-5">
       <div className="flex items-center gap-2">
         <BadgeCheck className="h-5 w-5 text-primary" />
-        <h2 className="font-[family-name:var(--font-syne)] text-lg font-semibold">
+        <h2 className="font-[family-name:var(--fuente-titulos)] text-lg font-semibold">
           Validar / canjear
         </h2>
       </div>

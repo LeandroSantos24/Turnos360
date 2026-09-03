@@ -12,7 +12,7 @@ equivalente sobre el precio del servicio.
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, Integer, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +30,9 @@ class CuponDescuento(TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     codigo: Mapped[str] = mapped_column(String(30))  # se guarda en MAYÚSCULAS
-    tipo: Mapped[str] = mapped_column(String(10), default="porcentaje")  # porcentaje | monto
+    tipo: Mapped[str] = mapped_column(
+        String(10), default="porcentaje", server_default=text("'porcentaje'")
+    )  # porcentaje | monto
     valor: Mapped[float] = mapped_column(Numeric(12, 2))
     vence_el: Mapped[dt.date | None] = mapped_column(Date)
     max_usos: Mapped[int | None] = mapped_column(Integer)

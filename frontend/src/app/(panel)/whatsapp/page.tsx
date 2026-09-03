@@ -133,7 +133,7 @@ function ContenidoWhatsapp() {
       <div className="flex items-center gap-2.5">
         <MessageCircle className="h-6 w-6 text-primary" />
         <div>
-          <h1 className="font-[family-name:var(--font-syne)] text-2xl font-bold">
+          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
             WhatsApp
           </h1>
           <p className="text-sm text-muted-foreground">

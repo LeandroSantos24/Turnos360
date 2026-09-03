@@ -168,7 +168,7 @@ export default function GiftCardsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <Gift className="h-6 w-6 text-primary" />
-          <h1 className="font-[family-name:var(--font-syne)] text-2xl font-bold">Gift cards</h1>
+          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">Gift cards</h1>
         </div>
         {!creando && (
           <Button onClick={() => setCreando(true)}>
@@ -180,7 +180,7 @@ export default function GiftCardsPage() {
       {/* Alta */}
       {creando && (
         <div className="rounded-2xl border bg-card p-5">
-          <h2 className="font-[family-name:var(--font-syne)] text-lg font-semibold">
+          <h2 className="font-[family-name:var(--fuente-titulos)] text-lg font-semibold">
             Generar gift card
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -241,7 +241,7 @@ export default function GiftCardsPage() {
 
       {/* Listado */}
       <div>
-        <h2 className="mb-3 font-[family-name:var(--font-syne)] text-lg font-semibold">
+        <h2 className="mb-3 font-[family-name:var(--fuente-titulos)] text-lg font-semibold">
           Emitidas
         </h2>
         {cargando ? (

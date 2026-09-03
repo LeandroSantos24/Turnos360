@@ -55,7 +55,9 @@ class PagoSuscripcion(Base):
     monto: Mapped[float] = mapped_column(Numeric(12, 2))
     # Texto libre y no un enum: los métodos de cobro del SaaS cambian solos
     # (transferencia, efectivo, MP, dólares) y no vale una migración por cada uno.
-    metodo: Mapped[str] = mapped_column(String(40), default="transferencia")
+    metodo: Mapped[str] = mapped_column(
+        String(40), default="transferencia", server_default=text("'transferencia'")
+    )
 
     # Período que cubre el pago (para el historial: "esto es el mes de julio").
     periodo_desde: Mapped[dt.date | None] = mapped_column(Date)

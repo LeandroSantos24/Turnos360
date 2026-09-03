@@ -136,7 +136,7 @@ export default function CampanasPage() {
     <div className="mx-auto max-w-3xl space-y-4 p-6">
       <div className="flex items-center gap-2.5">
         <Megaphone className="h-6 w-6 text-primary" />
-        <h1 className="font-[family-name:var(--font-syne)] text-2xl font-bold">Campañas</h1>
+        <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">Campañas</h1>
       </div>
       <p className="-mt-2 text-sm text-muted-foreground">
         Mensajes automáticos por email a tus clientes. Prendé lo que quieras usar

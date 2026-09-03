@@ -18,14 +18,15 @@ movimientos con fecha, no "el sistema dice 200".
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger,
+BigInteger,
     DateTime,
     ForeignKey,
+    func,
     Index,
     Integer,
     Numeric,
     String,
-    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,10 +40,14 @@ class SaldoWhatsapp(Base):
     __tablename__ = "wa_saldo"
 
     empresa_id: Mapped[int] = mapped_column(ForeignKey("empresa.id"), primary_key=True)
-    disponible: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    disponible: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
     # Acumulado histórico, solo informativo: cuántos mensajes gastó en total.
     # No se usa para decidir nada; sirve para la pantalla y para cotizar packs.
-    consumidos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consumidos: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
     actualizado: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

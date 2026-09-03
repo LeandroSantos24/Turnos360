@@ -94,14 +94,18 @@ class Turno(TenantMixin, Base):
     importe_previsto: Mapped[float | None] = mapped_column(Numeric(12, 2))
     # True si el turno lo cubrió un abono activo del cliente (importe queda en 0).
     # Sirve para finanzas: distinguir "$0 por abono" de "$0 por otra razón".
-    cubierto_por_abono: Mapped[bool] = mapped_column(Boolean, default=False)
+    cubierto_por_abono: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     # Descuento aplicado al turno (%). Total = (servicio + adicionales) − este %.
     descuento_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     # Qué cupón produjo ese descuento, si vino de uno. Antes solo se guardaba
     # el porcentaje y un contador global de usos: con eso era imposible saber
     # cuánta gente usó un código y cuánto facturó, que es exactamente lo que
     # decide si la promoción sirvió o fue regalar plata.
-    cupon_id: Mapped[int | None] = mapped_column(ForeignKey("cupon_descuento.id"))
+    cupon_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cupon_descuento.id", name="fk_turno_cupon")
+    )
     # ¿Ya se cobró este turno? Lo marca el registro de cobro (N-52).
     cobrado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 

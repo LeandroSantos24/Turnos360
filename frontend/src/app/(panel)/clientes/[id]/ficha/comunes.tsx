@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 export function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <Card className="space-y-4 rounded-2xl p-5">
-      <h2 className="font-[family-name:var(--font-syne)] text-lg font-semibold">{titulo}</h2>
+      <h2 className="font-[family-name:var(--fuente-titulos)] text-lg font-semibold">{titulo}</h2>
       {children}
     </Card>
   );

@@ -53,7 +53,7 @@ export default function CuentaPage() {
     <div className="mx-auto max-w-md space-y-5 p-6">
       <div className="flex items-center gap-2.5">
         <UserCircle className="h-6 w-6 text-primary" />
-        <h1 className="font-[family-name:var(--font-syne)] text-2xl font-bold">
+        <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
           Mi cuenta
         </h1>
       </div>

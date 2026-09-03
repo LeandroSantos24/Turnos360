@@ -92,9 +92,11 @@ class Membresia(TenantMixin, Base):
     #
     # metodo_pago_id es opcional a propósito: una membresía también puede ser
     # de cortesía (canje, compensación), y ahí no hay nada que cobrar.
-    metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodo_pago.id"))
+    metodo_pago_id: Mapped[int | None] = mapped_column(
+        ForeignKey("metodo_pago.id", name="fk_membresia_metodo_pago")
+    )
     movimiento_id: Mapped[int | None] = mapped_column(
-        ForeignKey("movimiento_financiero.id")
+        ForeignKey("movimiento_financiero.id", name="fk_membresia_movimiento")
     )
     # Lo que se cobró de verdad. Puede diferir del precio del plan: descuento
     # de lanzamiento, ajuste por un mes empezado, precio pactado a mano.

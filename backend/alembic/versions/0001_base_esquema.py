@@ -1,0 +1,1000 @@
+"""Esquema base de Turnos360 — punto de partida único de la base de datos.
+
+QUÉ ES ESTO
+───────────
+Hasta acá el historial eran 43 migraciones encadenadas (junio a agosto de
+2026), 3.171 líneas, que había que correr una detrás de otra para levantar una
+base vacía. Cada `docker compose up` de una máquina nueva, cada CI, cada
+`make db-reset` pagaba ese peaje. Este archivo las reemplaza por una sola.
+
+POR QUÉ SE PUDO APLASTAR
+────────────────────────
+Porque todavía no hay ninguna base en producción corriendo ese historial. Una
+migración sirve para llevar una base CON DATOS de un estado al siguiente; si
+ninguna base está en un estado intermedio, los pasos intermedios no le sirven a
+nadie y solo hacen más lento el arranque. El día que Turnos360 esté deployado,
+esto ya no se puede volver a hacer: de ahí en adelante cada cambio de esquema
+es una migración incremental más, encima de esta.
+
+CÓMO SE VERIFICÓ QUE NO SE PERDIÓ NADA
+──────────────────────────────────────
+No a ojo. Se levantaron DOS bases: una corriendo las 43 migraciones viejas y
+otra corriendo solo este archivo, y se compararon contra `information_schema`
+y `pg_catalog` — columnas con su tipo, largo, precisión, nulabilidad y default;
+índices con su definición; restricciones con su definición; y los enums con sus
+valores en orden. Resultado: 42 tablas, 486 columnas, 134 índices, 149
+restricciones y 13 enums, idénticos. Después, los 736 tests de la suite pasaron
+contra la base nueva.
+
+LO QUE APARECIÓ EN EL CAMINO
+────────────────────────────
+La primera comparación NO dio idéntica, y ahí estaba el hallazgo: los modelos
+y las migraciones habían quedado desalineados en 13 puntos.
+
+  · 7 columnas tenían `server_default` en la base (heredado de la migración que
+    las agregó NOT NULL con un valor para el backfill) que el modelo no
+    declaraba: cupon_descuento.tipo, gift_card.estado, pago_suscripcion.metodo,
+    servicio.paso_turno_min, turno.cubierto_por_abono y las dos de wa_saldo.
+    Aplastar sin mirar habría borrado esos defaults en silencio, y cualquier
+    INSERT que no pasara por el modelo (un script, una carga masiva, un
+    `INSERT` a mano en una urgencia) habría empezado a fallar por NOT NULL.
+
+  · 6 claves foráneas tenían nombre explícito en la migración y nombre generado
+    por la convención en el modelo. Cosmético para la base, pero deja
+    `alembic check` con ruido para siempre.
+
+Los 13 se arreglaron en los MODELOS, no acá: se les agregó el `server_default`
+y el `name=` que les faltaba. Así el modelo vuelve a ser la fuente de verdad y
+las dos cosas no se pueden volver a separar sin que `alembic check` lo grite.
+
+Revision ID: 0001_base
+Revises:
+Create Date: 2026-09-03
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+revision: str = '0001_base'
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.create_table('rubro',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('codigo', sa.String(length=40), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('preset', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_rubro')),
+    sa.UniqueConstraint('codigo', name=op.f('uq_rubro_codigo'))
+    )
+    op.create_table('super_admin',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('email', sa.String(length=200), nullable=False),
+    sa.Column('hash_clave', sa.String(length=300), nullable=False),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_super_admin')),
+    sa.UniqueConstraint('email', name=op.f('uq_super_admin_email'))
+    )
+    op.create_table('empresa',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('rubro_id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('slug', sa.String(length=80), nullable=False),
+    sa.Column('config_pack', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('descripcion', sa.Text(), nullable=True),
+    sa.Column('direccion', sa.String(length=200), nullable=True),
+    sa.Column('telefono_publico', sa.String(length=40), nullable=True),
+    sa.Column('email_publico', sa.String(length=120), nullable=True),
+    sa.Column('logo_url', sa.String(length=300), nullable=True),
+    sa.Column('portada_url', sa.String(length=300), nullable=True),
+    sa.Column('color_marca', sa.String(length=7), nullable=True),
+    sa.Column('reserva_anticipacion_min', sa.Integer(), server_default='0', nullable=False),
+    sa.Column('reserva_dias_max', sa.Integer(), server_default='180', nullable=False),
+    sa.Column('reserva_fecha_limite', sa.Date(), nullable=True),
+    sa.Column('reserva_permite_cancelar', sa.Boolean(), server_default=sa.text('true'), nullable=False),
+    sa.Column('reserva_pide_telefono', sa.Boolean(), server_default=sa.text('true'), nullable=False),
+    sa.Column('reserva_pide_nacimiento', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('meta_pixel_id', sa.String(length=40), nullable=True),
+    sa.Column('google_tag_id', sa.String(length=40), nullable=True),
+    sa.Column('google_conversion_label', sa.String(length=60), nullable=True),
+    sa.Column('horarios_atencion', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('redes', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('galeria', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('wa_credenciales', postgresql.BYTEA(), nullable=True),
+    sa.Column('wa_phone_number_id', sa.String(length=40), nullable=True),
+    sa.Column('email_credenciales', postgresql.BYTEA(), nullable=True),
+    sa.Column('automatizaciones', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('mp_credenciales', postgresql.BYTEA(), nullable=True),
+    sa.Column('sena_activa', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('cobro_modo', sa.String(length=10), server_default='ninguno', nullable=False),
+    sa.Column('sena_monto', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('activa', sa.Boolean(), nullable=False),
+    sa.Column('plan', sa.String(length=20), server_default='gratuito', nullable=False),
+    sa.Column('suscripcion_vence', sa.Date(), nullable=True),
+    sa.Column('prueba_hasta', sa.Date(), nullable=True),
+    sa.Column('razon_social', sa.String(length=160), nullable=True),
+    sa.Column('cuit', sa.String(length=20), nullable=True),
+    sa.Column('contacto_nombre', sa.String(length=120), nullable=True),
+    sa.Column('contacto_email', sa.String(length=160), nullable=True),
+    sa.Column('contacto_telefono', sa.String(length=40), nullable=True),
+    sa.Column('notas_admin', sa.Text(), nullable=True),
+    sa.Column('precio_mensual', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('limite_recursos', sa.Integer(), nullable=True),
+    sa.Column('limite_sucursales', sa.Integer(), nullable=True),
+    sa.Column('de_registro_publico', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['rubro_id'], ['rubro.id'], name=op.f('fk_empresa_rubro_id_rubro')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_empresa')),
+    sa.UniqueConstraint('slug', name=op.f('uq_empresa_slug'))
+    )
+    op.create_index(op.f('ix_empresa_wa_phone_number_id'), 'empresa', ['wa_phone_number_id'], unique=False)
+    op.create_table('categoria_financiera',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=80), nullable=False),
+    sa.Column('tipo', sa.Enum('ingreso', 'egreso', name='tipo_movimiento'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_categoria_financiera_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_categoria_financiera'))
+    )
+    op.create_index(op.f('ix_categoria_financiera_empresa_id'), 'categoria_financiera', ['empresa_id'], unique=False)
+    op.create_table('cliente',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('apellido', sa.String(length=120), nullable=True),
+    sa.Column('dni', sa.String(length=20), nullable=True),
+    sa.Column('email', sa.String(length=200), nullable=True),
+    sa.Column('telefono', sa.String(length=40), nullable=True),
+    sa.Column('fecha_nacimiento', sa.Date(), nullable=True),
+    sa.Column('canal_adquisicion', sa.String(length=60), nullable=True),
+    sa.Column('ultimo_cumple_enviado', sa.Date(), nullable=True),
+    sa.Column('acepta_marketing', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('acepta_whatsapp', sa.Boolean(), server_default='true', nullable=False),
+    sa.Column('ultimo_inactivo_enviado', sa.Date(), nullable=True),
+    sa.Column('campos_rubro', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('preferencias', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('etiquetas', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('observaciones', sa.Text(), nullable=True),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_cliente_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_cliente'))
+    )
+    op.create_index('ix_cliente_empresa_apellido_nombre', 'cliente', ['empresa_id', 'apellido', 'nombre'], unique=False)
+    op.create_index('ix_cliente_empresa_dni', 'cliente', ['empresa_id', 'dni'], unique=False)
+    op.create_index(op.f('ix_cliente_empresa_id'), 'cliente', ['empresa_id'], unique=False)
+    op.create_index('ix_cliente_empresa_telefono', 'cliente', ['empresa_id', 'telefono'], unique=False)
+    op.create_table('cupon_descuento',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('codigo', sa.String(length=30), nullable=False),
+    sa.Column('tipo', sa.String(length=10), server_default=sa.text("'porcentaje'"), nullable=False),
+    sa.Column('valor', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('vence_el', sa.Date(), nullable=True),
+    sa.Column('max_usos', sa.Integer(), nullable=True),
+    sa.Column('usos', sa.Integer(), server_default='0', nullable=False),
+    sa.Column('servicios_ids', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False),
+    sa.Column('activo', sa.Boolean(), server_default='true', nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_cupon_descuento_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_cupon_descuento')),
+    sa.UniqueConstraint('empresa_id', 'codigo', name='uq_cupon_empresa_codigo')
+    )
+    op.create_index(op.f('ix_cupon_descuento_empresa_id'), 'cupon_descuento', ['empresa_id'], unique=False)
+    op.create_table('especialidad',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_especialidad_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_especialidad'))
+    )
+    op.create_index(op.f('ix_especialidad_empresa_id'), 'especialidad', ['empresa_id'], unique=False)
+    op.create_table('metodo_pago',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=60), nullable=False),
+    sa.Column('comision_pct', sa.Numeric(precision=5, scale=2), nullable=False),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_metodo_pago_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_metodo_pago'))
+    )
+    op.create_index(op.f('ix_metodo_pago_empresa_id'), 'metodo_pago', ['empresa_id'], unique=False)
+    op.create_table('pago_suscripcion',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.Column('fecha', sa.Date(), nullable=False),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('metodo', sa.String(length=40), server_default=sa.text("'transferencia'"), nullable=False),
+    sa.Column('periodo_desde', sa.Date(), nullable=True),
+    sa.Column('periodo_hasta', sa.Date(), nullable=True),
+    sa.Column('notas', sa.Text(), nullable=True),
+    sa.Column('registrado_por', sa.String(length=160), nullable=True),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('mp_payment_id', sa.String(length=40), nullable=True),
+    sa.Column('anulado', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('anulado_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('anulado_por', sa.String(length=160), nullable=True),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_pago_suscripcion_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_pago_suscripcion'))
+    )
+    op.create_index('ix_pago_suscripcion_empresa_fecha', 'pago_suscripcion', ['empresa_id', 'fecha'], unique=False)
+    op.create_index(op.f('ix_pago_suscripcion_empresa_id'), 'pago_suscripcion', ['empresa_id'], unique=False)
+    op.create_index('ix_pago_suscripcion_fecha', 'pago_suscripcion', ['fecha'], unique=False)
+    op.create_index('uq_pago_suscripcion_mp', 'pago_suscripcion', ['mp_payment_id'], unique=True, postgresql_where=sa.text('mp_payment_id is not null'))
+    op.create_table('plan_abono',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=80), nullable=False),
+    sa.Column('descripcion', sa.String(length=300), nullable=True),
+    sa.Column('precio', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('ilimitado', sa.Boolean(), nullable=False),
+    sa.Column('cantidad_cupos', sa.Integer(), nullable=True),
+    sa.Column('servicios_cubiertos', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_plan_abono_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_plan_abono'))
+    )
+    op.create_index('ix_plan_abono_empresa_activo', 'plan_abono', ['empresa_id', 'activo'], unique=False)
+    op.create_index(op.f('ix_plan_abono_empresa_id'), 'plan_abono', ['empresa_id'], unique=False)
+    op.create_table('plantilla_mensaje',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('canal', sa.Enum('whatsapp', 'email', name='canal_mensaje'), nullable=False),
+    sa.Column('codigo', sa.String(length=60), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('cuerpo', sa.Text(), nullable=False),
+    sa.Column('aprobada_meta', sa.Boolean(), nullable=False),
+    sa.Column('con_botones', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('activa', sa.Boolean(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_plantilla_mensaje_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_plantilla_mensaje'))
+    )
+    op.create_index(op.f('ix_plantilla_mensaje_empresa_id'), 'plantilla_mensaje', ['empresa_id'], unique=False)
+    op.create_table('servicio',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('duracion_min', sa.Integer(), nullable=False),
+    sa.Column('buffer_min', sa.Integer(), nullable=False),
+    sa.Column('paso_turno_min', sa.Integer(), server_default=sa.text('15'), nullable=False),
+    sa.Column('grupo_agenda', sa.String(length=40), nullable=True),
+    sa.Column('precio', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('agendable', sa.Boolean(), server_default='true', nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_servicio_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_servicio')),
+    sa.UniqueConstraint('empresa_id', 'id', name='uq_servicio_empresa')
+    )
+    op.create_index('ix_servicio_empresa_activo', 'servicio', ['empresa_id', 'activo'], unique=False)
+    op.create_index(op.f('ix_servicio_empresa_id'), 'servicio', ['empresa_id'], unique=False)
+    op.create_table('sucursal',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('direccion', sa.String(length=200), nullable=True),
+    sa.Column('telefono', sa.String(length=40), nullable=True),
+    sa.Column('activa', sa.Boolean(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_sucursal_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_sucursal')),
+    sa.UniqueConstraint('empresa_id', 'id', name='uq_sucursal_empresa')
+    )
+    op.create_index(op.f('ix_sucursal_empresa_id'), 'sucursal', ['empresa_id'], unique=False)
+    op.create_table('wa_saldo',
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.Column('disponible', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('consumidos', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('actualizado', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_wa_saldo_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('empresa_id', name=op.f('pk_wa_saldo'))
+    )
+    op.create_table('ajuste_suscripcion',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.Column('tipo', sa.String(length=20), nullable=False),
+    sa.Column('vence_antes', sa.Date(), nullable=True),
+    sa.Column('vence_despues', sa.Date(), nullable=True),
+    sa.Column('dias', sa.Integer(), nullable=True),
+    sa.Column('detalle', sa.Text(), nullable=True),
+    sa.Column('pago_id', sa.Integer(), nullable=True),
+    sa.Column('hecho_por', sa.String(length=160), nullable=True),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('revertido', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('revertido_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('revertido_por', sa.String(length=160), nullable=True),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_ajuste_suscripcion_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['pago_id'], ['pago_suscripcion.id'], name=op.f('fk_ajuste_suscripcion_pago_id_pago_suscripcion')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_ajuste_suscripcion'))
+    )
+    op.create_index('ix_ajuste_suscripcion_empresa', 'ajuste_suscripcion', ['empresa_id', 'creado_en'], unique=False)
+    op.create_index(op.f('ix_ajuste_suscripcion_empresa_id'), 'ajuste_suscripcion', ['empresa_id'], unique=False)
+    op.create_table('aviso_pago',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.Column('metodo', sa.String(length=40), nullable=False),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('referencia', sa.Text(), nullable=True),
+    sa.Column('avisado_por', sa.String(length=160), nullable=True),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('resuelto', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('resuelto_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('resuelto_por', sa.String(length=160), nullable=True),
+    sa.Column('pago_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_aviso_pago_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['pago_id'], ['pago_suscripcion.id'], name=op.f('fk_aviso_pago_pago_id_pago_suscripcion')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_aviso_pago'))
+    )
+    op.create_index(op.f('ix_aviso_pago_empresa_id'), 'aviso_pago', ['empresa_id'], unique=False)
+    op.create_index('ix_aviso_pago_pendiente', 'aviso_pago', ['creado_en'], unique=False, postgresql_where=sa.text('resuelto = false'))
+    op.create_table('deuda_cliente',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('saldada', sa.Boolean(), nullable=False),
+    sa.Column('ref_tabla', sa.String(length=40), nullable=True),
+    sa.Column('ref_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_deuda_cliente_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_deuda_cliente_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_deuda_cliente'))
+    )
+    op.create_index(op.f('ix_deuda_cliente_empresa_id'), 'deuda_cliente', ['empresa_id'], unique=False)
+    op.create_table('ficha_clinica',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('motivo_consulta', sa.Text(), nullable=True),
+    sa.Column('objetivo', sa.Text(), nullable=True),
+    sa.Column('ocupacion', sa.String(length=200), nullable=True),
+    sa.Column('horario_trabajo', sa.String(length=200), nullable=True),
+    sa.Column('fum', sa.Date(), nullable=True),
+    sa.Column('horario_comidas', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('recordatorio_24h', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('frecuencia_consumo', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('actividad_fisica', sa.Text(), nullable=True),
+    sa.Column('enfermedades', sa.Text(), nullable=True),
+    sa.Column('operaciones', sa.Text(), nullable=True),
+    sa.Column('medicacion', sa.Text(), nullable=True),
+    sa.Column('antecedentes_familiares', sa.Text(), nullable=True),
+    sa.Column('consume_alcohol_drogas', sa.String(length=200), nullable=True),
+    sa.Column('fuma', sa.String(length=120), nullable=True),
+    sa.Column('sintomas_recurrentes', sa.Text(), nullable=True),
+    sa.Column('evacuacion', sa.String(length=200), nullable=True),
+    sa.Column('sueno', sa.String(length=200), nullable=True),
+    sa.Column('alimentos_no_consume', sa.Text(), nullable=True),
+    sa.Column('alimentos_no_tolera', sa.Text(), nullable=True),
+    sa.Column('alimentos_gustan', sa.Text(), nullable=True),
+    sa.Column('nutri_anterior', sa.Text(), nullable=True),
+    sa.Column('obra_social', sa.String(length=120), nullable=True),
+    sa.Column('plan_obra_social', sa.String(length=120), nullable=True),
+    sa.Column('nro_afiliado', sa.String(length=60), nullable=True),
+    sa.Column('datos_extra', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('actualizada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_ficha_clinica_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_ficha_clinica_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_ficha_clinica')),
+    sa.UniqueConstraint('empresa_id', 'cliente_id', name='uq_ficha_empresa_cliente')
+    )
+    op.create_index(op.f('ix_ficha_clinica_empresa_id'), 'ficha_clinica', ['empresa_id'], unique=False)
+    op.create_index('ix_ficha_empresa_cliente', 'ficha_clinica', ['empresa_id', 'cliente_id'], unique=False)
+    op.create_table('historial_cliente',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('tipo_evento', sa.String(length=40), nullable=False),
+    sa.Column('descripcion', sa.String(length=300), nullable=True),
+    sa.Column('ref_tabla', sa.String(length=40), nullable=True),
+    sa.Column('ref_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_historial_cliente_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_historial_cliente_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_historial_cliente'))
+    )
+    op.create_index(op.f('ix_historial_cliente_empresa_id'), 'historial_cliente', ['empresa_id'], unique=False)
+    op.create_index('ix_historial_empresa_cliente_fecha', 'historial_cliente', ['empresa_id', 'cliente_id', 'fecha'], unique=False)
+    op.create_table('servicio_sucursal',
+    sa.Column('servicio_id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('precio', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id', 'servicio_id'], ['servicio.empresa_id', 'servicio.id'], name='fk_servicio_sucursal_servicio', ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_servicio_sucursal_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_servicio_sucursal_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('servicio_id', 'sucursal_id', name=op.f('pk_servicio_sucursal'))
+    )
+    op.create_index(op.f('ix_servicio_sucursal_empresa_id'), 'servicio_sucursal', ['empresa_id'], unique=False)
+    op.create_table('usuario',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('email', sa.String(length=200), nullable=False),
+    sa.Column('hash_clave', sa.String(length=300), nullable=False),
+    sa.Column('rol', sa.Enum('dueno', 'admin', 'recepcion', 'profesional', name='rol_usuario'), nullable=False),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('email_verificado', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('verif_token_hash', sa.String(length=128), nullable=True),
+    sa.Column('verif_token_expira', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('reset_token_hash', sa.String(length=128), nullable=True),
+    sa.Column('reset_token_expira', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('token_version', sa.Integer(), server_default='0', nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_usuario_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_usuario_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_usuario'))
+    )
+    op.create_index(op.f('ix_usuario_empresa_id'), 'usuario', ['empresa_id'], unique=False)
+    op.create_index('uq_usuario_email_lower', 'usuario', [sa.literal_column('lower(email)')], unique=True)
+    op.create_table('adjunto',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('entrada_clinica_id', sa.Integer(), nullable=True),
+    sa.Column('tipo', sa.String(length=40), nullable=True),
+    sa.Column('nombre_archivo', sa.String(length=255), nullable=False),
+    sa.Column('ruta', sa.String(length=500), nullable=False),
+    sa.Column('subido_por', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_adjunto_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_adjunto_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['subido_por'], ['usuario.id'], name=op.f('fk_adjunto_subido_por_usuario')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_adjunto'))
+    )
+    op.create_index(op.f('ix_adjunto_empresa_id'), 'adjunto', ['empresa_id'], unique=False)
+    op.create_table('caja',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('fecha_apertura', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('fecha_cierre', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('saldo_inicial', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('saldo_final', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('estado', sa.Enum('abierta', 'cerrada', name='estado_caja'), nullable=False),
+    sa.Column('abierta_por', sa.Integer(), nullable=True),
+    sa.Column('cerrada_por', sa.Integer(), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['abierta_por'], ['usuario.id'], name=op.f('fk_caja_abierta_por_usuario')),
+    sa.ForeignKeyConstraint(['cerrada_por'], ['usuario.id'], name=op.f('fk_caja_cerrada_por_usuario')),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_caja_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_caja_empresa_id_empresa')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_caja'))
+    )
+    op.create_index(op.f('ix_caja_empresa_id'), 'caja', ['empresa_id'], unique=False)
+    op.create_index('uq_caja_abierta_por_sucursal', 'caja', ['empresa_id', 'sucursal_id'], unique=True, postgresql_where=sa.text("estado = 'abierta'"))
+    op.create_table('log_auditoria',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=True),
+    sa.Column('usuario_id', sa.Integer(), nullable=True),
+    sa.Column('accion', sa.String(length=30), nullable=False),
+    sa.Column('tabla', sa.String(length=60), nullable=True),
+    sa.Column('registro_id', sa.Integer(), nullable=True),
+    sa.Column('detalle', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('ip', sa.String(length=45), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_log_auditoria_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['usuario_id'], ['usuario.id'], name=op.f('fk_log_auditoria_usuario_id_usuario')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_log_auditoria'))
+    )
+    op.create_index(op.f('ix_log_auditoria_empresa_id'), 'log_auditoria', ['empresa_id'], unique=False)
+    op.create_index('ix_log_empresa_fecha', 'log_auditoria', ['empresa_id', 'fecha'], unique=False)
+    op.create_index('ix_log_tabla_registro', 'log_auditoria', ['tabla', 'registro_id'], unique=False)
+    op.create_table('recurso',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('tipo', sa.Enum('persona', 'box', 'equipo', name='tipo_recurso'), nullable=False),
+    sa.Column('nombre', sa.String(length=120), nullable=False),
+    sa.Column('usuario_id', sa.Integer(), nullable=True),
+    sa.Column('color', sa.String(length=9), nullable=True),
+    sa.Column('foto_url', sa.String(length=300), nullable=True),
+    sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_recurso_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_recurso_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['usuario_id'], ['usuario.id'], name=op.f('fk_recurso_usuario_id_usuario')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_recurso'))
+    )
+    op.create_index(op.f('ix_recurso_empresa_id'), 'recurso', ['empresa_id'], unique=False)
+    op.create_index('ix_recurso_empresa_tipo', 'recurso', ['empresa_id', 'tipo'], unique=False)
+    op.create_table('comision_profesional',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('recurso_id', sa.Integer(), nullable=False),
+    sa.Column('modalidad', sa.Enum('porcentaje', 'canon_consulta', 'alquiler', name='modalidad_comision'), nullable=False),
+    sa.Column('porcentaje', sa.Numeric(precision=5, scale=2), nullable=True),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('vigencia_desde', sa.Date(), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_comision_profesional_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_comision_profesional_recurso_id_recurso')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_comision_profesional'))
+    )
+    op.create_index(op.f('ix_comision_profesional_empresa_id'), 'comision_profesional', ['empresa_id'], unique=False)
+    op.create_table('excepcion_agenda',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('recurso_id', sa.Integer(), nullable=True),
+    sa.Column('tipo', sa.Enum('feriado', 'licencia', 'vacaciones', 'bloqueo', name='tipo_excepcion'), nullable=False),
+    sa.Column('fecha_desde', sa.Date(), nullable=False),
+    sa.Column('fecha_hasta', sa.Date(), nullable=False),
+    sa.Column('motivo', sa.String(length=200), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_excepcion_agenda_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_excepcion_agenda_recurso_id_recurso')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_excepcion_agenda'))
+    )
+    op.create_index(op.f('ix_excepcion_agenda_empresa_id'), 'excepcion_agenda', ['empresa_id'], unique=False)
+    op.create_table('horario_recurso',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('recurso_id', sa.Integer(), nullable=False),
+    sa.Column('dia_semana', sa.Integer(), nullable=False),
+    sa.Column('hora_desde', sa.Time(), nullable=False),
+    sa.Column('hora_hasta', sa.Time(), nullable=False),
+    sa.Column('vigencia_desde', sa.Date(), nullable=True),
+    sa.Column('vigencia_hasta', sa.Date(), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_horario_recurso_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_horario_recurso_recurso_id_recurso')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_horario_recurso'))
+    )
+    op.create_index('ix_horario_empresa_recurso_dia', 'horario_recurso', ['empresa_id', 'recurso_id', 'dia_semana'], unique=False)
+    op.create_index(op.f('ix_horario_recurso_empresa_id'), 'horario_recurso', ['empresa_id'], unique=False)
+    op.create_table('lista_espera',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('servicio_id', sa.Integer(), nullable=True),
+    sa.Column('recurso_id', sa.Integer(), nullable=True),
+    sa.Column('rango_preferido', sa.String(length=120), nullable=True),
+    sa.Column('estado', sa.String(length=20), nullable=False),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_lista_espera_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_lista_espera_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_lista_espera_recurso_id_recurso')),
+    sa.ForeignKeyConstraint(['servicio_id'], ['servicio.id'], name=op.f('fk_lista_espera_servicio_id_servicio')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_lista_espera'))
+    )
+    op.create_index(op.f('ix_lista_espera_empresa_id'), 'lista_espera', ['empresa_id'], unique=False)
+    op.create_table('movimiento_financiero',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('caja_id', sa.Integer(), nullable=True),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('tipo', sa.Enum('ingreso', 'egreso', name='tipo_movimiento'), nullable=False),
+    sa.Column('concepto', sa.String(length=120), nullable=True),
+    sa.Column('descripcion', sa.String(length=300), nullable=True),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('moneda', sa.String(length=3), nullable=False),
+    sa.Column('metodo_pago_id', sa.Integer(), nullable=True),
+    sa.Column('categoria_id', sa.Integer(), nullable=True),
+    sa.Column('usuario_id', sa.Integer(), nullable=True),
+    sa.Column('anulado', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('anulado_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('anulado_por_id', sa.Integer(), nullable=True),
+    sa.Column('motivo_anulacion', sa.String(length=200), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['anulado_por_id'], ['usuario.id'], name='fk_movfin_anulado_por'),
+    sa.ForeignKeyConstraint(['caja_id'], ['caja.id'], name=op.f('fk_movimiento_financiero_caja_id_caja')),
+    sa.ForeignKeyConstraint(['categoria_id'], ['categoria_financiera.id'], name=op.f('fk_movimiento_financiero_categoria_id_categoria_financiera')),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_movfin_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_movimiento_financiero_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['metodo_pago_id'], ['metodo_pago.id'], name=op.f('fk_movimiento_financiero_metodo_pago_id_metodo_pago')),
+    sa.ForeignKeyConstraint(['usuario_id'], ['usuario.id'], name=op.f('fk_movimiento_financiero_usuario_id_usuario')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_movimiento_financiero'))
+    )
+    op.create_index('ix_movfin_caja_activos', 'movimiento_financiero', ['empresa_id', 'caja_id', 'anulado'], unique=False)
+    op.create_index('ix_movfin_empresa_fecha', 'movimiento_financiero', ['empresa_id', 'fecha'], unique=False)
+    op.create_index('ix_movfin_empresa_tipo_categoria', 'movimiento_financiero', ['empresa_id', 'tipo', 'categoria_id'], unique=False)
+    op.create_index(op.f('ix_movimiento_financiero_empresa_id'), 'movimiento_financiero', ['empresa_id'], unique=False)
+    op.create_table('recurso_especialidad',
+    sa.Column('recurso_id', sa.Integer(), nullable=False),
+    sa.Column('especialidad_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['especialidad_id'], ['especialidad.id'], name=op.f('fk_recurso_especialidad_especialidad_id_especialidad')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_recurso_especialidad_recurso_id_recurso')),
+    sa.PrimaryKeyConstraint('recurso_id', 'especialidad_id', name=op.f('pk_recurso_especialidad'))
+    )
+    op.create_table('servicio_recurso',
+    sa.Column('servicio_id', sa.Integer(), nullable=False),
+    sa.Column('recurso_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_servicio_recurso_recurso_id_recurso')),
+    sa.ForeignKeyConstraint(['servicio_id'], ['servicio.id'], name=op.f('fk_servicio_recurso_servicio_id_servicio')),
+    sa.PrimaryKeyConstraint('servicio_id', 'recurso_id', name=op.f('pk_servicio_recurso'))
+    )
+    op.create_table('turno',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('recurso_id', sa.Integer(), nullable=False),
+    sa.Column('servicio_id', sa.Integer(), nullable=True),
+    sa.Column('vehiculo_id', sa.Integer(), nullable=True),
+    sa.Column('paquete_id', sa.Integer(), nullable=True),
+    sa.Column('tipo', sa.Enum('simple', 'recurrente', 'serie', 'orden_llegada', 'orden_trabajo', name='tipo_turno'), nullable=False),
+    sa.Column('estado', sa.Enum('pendiente', 'confirmado', 'en_curso', 'finalizado', 'cancelado', 'ausente', name='estado_turno'), nullable=False),
+    sa.Column('categoria', sa.String(length=60), nullable=True),
+    sa.Column('fecha_inicio', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('fecha_fin', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('posicion_cola', sa.Integer(), nullable=True),
+    sa.Column('serie_grupo_id', sa.Integer(), nullable=True),
+    sa.Column('es_sobreturno', sa.Boolean(), nullable=False),
+    sa.Column('importe_previsto', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('cubierto_por_abono', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('descuento_pct', sa.Numeric(precision=5, scale=2), server_default='0', nullable=False),
+    sa.Column('cupon_id', sa.Integer(), nullable=True),
+    sa.Column('cobrado', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('sena_estado', sa.String(length=20), nullable=True),
+    sa.Column('sena_monto', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('mp_payment_id', sa.String(length=60), nullable=True),
+    sa.Column('recordatorio_enviado', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('recordatorio_2h_enviado', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('creado_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('motivo_cancelacion', sa.String(length=300), nullable=True),
+    sa.Column('notas', sa.Text(), nullable=True),
+    sa.Column('creado_por', sa.Integer(), nullable=True),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_turno_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['creado_por'], ['usuario.id'], name=op.f('fk_turno_creado_por_usuario')),
+    sa.ForeignKeyConstraint(['cupon_id'], ['cupon_descuento.id'], name='fk_turno_cupon'),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_turno_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_turno_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['recurso_id'], ['recurso.id'], name=op.f('fk_turno_recurso_id_recurso')),
+    sa.ForeignKeyConstraint(['servicio_id'], ['servicio.id'], name=op.f('fk_turno_servicio_id_servicio')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_turno'))
+    )
+    op.create_index('ix_turno_empresa_cliente', 'turno', ['empresa_id', 'cliente_id'], unique=False)
+    op.create_index('ix_turno_empresa_cupon', 'turno', ['empresa_id', 'cupon_id'], unique=False)
+    op.create_index('ix_turno_empresa_estado_inicio', 'turno', ['empresa_id', 'estado', 'fecha_inicio'], unique=False)
+    op.create_index(op.f('ix_turno_empresa_id'), 'turno', ['empresa_id'], unique=False)
+    op.create_index('ix_turno_empresa_recurso_inicio', 'turno', ['empresa_id', 'recurso_id', 'fecha_inicio'], unique=False)
+    op.create_index('ix_turno_recordatorio_2h_pendiente', 'turno', ['fecha_inicio'], unique=False, postgresql_where=sa.text('recordatorio_2h_enviado = false'))
+    op.create_index('ix_turno_recordatorio_pendiente', 'turno', ['fecha_inicio'], unique=False, postgresql_where=sa.text('recordatorio_enviado = false'))
+    op.create_index('ix_turno_sena_pendiente', 'turno', ['creado_at'], unique=False, postgresql_where=sa.text("sena_estado = 'pendiente'"))
+    op.create_table('calificacion',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('turno_id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('puntaje', sa.Integer(), nullable=False),
+    sa.Column('comentario', sa.Text(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_calificacion_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_calificacion_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['turno_id'], ['turno.id'], name=op.f('fk_calificacion_turno_id_turno')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_calificacion'))
+    )
+    op.create_index(op.f('ix_calificacion_empresa_id'), 'calificacion', ['empresa_id'], unique=False)
+    op.create_table('entrada_clinica',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('turno_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.Date(), nullable=False),
+    sa.Column('tipo', sa.String(length=40), nullable=False),
+    sa.Column('como_se_sintio', sa.Text(), nullable=True),
+    sa.Column('noto_diferencia', sa.Text(), nullable=True),
+    sa.Column('apetito', sa.Text(), nullable=True),
+    sa.Column('entrenamiento', sa.Text(), nullable=True),
+    sa.Column('descanso', sa.Text(), nullable=True),
+    sa.Column('estres', sa.Text(), nullable=True),
+    sa.Column('resumen_antropometria', sa.Text(), nullable=True),
+    sa.Column('prescripcion', sa.Text(), nullable=True),
+    sa.Column('proximo_turno', sa.Date(), nullable=True),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_entrada_clinica_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_entrada_clinica_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['turno_id'], ['turno.id'], name=op.f('fk_entrada_clinica_turno_id_turno')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_entrada_clinica'))
+    )
+    op.create_index(op.f('ix_entrada_clinica_empresa_id'), 'entrada_clinica', ['empresa_id'], unique=False)
+    op.create_index('ix_entrada_empresa_cliente_fecha', 'entrada_clinica', ['empresa_id', 'cliente_id', 'fecha'], unique=False)
+    op.create_table('gift_card',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('codigo', sa.String(length=40), nullable=False),
+    sa.Column('beneficiario', sa.String(length=120), nullable=True),
+    sa.Column('de_parte_de', sa.String(length=120), nullable=True),
+    sa.Column('mensaje', sa.String(length=300), nullable=True),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('concepto', sa.String(length=120), nullable=True),
+    sa.Column('estado', sa.Enum('activa', 'canjeada', 'vencida', 'anulada', name='estado_gift_card'), server_default=sa.text("'activa'"), nullable=False),
+    sa.Column('vence', sa.Date(), nullable=True),
+    sa.Column('metodo_pago_id', sa.Integer(), nullable=True),
+    sa.Column('movimiento_id', sa.Integer(), nullable=True),
+    sa.Column('canjeada_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('canjeada_por', sa.String(length=120), nullable=True),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_gift_card_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['metodo_pago_id'], ['metodo_pago.id'], name='fk_giftcard_metodo_pago'),
+    sa.ForeignKeyConstraint(['movimiento_id'], ['movimiento_financiero.id'], name='fk_giftcard_movimiento'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_gift_card'))
+    )
+    op.create_index('ix_gift_card_empresa_codigo', 'gift_card', ['empresa_id', 'codigo'], unique=True)
+    op.create_index('ix_gift_card_empresa_estado', 'gift_card', ['empresa_id', 'estado'], unique=False)
+    op.create_index(op.f('ix_gift_card_empresa_id'), 'gift_card', ['empresa_id'], unique=False)
+    op.create_table('item_turno',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('turno_id', sa.Integer(), nullable=False),
+    sa.Column('descripcion', sa.String(length=160), nullable=False),
+    sa.Column('precio', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('cantidad', sa.Integer(), nullable=False),
+    sa.Column('tipo', sa.String(length=40), nullable=False),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_item_turno_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['turno_id'], ['turno.id'], name=op.f('fk_item_turno_turno_id_turno')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_item_turno'))
+    )
+    op.create_index(op.f('ix_item_turno_empresa_id'), 'item_turno', ['empresa_id'], unique=False)
+    op.create_index('ix_item_turno_empresa_turno', 'item_turno', ['empresa_id', 'turno_id'], unique=False)
+    op.create_index('ix_item_turno_turno', 'item_turno', ['turno_id'], unique=False)
+    op.create_table('membresia',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('plan_id', sa.Integer(), nullable=False),
+    sa.Column('fecha_desde', sa.Date(), nullable=False),
+    sa.Column('fecha_hasta', sa.Date(), nullable=False),
+    sa.Column('estado', sa.Enum('ACTIVA', 'SUSPENDIDA', 'VENCIDA', 'PENDIENTE_PAGO', name='estado_membresia'), nullable=False),
+    sa.Column('cupos_usados', sa.Integer(), nullable=False),
+    sa.Column('metodo_pago_id', sa.Integer(), nullable=True),
+    sa.Column('movimiento_id', sa.Integer(), nullable=True),
+    sa.Column('monto_cobrado', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_membresia_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_membresia_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['metodo_pago_id'], ['metodo_pago.id'], name='fk_membresia_metodo_pago'),
+    sa.ForeignKeyConstraint(['movimiento_id'], ['movimiento_financiero.id'], name='fk_membresia_movimiento'),
+    sa.ForeignKeyConstraint(['plan_id'], ['plan_abono.id'], name=op.f('fk_membresia_plan_id_plan_abono')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_membresia'))
+    )
+    op.create_index('ix_membresia_empresa_cliente', 'membresia', ['empresa_id', 'cliente_id'], unique=False)
+    op.create_index(op.f('ix_membresia_empresa_id'), 'membresia', ['empresa_id'], unique=False)
+    op.create_index('ix_membresia_vigencia', 'membresia', ['empresa_id', 'fecha_hasta'], unique=False)
+    op.create_table('mensaje',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=True),
+    sa.Column('turno_id', sa.Integer(), nullable=True),
+    sa.Column('canal', sa.Enum('whatsapp', 'email', name='canal_mensaje'), nullable=False),
+    sa.Column('direccion', sa.Enum('saliente', 'entrante', name='direccion_mensaje'), nullable=False),
+    sa.Column('plantilla_id', sa.Integer(), nullable=True),
+    sa.Column('contenido', sa.Text(), nullable=True),
+    sa.Column('estado', sa.Enum('pendiente', 'enviado', 'entregado', 'leido', 'fallido', name='estado_mensaje'), nullable=False),
+    sa.Column('error', sa.String(length=300), nullable=True),
+    sa.Column('externo_id', sa.String(length=80), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_mensaje_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_mensaje_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['plantilla_id'], ['plantilla_mensaje.id'], name=op.f('fk_mensaje_plantilla_id_plantilla_mensaje')),
+    sa.ForeignKeyConstraint(['turno_id'], ['turno.id'], name=op.f('fk_mensaje_turno_id_turno')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_mensaje'))
+    )
+    op.create_index('ix_mensaje_empresa_cliente', 'mensaje', ['empresa_id', 'cliente_id'], unique=False)
+    op.create_index('ix_mensaje_empresa_fecha', 'mensaje', ['empresa_id', 'fecha'], unique=False)
+    op.create_index(op.f('ix_mensaje_empresa_id'), 'mensaje', ['empresa_id'], unique=False)
+    op.create_index('ix_mensaje_empresa_turno', 'mensaje', ['empresa_id', 'turno_id'], unique=False)
+    op.create_index(op.f('ix_mensaje_externo_id'), 'mensaje', ['externo_id'], unique=False)
+    op.create_table('pago',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sucursal_id', sa.Integer(), nullable=False),
+    sa.Column('turno_id', sa.Integer(), nullable=True),
+    sa.Column('orden_trabajo_id', sa.Integer(), nullable=True),
+    sa.Column('cliente_id', sa.Integer(), nullable=True),
+    sa.Column('metodo_pago_id', sa.Integer(), nullable=True),
+    sa.Column('origen', sa.String(length=20), nullable=True),
+    sa.Column('monto', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('comision_aplicada', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('movimiento_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('anulado', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('anulado_en', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('anulado_por_id', sa.Integer(), nullable=True),
+    sa.Column('motivo_anulacion', sa.String(length=200), nullable=True),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_pago_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id', 'sucursal_id'], ['sucursal.empresa_id', 'sucursal.id'], name='fk_pago_sucursal'),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_pago_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['metodo_pago_id'], ['metodo_pago.id'], name=op.f('fk_pago_metodo_pago_id_metodo_pago')),
+    sa.ForeignKeyConstraint(['movimiento_id'], ['movimiento_financiero.id'], name=op.f('fk_pago_movimiento_id_movimiento_financiero')),
+    sa.ForeignKeyConstraint(['turno_id'], ['turno.id'], name=op.f('fk_pago_turno_id_turno')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_pago'))
+    )
+    op.create_index('ix_pago_empresa_cliente', 'pago', ['empresa_id', 'cliente_id'], unique=False)
+    op.create_index('ix_pago_empresa_fecha', 'pago', ['empresa_id', 'fecha'], unique=False)
+    op.create_index(op.f('ix_pago_empresa_id'), 'pago', ['empresa_id'], unique=False)
+    op.create_index('ix_pago_empresa_origen', 'pago', ['empresa_id', 'origen'], unique=False)
+    op.create_index('ix_pago_empresa_vigente', 'pago', ['empresa_id', 'fecha'], unique=False, postgresql_where=sa.text('anulado = false'))
+    op.create_index('ix_pago_movimiento', 'pago', ['movimiento_id'], unique=False)
+    op.create_index('ix_pago_turno', 'pago', ['turno_id'], unique=False)
+    op.create_index('uq_pago_sena_turno', 'pago', ['turno_id'], unique=True, postgresql_where=sa.text("origen = 'sena'"))
+    op.create_table('medicion_antropometrica',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cliente_id', sa.Integer(), nullable=False),
+    sa.Column('entrada_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.Date(), nullable=False),
+    sa.Column('evaluador', sa.String(length=120), nullable=True),
+    sa.Column('origen', sa.String(length=40), nullable=False),
+    sa.Column('peso_kg', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('talla_cm', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('imc', sa.Numeric(precision=5, scale=2), nullable=True),
+    sa.Column('talla_sentado_cm', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('envergadura_cm', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('pl_triceps', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_subescapular', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_biceps', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_cresta_iliaca', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_supraespinal', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_abdominal', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_muslo', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('pl_pierna', sa.Numeric(precision=5, scale=1), nullable=True),
+    sa.Column('sumatoria_pliegues', sa.Numeric(precision=6, scale=1), nullable=True),
+    sa.Column('per_cintura', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('per_cadera', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('per_brazo', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('per_muslo', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('per_pierna', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('masa_grasa_kg', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('masa_grasa_pct', sa.Numeric(precision=5, scale=2), nullable=True),
+    sa.Column('masa_muscular_kg', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('masa_osea_kg', sa.Numeric(precision=6, scale=2), nullable=True),
+    sa.Column('datos_isak', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], name=op.f('fk_medicion_antropometrica_cliente_id_cliente')),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_medicion_antropometrica_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['entrada_id'], ['entrada_clinica.id'], name=op.f('fk_medicion_antropometrica_entrada_id_entrada_clinica')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_medicion_antropometrica'))
+    )
+    op.create_index(op.f('ix_medicion_antropometrica_empresa_id'), 'medicion_antropometrica', ['empresa_id'], unique=False)
+    op.create_index('ix_medicion_empresa_cliente_fecha', 'medicion_antropometrica', ['empresa_id', 'cliente_id', 'fecha'], unique=False)
+    op.create_table('wa_movimiento',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('cantidad', sa.Integer(), nullable=False),
+    sa.Column('motivo', sa.String(length=20), nullable=False),
+    sa.Column('detalle', sa.String(length=200), nullable=True),
+    sa.Column('precio_ars', sa.Numeric(precision=12, scale=2), nullable=True),
+    sa.Column('mensaje_id', sa.BigInteger(), nullable=True),
+    sa.Column('usuario_id', sa.Integer(), nullable=True),
+    sa.Column('fecha', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('empresa_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_wa_movimiento_empresa_id_empresa')),
+    sa.ForeignKeyConstraint(['mensaje_id'], ['mensaje.id'], name=op.f('fk_wa_movimiento_mensaje_id_mensaje')),
+    sa.ForeignKeyConstraint(['usuario_id'], ['usuario.id'], name=op.f('fk_wa_movimiento_usuario_id_usuario')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_wa_movimiento'))
+    )
+    op.create_index('ix_wa_movimiento_empresa_fecha', 'wa_movimiento', ['empresa_id', 'fecha'], unique=False)
+    op.create_index(op.f('ix_wa_movimiento_empresa_id'), 'wa_movimiento', ['empresa_id'], unique=False)
+
+
+def downgrade() -> None:
+    op.drop_index(op.f('ix_wa_movimiento_empresa_id'), table_name='wa_movimiento')
+    op.drop_index('ix_wa_movimiento_empresa_fecha', table_name='wa_movimiento')
+    op.drop_table('wa_movimiento')
+    op.drop_index('ix_medicion_empresa_cliente_fecha', table_name='medicion_antropometrica')
+    op.drop_index(op.f('ix_medicion_antropometrica_empresa_id'), table_name='medicion_antropometrica')
+    op.drop_table('medicion_antropometrica')
+    op.drop_index('uq_pago_sena_turno', table_name='pago', postgresql_where=sa.text("origen = 'sena'"))
+    op.drop_index('ix_pago_turno', table_name='pago')
+    op.drop_index('ix_pago_movimiento', table_name='pago')
+    op.drop_index('ix_pago_empresa_vigente', table_name='pago', postgresql_where=sa.text('anulado = false'))
+    op.drop_index('ix_pago_empresa_origen', table_name='pago')
+    op.drop_index(op.f('ix_pago_empresa_id'), table_name='pago')
+    op.drop_index('ix_pago_empresa_fecha', table_name='pago')
+    op.drop_index('ix_pago_empresa_cliente', table_name='pago')
+    op.drop_table('pago')
+    op.drop_index(op.f('ix_mensaje_externo_id'), table_name='mensaje')
+    op.drop_index('ix_mensaje_empresa_turno', table_name='mensaje')
+    op.drop_index(op.f('ix_mensaje_empresa_id'), table_name='mensaje')
+    op.drop_index('ix_mensaje_empresa_fecha', table_name='mensaje')
+    op.drop_index('ix_mensaje_empresa_cliente', table_name='mensaje')
+    op.drop_table('mensaje')
+    op.drop_index('ix_membresia_vigencia', table_name='membresia')
+    op.drop_index(op.f('ix_membresia_empresa_id'), table_name='membresia')
+    op.drop_index('ix_membresia_empresa_cliente', table_name='membresia')
+    op.drop_table('membresia')
+    op.drop_index('ix_item_turno_turno', table_name='item_turno')
+    op.drop_index('ix_item_turno_empresa_turno', table_name='item_turno')
+    op.drop_index(op.f('ix_item_turno_empresa_id'), table_name='item_turno')
+    op.drop_table('item_turno')
+    op.drop_index(op.f('ix_gift_card_empresa_id'), table_name='gift_card')
+    op.drop_index('ix_gift_card_empresa_estado', table_name='gift_card')
+    op.drop_index('ix_gift_card_empresa_codigo', table_name='gift_card')
+    op.drop_table('gift_card')
+    op.drop_index('ix_entrada_empresa_cliente_fecha', table_name='entrada_clinica')
+    op.drop_index(op.f('ix_entrada_clinica_empresa_id'), table_name='entrada_clinica')
+    op.drop_table('entrada_clinica')
+    op.drop_index(op.f('ix_calificacion_empresa_id'), table_name='calificacion')
+    op.drop_table('calificacion')
+    op.drop_index('ix_turno_sena_pendiente', table_name='turno', postgresql_where=sa.text("sena_estado = 'pendiente'"))
+    op.drop_index('ix_turno_recordatorio_pendiente', table_name='turno', postgresql_where=sa.text('recordatorio_enviado = false'))
+    op.drop_index('ix_turno_recordatorio_2h_pendiente', table_name='turno', postgresql_where=sa.text('recordatorio_2h_enviado = false'))
+    op.drop_index('ix_turno_empresa_recurso_inicio', table_name='turno')
+    op.drop_index(op.f('ix_turno_empresa_id'), table_name='turno')
+    op.drop_index('ix_turno_empresa_estado_inicio', table_name='turno')
+    op.drop_index('ix_turno_empresa_cupon', table_name='turno')
+    op.drop_index('ix_turno_empresa_cliente', table_name='turno')
+    op.drop_table('turno')
+    op.drop_table('servicio_recurso')
+    op.drop_table('recurso_especialidad')
+    op.drop_index(op.f('ix_movimiento_financiero_empresa_id'), table_name='movimiento_financiero')
+    op.drop_index('ix_movfin_empresa_tipo_categoria', table_name='movimiento_financiero')
+    op.drop_index('ix_movfin_empresa_fecha', table_name='movimiento_financiero')
+    op.drop_index('ix_movfin_caja_activos', table_name='movimiento_financiero')
+    op.drop_table('movimiento_financiero')
+    op.drop_index(op.f('ix_lista_espera_empresa_id'), table_name='lista_espera')
+    op.drop_table('lista_espera')
+    op.drop_index(op.f('ix_horario_recurso_empresa_id'), table_name='horario_recurso')
+    op.drop_index('ix_horario_empresa_recurso_dia', table_name='horario_recurso')
+    op.drop_table('horario_recurso')
+    op.drop_index(op.f('ix_excepcion_agenda_empresa_id'), table_name='excepcion_agenda')
+    op.drop_table('excepcion_agenda')
+    op.drop_index(op.f('ix_comision_profesional_empresa_id'), table_name='comision_profesional')
+    op.drop_table('comision_profesional')
+    op.drop_index('ix_recurso_empresa_tipo', table_name='recurso')
+    op.drop_index(op.f('ix_recurso_empresa_id'), table_name='recurso')
+    op.drop_table('recurso')
+    op.drop_index('ix_log_tabla_registro', table_name='log_auditoria')
+    op.drop_index('ix_log_empresa_fecha', table_name='log_auditoria')
+    op.drop_index(op.f('ix_log_auditoria_empresa_id'), table_name='log_auditoria')
+    op.drop_table('log_auditoria')
+    op.drop_index('uq_caja_abierta_por_sucursal', table_name='caja', postgresql_where=sa.text("estado = 'abierta'"))
+    op.drop_index(op.f('ix_caja_empresa_id'), table_name='caja')
+    op.drop_table('caja')
+    op.drop_index(op.f('ix_adjunto_empresa_id'), table_name='adjunto')
+    op.drop_table('adjunto')
+    op.drop_index('uq_usuario_email_lower', table_name='usuario')
+    op.drop_index(op.f('ix_usuario_empresa_id'), table_name='usuario')
+    op.drop_table('usuario')
+    op.drop_index(op.f('ix_servicio_sucursal_empresa_id'), table_name='servicio_sucursal')
+    op.drop_table('servicio_sucursal')
+    op.drop_index('ix_historial_empresa_cliente_fecha', table_name='historial_cliente')
+    op.drop_index(op.f('ix_historial_cliente_empresa_id'), table_name='historial_cliente')
+    op.drop_table('historial_cliente')
+    op.drop_index('ix_ficha_empresa_cliente', table_name='ficha_clinica')
+    op.drop_index(op.f('ix_ficha_clinica_empresa_id'), table_name='ficha_clinica')
+    op.drop_table('ficha_clinica')
+    op.drop_index(op.f('ix_deuda_cliente_empresa_id'), table_name='deuda_cliente')
+    op.drop_table('deuda_cliente')
+    op.drop_index('ix_aviso_pago_pendiente', table_name='aviso_pago', postgresql_where=sa.text('resuelto = false'))
+    op.drop_index(op.f('ix_aviso_pago_empresa_id'), table_name='aviso_pago')
+    op.drop_table('aviso_pago')
+    op.drop_index(op.f('ix_ajuste_suscripcion_empresa_id'), table_name='ajuste_suscripcion')
+    op.drop_index('ix_ajuste_suscripcion_empresa', table_name='ajuste_suscripcion')
+    op.drop_table('ajuste_suscripcion')
+    op.drop_table('wa_saldo')
+    op.drop_index(op.f('ix_sucursal_empresa_id'), table_name='sucursal')
+    op.drop_table('sucursal')
+    op.drop_index(op.f('ix_servicio_empresa_id'), table_name='servicio')
+    op.drop_index('ix_servicio_empresa_activo', table_name='servicio')
+    op.drop_table('servicio')
+    op.drop_index(op.f('ix_plantilla_mensaje_empresa_id'), table_name='plantilla_mensaje')
+    op.drop_table('plantilla_mensaje')
+    op.drop_index(op.f('ix_plan_abono_empresa_id'), table_name='plan_abono')
+    op.drop_index('ix_plan_abono_empresa_activo', table_name='plan_abono')
+    op.drop_table('plan_abono')
+    op.drop_index('uq_pago_suscripcion_mp', table_name='pago_suscripcion', postgresql_where=sa.text('mp_payment_id is not null'))
+    op.drop_index('ix_pago_suscripcion_fecha', table_name='pago_suscripcion')
+    op.drop_index(op.f('ix_pago_suscripcion_empresa_id'), table_name='pago_suscripcion')
+    op.drop_index('ix_pago_suscripcion_empresa_fecha', table_name='pago_suscripcion')
+    op.drop_table('pago_suscripcion')
+    op.drop_index(op.f('ix_metodo_pago_empresa_id'), table_name='metodo_pago')
+    op.drop_table('metodo_pago')
+    op.drop_index(op.f('ix_especialidad_empresa_id'), table_name='especialidad')
+    op.drop_table('especialidad')
+    op.drop_index(op.f('ix_cupon_descuento_empresa_id'), table_name='cupon_descuento')
+    op.drop_table('cupon_descuento')
+    op.drop_index('ix_cliente_empresa_telefono', table_name='cliente')
+    op.drop_index(op.f('ix_cliente_empresa_id'), table_name='cliente')
+    op.drop_index('ix_cliente_empresa_dni', table_name='cliente')
+    op.drop_index('ix_cliente_empresa_apellido_nombre', table_name='cliente')
+    op.drop_table('cliente')
+    op.drop_index(op.f('ix_categoria_financiera_empresa_id'), table_name='categoria_financiera')
+    op.drop_table('categoria_financiera')
+    op.drop_index(op.f('ix_empresa_wa_phone_number_id'), table_name='empresa')
+    op.drop_table('empresa')
+    op.drop_table('super_admin')
+    op.drop_table('rubro')
+    # ### end Alembic commands ###

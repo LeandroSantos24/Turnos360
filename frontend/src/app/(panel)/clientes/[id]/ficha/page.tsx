@@ -61,7 +61,7 @@ export default function FichaPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="font-[family-name:var(--font-syne)] text-2xl font-bold">
+          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
             Ficha clínica
           </h1>
           <p className="text-sm text-muted-foreground">{nombre}</p>

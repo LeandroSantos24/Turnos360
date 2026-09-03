@@ -113,7 +113,9 @@ class MovimientoFinanciero(TenantMixin, Base):
         Boolean, nullable=False, server_default=text("false")
     )
     anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    anulado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"))
+    anulado_por_id: Mapped[int | None] = mapped_column(
+        ForeignKey("usuario.id", name="fk_movfin_anulado_por")
+    )
     motivo_anulacion: Mapped[str | None] = mapped_column(String(200))
 
 
