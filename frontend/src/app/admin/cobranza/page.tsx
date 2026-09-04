@@ -150,6 +150,9 @@ export default function CobranzaPage() {
         }}
       />
 
+      {/* Progreso de la cobranza del mes */}
+      {resumen && <ProgresoDeCobros resumen={resumen} />}
+
       {/* Balance rápido */}
       {resumen && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -352,6 +355,100 @@ export default function CobranzaPage() {
     </div>
   );
 }
+
+/**
+ * Cuánto de lo que hay que cobrar este mes ya entró.
+ *
+ * POR QUÉ ESTO Y NO OTRA TARJETA MÁS
+ * ──────────────────────────────────
+ * Las cuatro tarjetas de abajo dan cuatro números sueltos, y el que mira tiene
+ * que restarlos de cabeza para contestar la única pregunta que importa un
+ * lunes: «¿cómo venimos?». Los tres números son partes de UN total —lo cobrado,
+ * lo que está por vencer y lo que ya venció— así que van en una sola barra,
+ * que es lo que convierte tres cifras en una respuesta.
+ *
+ * SOBRE LOS COLORES
+ * ─────────────────
+ * Verde, ámbar y rojo acá NO son "tres series": son estados (cobrado, por
+ * cobrar, vencido) y usan la paleta de estado que ya usa el resto del panel.
+ * Cada tramo va con su punto Y su etiqueta escrita: quien no distingue el
+ * ámbar del verde lee igual, y en blanco y negro también. El texto va en
+ * tinta normal y nunca en el color del tramo — el color lo lleva el punto.
+ */
+function ProgresoDeCobros({ resumen }: { resumen: ResumenCobranza }) {
+  const cobrado = resumen.cobrado_mes;
+  const porCobrar = resumen.pendiente_estimado;
+  const vencido = resumen.deuda_vencida;
+  const total = cobrado + porCobrar + vencido;
+
+  // Sin nada que cobrar la barra no dice nada: mejor no mostrarla que mostrar
+  // una barra vacía al 0 % que parece un problema.
+  if (total <= 0) return null;
+
+  const pct = (n: number) => (n / total) * 100;
+  const tramos = [
+    { clave: "cobrado", label: "Cobrado", valor: cobrado, punto: "bg-emerald-500" },
+    { clave: "porCobrar", label: `Por cobrar (${resumen.dias_aviso} días)`, valor: porCobrar, punto: "bg-amber-500" },
+    { clave: "vencido", label: "Vencido", valor: vencido, punto: "bg-red-500" },
+  ].filter((t) => t.valor > 0);
+
+  return (
+    <div className="rounded-2xl border bg-card p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Cobrado este mes</p>
+          {/* El titular: un número grande, no una tarjeta más. */}
+          <p
+            className="text-3xl font-bold tabular-nums"
+            style={{ fontFamily: "var(--fuente-titulos)" }}
+          >
+            {PESOS(cobrado)}
+            <span className="ml-2 text-base font-normal text-muted-foreground">
+              de {PESOS(total)}
+            </span>
+          </p>
+        </div>
+        <p className="text-2xl font-bold tabular-nums text-muted-foreground">
+          {Math.round(pct(cobrado))}%
+        </p>
+      </div>
+
+      {/* Una barra, tres tramos. El gap de 2px los separa sin una línea que
+          compita con los datos. */}
+      <div className="mt-3 flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted">
+        {tramos.map((t) => (
+          <div
+            key={t.clave}
+            className={`h-full ${t.punto} first:rounded-l-full last:rounded-r-full`}
+            style={{ width: `${pct(t.valor)}%` }}
+          />
+        ))}
+      </div>
+
+      {/* Etiquetas directas: el color nunca es lo único que distingue. */}
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+        {tramos.map((t) => (
+          <div key={t.clave} className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${t.punto}`} />
+            <span className="text-sm text-muted-foreground">{t.label}</span>
+            <span className="text-sm font-semibold tabular-nums">
+              {PESOS(t.valor)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {resumen.por_vencer_sin_precio > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {resumen.por_vencer_sin_precio} empresa
+          {resumen.por_vencer_sin_precio === 1 ? "" : "s"} por vencer sin precio
+          cargado: no suman a este total, así que lo real es un poco más.
+        </p>
+      )}
+    </div>
+  );
+}
+
 
 function Tarjeta({
   titulo,
