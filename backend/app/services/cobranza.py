@@ -424,6 +424,10 @@ def historial_pagos(db: Session, empresa_id: int, limite: int = 24) -> list[dict
             # y después se dio de baja es justo lo que hay que poder ver.
             "anulado": bool(p.anulado),
             "anulado_por": p.anulado_por,
+            # Con id de MP = se puede preguntar a Mercado Pago qué pasó
+            # después. Sin id, la verificación es contra el banco y la hace
+            # una persona. La pantalla necesita saber cuál de las dos es.
+            "mp_payment_id": p.mp_payment_id,
         }
         for p in filas
     ]

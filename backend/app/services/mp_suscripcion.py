@@ -289,3 +289,110 @@ def acreditar(db: Session, payment_id: str) -> PagoSuscripcion | None:
         log.exception("No se pudo avisar el pago %s", payment_id)
 
     return pago
+
+
+# Qué significa cada estado de Mercado Pago, en castellano y sin ambigüedad.
+# La clave es que «no approved» NO es todo lo mismo: un `pending` puede
+# aprobarse solo en unas horas, un `rejected` no se aprueba nunca, y un
+# `refunded` ES plata que estuvo y se devolvió. Tratarlos igual es lo que hace
+# que una cuota devuelta siga contando como cobrada.
+ESTADOS_MP: dict[str, dict[str, str]] = {
+    "approved": {"etiqueta": "Acreditado", "color": "verde"},
+    "authorized": {"etiqueta": "Autorizado, sin capturar", "color": "ambar"},
+    "in_process": {"etiqueta": "En revisión", "color": "ambar"},
+    "in_mediation": {"etiqueta": "En disputa", "color": "rojo"},
+    "pending": {"etiqueta": "Pendiente", "color": "ambar"},
+    "rejected": {"etiqueta": "Rechazado", "color": "rojo"},
+    "cancelled": {"etiqueta": "Cancelado", "color": "rojo"},
+    "refunded": {"etiqueta": "Devuelto", "color": "rojo"},
+    "charged_back": {"etiqueta": "Contracargo", "color": "rojo"},
+}
+
+
+def verificar(db: Session, pago: PagoSuscripcion) -> dict:
+    """Le pregunta a Mercado Pago qué pasó DE VERDAD con esta cuota.
+
+    POR QUÉ HACE FALTA PREGUNTAR
+    ────────────────────────────
+    Lo planteó Leandro: «capaz no entro a Mercado Pago y se había marcado como
+    cobrado». El webhook acredita solo, y eso es lo que queremos — pero
+    después de acreditar, la fila de la base no vuelve a mirarse nunca. Si el
+    pago se devolvió, se disputó o terminó en contracargo, Mercado Pago lo
+    sabe y nosotros seguimos mostrando «cobrado» para siempre. El agujero no
+    es que el webhook falle: es que lo que el webhook escribió no se revisa.
+
+    Esto no toca nada. Devuelve lo que dice MP al lado de lo que dice nuestra
+    base, y deja que decida una persona. Corregir automáticamente un pago
+    porque una consulta HTTP salió mal —o volvió lenta, o el token venció— es
+    peor que no revisar: borraría plata cobrada de verdad sin que nadie lo
+    haya pedido.
+
+    Nunca levanta: un problema de red no puede tumbar el panel de cobranza.
+    """
+    salida: dict = {
+        "pago_id": pago.id,
+        "mp_payment_id": pago.mp_payment_id,
+        "monto_registrado": float(pago.monto),
+        "anulado": bool(pago.anulado),
+        # Los tres casos en los que NO hay nada que comparar, separados para
+        # que la pantalla pueda decir por qué en vez de un "no se pudo".
+        "consultable": False,
+        "motivo": None,
+        "estado": None,
+        "estado_etiqueta": None,
+        "color": "gris",
+        "monto_mp": None,
+        "coincide": None,
+        "acreditado": None,
+        "detalle": None,
+    }
+
+    if not pago.mp_payment_id:
+        salida["motivo"] = "sin_id"
+        salida["detalle"] = (
+            "Esta cuota no entró por Mercado Pago, así que no hay nada que "
+            "consultar. Si fue una transferencia, se verifica en el banco."
+        )
+        return salida
+
+    if not esta_activo():
+        salida["motivo"] = "mp_apagado"
+        salida["detalle"] = (
+            "Mercado Pago no está configurado en este entorno "
+            "(falta MP_SAAS_ACCESS_TOKEN), así que no se puede consultar."
+        )
+        return salida
+
+    datos = consultar_pago(pago.mp_payment_id)
+    if datos is None:
+        salida["motivo"] = "sin_respuesta"
+        salida["detalle"] = (
+            "Mercado Pago no respondió o el pago no existe en la cuenta. "
+            "Probá de nuevo en un rato; si sigue igual, revisalo en el panel "
+            "de Mercado Pago antes de tocar nada acá."
+        )
+        return salida
+
+    estado = str(datos.get("status") or "").strip()
+    info = ESTADOS_MP.get(estado, {"etiqueta": estado or "Desconocido", "color": "gris"})
+    monto_mp = datos.get("transaction_amount")
+    monto_mp = float(monto_mp) if monto_mp is not None else None
+
+    salida.update(
+        {
+            "consultable": True,
+            "estado": estado,
+            "estado_etiqueta": info["etiqueta"],
+            "color": info["color"],
+            "monto_mp": monto_mp,
+            "acreditado": estado == "approved",
+            # Comparar los montos importa aparte del estado: un pago aprobado
+            # por un importe distinto al registrado también es un problema, y
+            # es el que nadie mira porque el semáforo está en verde.
+            "coincide": (
+                monto_mp is not None and abs(monto_mp - float(pago.monto)) < 1
+            ),
+            "detalle": datos.get("status_detail"),
+        }
+    )
+    return salida

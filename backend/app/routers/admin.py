@@ -254,6 +254,29 @@ def historial_pagos(empresa_id: int, admin: SuperAdminActual, db: DB):
     return cobranza.historial_pagos(db, empresa_id)
 
 
+@router.get("/pagos/{pago_id}/verificar-mp")
+def verificar_pago_mp(pago_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    """¿Mercado Pago sigue diciendo que esta cuota está cobrada?
+
+    Lo pidió Leandro con estas palabras: «capaz no entro a Mercado Pago y se
+    había marcado como cobrado». El webhook acredita solo —eso está bien— pero
+    después nadie vuelve a mirar esa fila. Si el pago se devolvió, se disputó o
+    terminó en contracargo, Mercado Pago lo sabe y el panel sigue mostrando
+    «cobrado» para siempre.
+
+    Es de solo lectura A PROPÓSITO: informa y deja decidir. Anular una cuota
+    automáticamente porque una consulta HTTP volvió mal (token vencido, timeout,
+    caída de MP) borraría plata cobrada de verdad sin que nadie lo pida.
+    """
+    from app.models import PagoSuscripcion
+    from app.services import mp_suscripcion as mp_sus
+
+    pago = db.get(PagoSuscripcion, pago_id)
+    if pago is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese pago no existe")
+    return mp_sus.verificar(db, pago)
+
+
 @router.post(
     "/empresas/{empresa_id}/pagos",
     response_model=PagoSuscripcionOut,

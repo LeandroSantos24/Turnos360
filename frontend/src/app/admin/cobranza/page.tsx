@@ -23,6 +23,7 @@ import { AvisosDePago } from "./avisos-de-pago";
 import {
   AvisoPago,
   EmpresaCobranza,
+  VerificacionMP,
   PagoSuscripcion,
   ResumenCobranza,
   SemaforoColor,
@@ -33,6 +34,7 @@ import {
   listarCobranza,
   registrarPago,
   resumenCobranza,
+  verificarPagoMP,
 } from "@/lib/admin-api";
 import { PLANES, PRECIO_MENSUAL } from "@/lib/precios";
 import { Button } from "@/components/ui/button";
@@ -420,6 +422,106 @@ function Tarjeta({
  *   5. Abajo, antes de confirmar, dice en una línea qué va a pasar: el plan
  *      resultante y el vencimiento de antes → después.
  */
+/**
+ * Una fila del historial de pagos, con la verificación contra Mercado Pago.
+ *
+ * POR QUÉ HAY UN BOTÓN Y NO SE CONSULTA SOLO
+ * ──────────────────────────────────────────
+ * Consultar los cinco pagos al abrir el diálogo son cinco llamadas a la API de
+ * MP cada vez que alguien mira una ficha, para un dato que casi siempre es el
+ * mismo. Se consulta cuando hace falta: cuando la cuota no cuadra, cuando el
+ * negocio reclama, o cuando uno duda. Que sea un acto deliberado también deja
+ * claro que el resultado es de AHORA y no un estado guardado.
+ */
+function FilaDePago({ pago }: { pago: PagoSuscripcion }) {
+  const [mp, setMp] = useState<VerificacionMP | null>(null);
+  const [viendo, setViendo] = useState(false);
+
+  const esDeMP = !!pago.mp_payment_id;
+
+  async function verificar() {
+    setViendo(true);
+    try {
+      setMp(await verificarPagoMP(pago.id));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo consultar");
+    } finally {
+      setViendo(false);
+    }
+  }
+
+  const tono: Record<string, string> = {
+    verde: "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400",
+    ambar: "border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400",
+    rojo: "border-red-500/50 bg-red-500/5 text-red-700 dark:text-red-400",
+    gris: "border-border bg-muted/40 text-muted-foreground",
+  };
+
+  return (
+    <li className="px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 text-muted-foreground">
+          {pago.fecha} · {pago.metodo}
+          {pago.anulado && (
+            <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs">
+              anulado
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span
+            className={`tabular-nums font-medium ${pago.anulado ? "line-through opacity-60" : ""}`}
+          >
+            {PESOS(pago.monto)}
+          </span>
+          {esDeMP && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              onClick={verificar}
+              disabled={viendo}
+              title="Preguntarle a Mercado Pago qué pasó con este pago"
+            >
+              {viendo ? "Consultando…" : "Verificar en MP"}
+            </Button>
+          )}
+        </span>
+      </div>
+
+      {mp && (
+        <div className={`mt-2 rounded-lg border p-2.5 text-xs ${tono[mp.color]}`}>
+          {mp.consultable ? (
+            <>
+              <p className="font-medium">
+                Mercado Pago dice: {mp.estado_etiqueta}
+              </p>
+              {/* Los dos montos juntos. Un pago aprobado POR OTRO IMPORTE es el
+                  problema que nadie ve, porque el estado está en verde. */}
+              {mp.coincide === false && (
+                <p className="mt-1">
+                  MP acreditó {PESOS(mp.monto_mp)} y acá figura{" "}
+                  {PESOS(mp.monto_registrado)}.
+                </p>
+              )}
+              {mp.acreditado === false && !pago.anulado && (
+                <p className="mt-1">
+                  Esta cuota figura cobrada acá pero Mercado Pago no la da por
+                  acreditada. Revisala antes de contarla.
+                </p>
+              )}
+              {mp.detalle && <p className="mt-1 opacity-80">{mp.detalle}</p>}
+            </>
+          ) : (
+            <p>{mp.detalle}</p>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+
 function DialogCobro({
   empresa,
   aviso,
@@ -688,12 +790,7 @@ function DialogCobro({
               </p>
               <ul className="divide-y text-sm">
                 {historial.slice(0, 5).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-muted-foreground">
-                      {p.fecha} · {p.metodo}
-                    </span>
-                    <span className="tabular-nums font-medium">{PESOS(p.monto)}</span>
-                  </li>
+                  <FilaDePago key={p.id} pago={p} />
                 ))}
               </ul>
             </div>

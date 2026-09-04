@@ -209,6 +209,40 @@ export interface PagoSuscripcion {
   periodo_desde: string | null;
   periodo_hasta: string | null;
   notas: string | null;
+  anulado?: boolean;
+  anulado_por?: string | null;
+  /** Presente = entró por Mercado Pago y se le puede preguntar a MP qué pasó. */
+  mp_payment_id?: string | null;
+}
+
+/**
+ * Lo que Mercado Pago dice HOY de una cuota que ya acreditamos.
+ *
+ * El webhook acredita solo y después esa fila no se vuelve a mirar nunca: si
+ * el pago se devolvió o terminó en contracargo, MP lo sabe y el panel sigue
+ * mostrando «cobrado». Esto es la consulta que cierra ese agujero.
+ */
+export interface VerificacionMP {
+  pago_id: number;
+  mp_payment_id: string | null;
+  monto_registrado: number;
+  anulado: boolean;
+  /** false = no se pudo consultar; `motivo` dice por qué. */
+  consultable: boolean;
+  motivo: "sin_id" | "mp_apagado" | "sin_respuesta" | null;
+  estado: string | null;
+  estado_etiqueta: string | null;
+  color: "verde" | "ambar" | "rojo" | "gris";
+  monto_mp: number | null;
+  /** El monto de MP coincide con el registrado. */
+  coincide: boolean | null;
+  /** null = no sabemos (no se pudo consultar). Nunca false por un error de red. */
+  acreditado: boolean | null;
+  detalle: string | null;
+}
+
+export function verificarPagoMP(pagoId: number): Promise<VerificacionMP> {
+  return adminRequest<VerificacionMP>(`/admin/pagos/${pagoId}/verificar-mp`);
 }
 
 export function listarCobranza(filtros: {

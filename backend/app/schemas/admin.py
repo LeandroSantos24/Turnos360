@@ -250,6 +250,11 @@ class PagoSuscripcionOut(BaseModel):
     periodo_desde: str | None = None
     periodo_hasta: str | None = None
     notas: str | None = None
+    anulado: bool = False
+    anulado_por: str | None = None
+    # Presente = la cuota entró por Mercado Pago y se le puede preguntar a MP
+    # qué pasó después de acreditarla.
+    mp_payment_id: str | None = None
 
 
 class ProrrogaIn(BaseModel):
