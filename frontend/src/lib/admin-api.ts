@@ -234,7 +234,21 @@ export function historialPagos(empresaId: number): Promise<PagoSuscripcion[]> {
 
 export function registrarPago(
   empresaId: number,
-  datos: { monto: number; metodo: string; fecha?: string; notas?: string; renovar?: boolean },
+  datos: {
+    monto: number;
+    metodo: string;
+    fecha?: string;
+    notas?: string;
+    renovar?: boolean;
+    /**
+     * A qué plan queda la empresa con este pago.
+     *
+     * Sin esto, una transferencia hecha PARA pasar a Pro se registraba como
+     * cuota y dejaba al negocio en Inicial: cobrado el dinero, sin entregar lo
+     * que compró. El plan viaja con el pago porque es parte del pago.
+     */
+    plan?: string;
+  },
 ): Promise<PagoSuscripcion> {
   return adminRequest<PagoSuscripcion>(`/admin/empresas/${empresaId}/pagos`, {
     method: "POST",
@@ -257,16 +271,33 @@ export interface AjusteSuscripcion {
   reversible: boolean;
 }
 
-/** Un negocio que dijo "ya te transferí" y todavía no se confirmó. */
+/**
+ * Un negocio que dijo "ya te transferí" y todavía no se confirmó.
+ *
+ * Viaja con TODO lo necesario para decidir sin abrir otra pantalla: lo que
+ * avisó, lo que se le espera cobrar, en qué plan está y si los dos números
+ * coinciden. Ese último campo es el que permite mirar la bandeja y saber
+ * cuáles se confirman solos y cuáles hay que pensar.
+ */
 export interface AvisoPago {
   id: number;
   empresa_id: number;
   empresa_nombre: string;
   metodo: string;
+  /** Lo que el negocio dijo que transfirió. Puede no haberlo cargado. */
   monto: number | null;
   referencia: string | null;
+  /** Quién avisó, desde el panel del negocio. */
+  avisado_por: string | null;
   creado_en: string | null;
   resuelto: boolean;
+  /** Lo que le corresponde pagar: su precio pactado, o el de su plan. */
+  monto_esperado: number | null;
+  plan_codigo: string;
+  plan_etiqueta: string;
+  vence: string | null;
+  /** Avisó exactamente lo esperado. */
+  coincide: boolean;
 }
 
 export function listarAvisosPago(): Promise<AvisoPago[]> {

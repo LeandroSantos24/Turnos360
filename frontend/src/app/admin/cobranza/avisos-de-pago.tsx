@@ -9,10 +9,19 @@
  *
  * Los pagos por Mercado Pago no aparecen acá: esos los confirma el webhook
  * contra la API de MP, que es una fuente de verdad y no una promesa.
+ *
+ * POR QUÉ CADA FILA MUESTRA DOS NÚMEROS
+ * ─────────────────────────────────────
+ * Antes la fila decía solo cuánto avisó el negocio. Para saber si ese monto
+ * estaba bien había que acordarse del precio pactado de ESA empresa, que puede
+ * no ser el de lista. Confirmar un pago era, en la práctica, confiar en la
+ * memoria. Ahora al lado del monto avisado está el esperado, y si coinciden la
+ * fila se pinta verde: los que coinciden se confirman de un vistazo y la
+ * atención queda libre para los que no, que son los únicos que hay que pensar.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AvisoPago, descartarAvisoPago, listarAvisosPago } from "@/lib/admin-api";
@@ -26,11 +35,17 @@ function cuando(iso: string | null): string {
   });
 }
 
+const PESOS = (n: number | null | undefined) =>
+  n == null ? "—" : `$${Number(n).toLocaleString("es-AR")}`;
+
 export function AvisosDePago({
   onCobrar,
+  /** Se vuelve a pedir la lista cada vez que este número cambia. */
+  recargar = 0,
 }: {
   /** Abre el diálogo de cobro de esa empresa, con el aviso a la vista. */
-  onCobrar?: (empresaId: number) => void;
+  onCobrar?: (empresaId: number, aviso: AvisoPago) => void;
+  recargar?: number;
 }) {
   const confirmar = useConfirmar();
   const [avisos, setAvisos] = useState<AvisoPago[]>([]);
@@ -45,7 +60,7 @@ export function AvisosDePago({
 
   useEffect(() => {
     cargar();
-  }, [cargar]);
+  }, [cargar, recargar]);
 
   async function descartar(a: AvisoPago) {
     if (
@@ -70,6 +85,8 @@ export function AvisosDePago({
 
   if (avisos.length === 0) return null;
 
+  const aRevisar = avisos.filter((a) => !a.coincide).length;
+
   return (
     <div className="rounded-2xl border border-sky-500/40 bg-sky-500/5 p-4">
       <p className="flex items-center gap-2 font-medium">
@@ -78,32 +95,84 @@ export function AvisosDePago({
         ya {avisos.length === 1 ? "transfirió" : "transfirieron"}
       </p>
       <p className="mt-0.5 text-sm text-muted-foreground">
-        Buscalos en el banco y registrá la cuota. Al registrarla, el aviso sale
-        solo de esta lista.
+        Buscá cada uno en el banco y registrá la cuota. Al registrarla, el aviso
+        sale solo de esta lista.
+        {aRevisar > 0 && (
+          <>
+            {" "}
+            <span className="font-medium text-amber-700 dark:text-amber-400">
+              {aRevisar} {aRevisar === 1 ? "no coincide" : "no coinciden"} con lo
+              esperado.
+            </span>
+          </>
+        )}
       </p>
+
       <div className="mt-3 space-y-2">
         {avisos.map((a) => (
           <div
             key={a.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-3"
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-3 ${
+              a.coincide
+                ? "border-emerald-500/40"
+                : "border-amber-500/50 bg-amber-500/[0.04]"
+            }`}
           >
-            <div className="min-w-0">
-              <p className="font-medium">{a.empresa_nombre}</p>
-              <p className="text-sm text-muted-foreground">
-                {a.monto != null
-                  ? `$${a.monto.toLocaleString("es-AR")}`
-                  : "sin monto"}{" "}
-                · {a.metodo} · {cuando(a.creado_en)}
-                {a.referencia ? ` · ${a.referencia}` : ""}
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 font-medium">
+                {a.empresa_nombre}
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                  {a.plan_etiqueta}
+                </span>
               </p>
+
+              {/* Los dos números, uno al lado del otro. Es toda la decisión. */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span>
+                  <span className="text-muted-foreground">Avisó</span>{" "}
+                  <span className="font-semibold tabular-nums">{PESOS(a.monto)}</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">Esperado</span>{" "}
+                  <span className="font-semibold tabular-nums">
+                    {PESOS(a.monto_esperado)}
+                  </span>
+                </span>
+                {a.coincide ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    <Check className="h-3 w-3" /> Coincide
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3 w-3" /> Revisar
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {a.metodo} · {cuando(a.creado_en)}
+                {a.avisado_por ? ` · avisó ${a.avisado_por}` : ""}
+                {a.vence ? ` · vence ${a.vence}` : " · sin vencimiento"}
+              </p>
+              {a.referencia && (
+                <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
+                  Comprobante: {a.referencia}
+                </p>
+              )}
             </div>
+
             <div className="flex gap-1.5">
               {onCobrar && (
-                <Button size="sm" onClick={() => onCobrar(a.empresa_id)}>
+                <Button size="sm" onClick={() => onCobrar(a.empresa_id, a)}>
                   Registrar cobro
                 </Button>
               )}
-              <Button size="sm" variant="ghost" onClick={() => descartar(a)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => descartar(a)}
+                title="Descartar sin cobrar"
+              >
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>

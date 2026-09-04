@@ -232,6 +232,14 @@ class PagoSuscripcionIn(BaseModel):
     notas: str | None = Field(default=None, max_length=500)
     # False = anotar el pago SIN mover el vencimiento (pago parcial, ajuste).
     renovar: bool = True
+    # A qué plan lo deja este pago. None = no se toca el plan.
+    #
+    # Es la mitad que faltaba del autoservicio: por Mercado Pago el plan viaja
+    # en el external_reference y se activa solo, pero una TRANSFERENCIA la
+    # confirma una persona. Sin este campo, un negocio que transfiere para
+    # pasar a Pro queda con el pago registrado y el plan en Inicial — y nadie
+    # se entera hasta que reclama.
+    plan: str | None = Field(default=None, max_length=20)
 
 
 class PagoSuscripcionOut(BaseModel):

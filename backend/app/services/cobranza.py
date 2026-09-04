@@ -610,24 +610,69 @@ def aviso_pendiente(db: Session, empresa_id: int) -> AvisoPago | None:
 
 
 def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
-    """La bandeja de entrada de Leandro: quién dice que pagó y no está confirmado."""
-    q = select(AvisoPago, Empresa.nombre).join(Empresa, AvisoPago.empresa_id == Empresa.id)
+    """La bandeja de entrada: quién dice que pagó y no está confirmado.
+
+    CADA AVISO VIAJA CON TODO LO QUE HACE FALTA PARA DECIDIR
+    ────────────────────────────────────────────────────────
+    Antes traía solo el nombre, el monto y la referencia. Confirmar un pago
+    significaba abrir el diálogo de cobro, que llegaba con el monto de LISTA
+    precargado —no con el que la persona dijo que transfirió— y sin nada del
+    aviso a la vista. Había que acordarse del número mirando la lista de atrás,
+    y si el negocio tenía un precio pactado distinto, el campo venía mal y no
+    había cómo notarlo.
+
+    Ahora viaja también qué se le espera cobrar, en qué plan está, y si el
+    monto avisado coincide con el esperado. Eso convierte «confirmar un pago»
+    de un ejercicio de memoria en una comparación de dos números que están uno
+    al lado del otro.
+    """
+    q = select(AvisoPago, Empresa).join(Empresa, AvisoPago.empresa_id == Empresa.id)
     if solo_pendientes:
         q = q.where(AvisoPago.resuelto.is_(False))
     filas = db.execute(q.order_by(AvisoPago.creado_en.desc()).limit(100)).all()
-    return [
-        {
-            "id": a.id,
-            "empresa_id": a.empresa_id,
-            "empresa_nombre": nombre,
-            "metodo": a.metodo,
-            "monto": float(a.monto) if a.monto is not None else None,
-            "referencia": a.referencia,
-            "creado_en": a.creado_en.isoformat() if a.creado_en else None,
-            "resuelto": bool(a.resuelto),
-        }
-        for a, nombre in filas
-    ]
+
+    salida = []
+    for a, empresa in filas:
+        avisado = float(a.monto) if a.monto is not None else None
+        # Lo que le corresponde pagar: su precio pactado, o el del plan que
+        # tiene. El pactado manda — para eso existe la columna.
+        esperado = (
+            float(empresa.precio_mensual)
+            if empresa.precio_mensual is not None
+            else float(planes.limites_de(empresa.plan).precio)
+        )
+        salida.append(
+            {
+                "id": a.id,
+                "empresa_id": a.empresa_id,
+                "empresa_nombre": empresa.nombre,
+                "metodo": a.metodo,
+                "monto": avisado,
+                "referencia": a.referencia,
+                "avisado_por": a.avisado_por,
+                "creado_en": a.creado_en.isoformat() if a.creado_en else None,
+                "resuelto": bool(a.resuelto),
+                # Con qué comparar el monto avisado, sin salir de la bandeja.
+                "monto_esperado": esperado or None,
+                "plan_codigo": planes.plan_de(empresa.plan).value,
+                "plan_etiqueta": planes.limites_de(empresa.plan).etiqueta,
+                "vence": (
+                    empresa.suscripcion_vence.isoformat()
+                    if empresa.suscripcion_vence
+                    else None
+                ),
+                # True = avisó exactamente lo que se le espera. La bandeja lo
+                # marca en verde: esos se confirman de un vistazo, y el ojo
+                # queda libre para los que NO coinciden, que son los únicos
+                # que hay que pensar.
+                "coincide": (
+                    avisado is not None
+                    and esperado > 0
+                    and abs(avisado - esperado) < 1
+                ),
+            }
+        )
+    return salida
 
 
 def resolver_aviso(

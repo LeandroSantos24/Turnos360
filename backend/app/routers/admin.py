@@ -262,8 +262,33 @@ def historial_pagos(empresa_id: int, admin: SuperAdminActual, db: DB):
 def registrar_pago(
     empresa_id: int, datos: PagoSuscripcionIn, admin: SuperAdminActual, db: DB
 ):
-    """Registra una cuota cobrada. Por defecto empuja el vencimiento 30 días."""
+    """Registra una cuota cobrada. Por defecto empuja el vencimiento 30 días.
+
+    `plan` activa el plan comprado, igual que hace el webhook de Mercado Pago
+    con el que viene en su external_reference. Es lo que permite que una
+    transferencia también sirva para cambiar de plan sin tocar la base a mano.
+    """
+    from app.core import planes
+
     empresa = _empresa_o_404(db, empresa_id)
+
+    plan = None
+    if datos.plan:
+        elegido = planes.plan_de(datos.plan)
+        # Enterprise SÍ se puede activar por acá, y es la única forma: no tiene
+        # precio de lista, así que no puede pasar por el cobro automático. Lo
+        # que se rechaza es un plan inventado, que caería a GRATUITO y le
+        # sacaría el plan pago a alguien que acaba de pagar.
+        if elegido is planes.Plan.GRATUITO and datos.plan.strip().lower() not in (
+            "gratuito",
+            "basico",
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"El plan «{datos.plan}» no existe.",
+            )
+        plan = elegido.value
+
     pago = cobranza.registrar_pago(
         db,
         empresa,
@@ -273,6 +298,7 @@ def registrar_pago(
         notas=datos.notas,
         registrado_por=admin.email,
         renovar=datos.renovar,
+        plan=plan,
     )
     # Si el negocio había avisado "ya te transferí", ese aviso queda atendido:
     # es exactamente lo que Leandro estaba yendo a confirmar.
