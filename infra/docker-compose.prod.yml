@@ -127,9 +127,9 @@ services:
       COBRO_MP_LINK: ${COBRO_MP_LINK:-}
       COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
       # Precio de lista: con el que nace toda empresa nueva desde el panel.
-      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL}
+      PRECIO_LISTA_MENSUAL: ${PRECIO_LISTA_MENSUAL:-13900}
       PROMO_ACTIVA: ${PROMO_ACTIVA:-false}
-      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL}
+      PRECIO_PROMO_MENSUAL: ${PRECIO_PROMO_MENSUAL:-11900}
       PROMO_ETIQUETA: ${PROMO_ETIQUETA:-Precio de lanzamiento}
       # Aviso por mail de cada acceso al panel de super-admin. Lo manda el
       # worker de Celery, no el backend: si Gmail tarda, el login no se cuelga.

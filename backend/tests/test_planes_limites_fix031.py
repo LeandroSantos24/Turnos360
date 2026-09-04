@@ -665,3 +665,77 @@ def test_el_precio_de_config_y_el_del_plan_de_entrada_son_el_mismo():
         "PRECIO_LISTA_MENSUAL y el precio del plan de entrada se separaron. "
         "La landing y la factura van a decir cosas distintas."
     )
+
+
+def test_los_defaults_de_docker_compose_coinciden_con_la_grilla():
+    """El tercer lugar donde vive el precio, y el que nadie mira.
+
+    EL CASO REAL: los compose traían `${PRECIO_LISTA_MENSUAL:-14990}` en seis
+    lugares mientras la grilla decía $11.900. El `.env` de desarrollo lo
+    pisaba, así que en la máquina de Leandro todo se veía bien — pero
+    cualquier despliegue que no definiera esa variable arrancaba con un precio
+    que no existía en ninguna grilla, y no había forma de enterarse salvo
+    mirando una factura.
+
+    El primer intento de arreglo fue sacar los defaults. Fue peor: con
+    `${VAR}` a secas, docker compose sustituye una CADENA VACÍA cuando la
+    variable no está, y pydantic no puede convertirla a float — el backend
+    dejaba de levantar. El default tiene que existir; lo que faltaba no era
+    quitarlo sino que algo verificara que dice lo mismo que la grilla.
+
+    Esto lee los YAML como texto a propósito: sin parsear, sin importar
+    docker, y falla con el archivo y el número que no coinciden.
+    """
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parents[2]
+    esperado = {
+        "PRECIO_LISTA_MENSUAL": float(planes.GRILLA[planes.PLAN_DE_ENTRADA].precio),
+        # La promo no está en la grilla: es un precio de campaña. Lo único que
+        # se exige es que no supere al de lista, porque una "promo" más cara
+        # que el precio normal es un error de tipeo con cara de descuento.
+        "PRECIO_PROMO_MENSUAL": None,
+    }
+
+    revisados = 0
+    for nombre in ("docker-compose.yml", "docker-compose.prod.yml"):
+        ruta = raiz / "infra" / nombre
+        if not ruta.exists():
+            continue
+        texto = ruta.read_text(encoding="utf-8")
+        for var, valor in esperado.items():
+            # `${VAR}` a secas, SIN `:-`: es la forma que sustituye una cadena
+            # vacía y voltea el backend. Se busca aparte porque el patrón de
+            # abajo no la matchea, y un test que no ve el bug no protege nada.
+            assert not re.search(rf"\$\{{{var}\}}", texto), (
+                f"{nombre}: {var} quedó sin default (`${{{var}}}`). Docker "
+                "compose sustituye una cadena vacía cuando la variable no "
+                "está y pydantic no puede convertirla a float: el backend no "
+                "arranca. Poné un default que coincida con la grilla."
+            )
+            for hallado in re.finditer(
+                rf"\$\{{{var}:-([0-9.]*)\}}", texto
+            ):
+                crudo = hallado.group(1)
+                revisados += 1
+                assert crudo != "", (
+                    f"{nombre}: {var} quedó con default vacío. Docker compose "
+                    "sustituye una cadena vacía y el backend no arranca."
+                )
+                if valor is not None:
+                    assert float(crudo) == valor, (
+                        f"{nombre}: el default de {var} es {crudo} y la grilla "
+                        f"dice {valor:.0f}. Un despliegue sin esa variable "
+                        "cobraría un precio que no existe en ninguna grilla."
+                    )
+                else:
+                    assert float(crudo) <= esperado["PRECIO_LISTA_MENSUAL"], (
+                        f"{nombre}: la promo ({crudo}) es más cara que el "
+                        "precio de lista. Eso es un typo con cara de descuento."
+                    )
+
+    assert revisados > 0, (
+        "No se encontró ningún default de precio en los compose. Si se "
+        "cambiaron de forma, este test dejó de proteger nada."
+    )
