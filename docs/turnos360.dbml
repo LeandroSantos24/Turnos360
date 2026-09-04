@@ -288,6 +288,7 @@ Table empresa {
   logo_url varchar(300)
   portada_url varchar(300)
   color_marca varchar(7)
+  tema jsonb
   reserva_anticipacion_min integer [not null]
   reserva_dias_max integer [not null]
   reserva_fecha_limite date

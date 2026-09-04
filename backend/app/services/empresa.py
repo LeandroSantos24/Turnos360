@@ -61,6 +61,10 @@ def obtener_landing(db: Session, empresa_id: int) -> dict:
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
         "galeria": empresa.galeria or [],
+        # {} y no None: el schema completa con los defaults, así que una
+        # empresa que nunca tocó el look recibe el tema por defecto ya armado
+        # y el editor no tiene que saber qué hacer con un null.
+        "tema": empresa.tema or {},
     }
 
 
@@ -77,6 +81,10 @@ def actualizar_landing(db: Session, empresa_id: int, datos: LandingConfig) -> di
     empresa.horarios_atencion = datos.horarios_atencion
     empresa.redes = datos.redes or {}
     empresa.galeria = [u.strip() for u in (datos.galeria or []) if u and u.strip()][:12]
+    # Se guarda el dict validado, no lo que llegó: los hex mal formados ya
+    # fueron descartados por el schema y las opciones fuera de lista habrían
+    # hecho fallar la validación antes de llegar acá.
+    empresa.tema = datos.tema.model_dump()
     db.commit()
     return obtener_landing(db, empresa_id)
 
@@ -132,12 +140,38 @@ def guardar_senas(db: Session, empresa_id: int, datos) -> dict:
 # Automatizaciones (campañas): defaults + get/put
 # ============================================================
 
+# Cuántas horas antes puede salir un recordatorio.
+#
+# Es una lista cerrada y no un número libre por una razón concreta: el barrido
+# corre cada 15 minutos y, para no escanear todos los turnos futuros en cada
+# ciclo, arma UNA consulta por cada valor distinto que estén usando las
+# empresas. Con siete opciones son como mucho catorce consultas por barrido;
+# con un entero libre serían tantas como empresas.
+#
+# Los valores cubren los dos usos reales: el aviso de "es mañana" (48/24/12) y
+# el de "es en un rato" (6/3/2/1).
+HORAS_RECORDATORIO = [48, 24, 12, 6, 3, 2, 1]
+
 AUTOMS_DEFAULTS: dict = {
-    "recordatorio_24h": {"activa": True},
-    "recordatorio_2h": {"activa": False},
-    "cumple": {"activa": False, "dias_antes": 7, "mensaje": ""},
-    "resena_google": {"activa": False, "link": ""},
-    "inactivos": {"activa": False, "dias": 60, "mensaje": ""},
+    # Los nombres de las claves son IDENTIFICADORES de ranura, no las horas:
+    # quedaron de cuando el recordatorio era fijo. Las horas de verdad están
+    # en `horas_antes` y son configurables. Renombrar las claves obligaría a
+    # migrar el JSONB de cada empresa a cambio de nada.
+    "recordatorio_24h": {"activa": True, "horas_antes": 24},
+    "recordatorio_2h": {"activa": False, "horas_antes": 2},
+    "cumple": {"activa": False, "dias_antes": 7, "asunto": "", "mensaje": ""},
+    "resena_google": {"activa": False, "link": "", "horas_despues": 2},
+    "inactivos": {
+        "activa": False,
+        "dias": 60,
+        "asunto": "",
+        "mensaje": "",
+        # A cuántas visitas previas apuntar. Mandarle "te extrañamos" a alguien
+        # que vino UNA vez hace tres meses no es fidelizar: es escribirle a un
+        # desconocido. Con 2, la campaña habla solo con quien ya volvió alguna
+        # vez, que es a quien tiene sentido recuperar.
+        "min_visitas": 1,
+    },
 }
 
 

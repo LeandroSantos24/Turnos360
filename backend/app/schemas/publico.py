@@ -52,6 +52,9 @@ class VidrieraOut(BaseModel):
     google_tag_id: str | None = None
     google_conversion_label: str | None = None
     color_marca: str | None = None
+    # El look de la vidriera (ver TemaVidriera en schemas/empresa.py). Se manda
+    # como dict libre: acá solo viaja, la vidriera lo interpreta.
+    tema: dict = {}
     horarios_atencion: dict | None = None
     redes: dict = {}
     galeria: list[str] = []

@@ -34,6 +34,12 @@ import {
   BORDE,
   hexA,
 } from "./vidriera-ui";
+import {
+  conAlfa,
+  estilosDe,
+  normalizarTema,
+  type TemaVidriera,
+} from "@/lib/tema-vidriera";
 import { ReservaWizard } from "./reserva-wizard";
 import { ScriptsSeguimiento } from "@/components/scripts-seguimiento";
 import { BannerCookies, useConsentimiento } from "@/components/banner-cookies";
@@ -146,6 +152,10 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   }
 
   const acento = acentoDe(vidriera);
+  // El look que eligió el negocio en «Mi página». Se resuelve una vez y baja
+  // por variables CSS: ver el comentario de TINTA en vidriera-ui.tsx.
+  const tema = normalizarTema(vidriera.tema as Partial<TemaVidriera> | undefined);
+  const look = estilosDe(tema, vidriera.color_marca);
   const haySeguimiento = Boolean(
     (vidriera.meta_pixel_id ?? "").trim() || (vidriera.google_tag_id ?? "").trim(),
   );
@@ -154,7 +164,32 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   const cerrar = () => setWizard({ abierto: false, servicio: null });
 
   return (
-    <div className="min-h-screen bg-white antialiased" style={{ color: TINTA }}>
+    <div
+      className="vd-raiz min-h-screen antialiased"
+      style={
+        {
+          // Las variables que consume TODA la vidriera. Definidas acá arriba
+          // una sola vez: cualquier componente de adentro —y cualquiera que
+          // se agregue después— hereda el look sin recibir nada.
+          "--vd-texto": look.texto,
+          "--vd-texto-suave": look.textoSuave,
+          "--vd-borde": conAlfa(look.texto, 0.12),
+          "--vd-superficie": conAlfa(look.texto, 0.05),
+          "--vd-tarjeta": look.tarjeta.background as string,
+          "--vd-radio": look.radio,
+          color: look.texto,
+          fontFamily: undefined,
+          ...look.fondo,
+        } as React.CSSProperties
+      }
+    >
+      {/* La tipografía de títulos que eligió el negocio. Va en un <style> y no
+          en el style del div porque tiene que alcanzar a los h1..h3 que están
+          repartidos por todos los componentes hijos. */}
+      <style>{`
+        .vd-raiz h1, .vd-raiz h2, .vd-raiz h3 { font-family: ${look.familiaTitulos}; }
+        .vd-tarjeta { background: var(--vd-tarjeta, #ffffff); }
+      `}</style>
       <ScriptsSeguimiento
         metaPixelId={vidriera.meta_pixel_id}
         googleTagId={vidriera.google_tag_id}

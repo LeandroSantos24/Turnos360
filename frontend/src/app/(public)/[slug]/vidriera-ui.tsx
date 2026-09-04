@@ -40,10 +40,33 @@ import { duracionLegible } from "@/lib/duracion";
 /* Tokens y helpers                                                    */
 /* ------------------------------------------------------------------ */
 
-export const TINTA = "#0c1015";
-export const TINTA_SUAVE = "#4b5566";
-export const BORDE = "#e9ecf1";
-export const SUPERFICIE = "#f6f7f9";
+/**
+ * Los colores de la vidriera, como VARIABLES CSS con su valor de siempre
+ * como respaldo.
+ *
+ * POR QUÉ ASÍ Y NO CON UN PROP `tema` EN CADA COMPONENTE
+ * ─────────────────────────────────────────────────────
+ * Estas constantes aparecen en más de cincuenta lugares del archivo, casi
+ * todos dentro de un `style={{ color: TINTA }}`. Pasar el tema como prop
+ * obligaría a tocar los cincuenta y a que cada componente nuevo se acuerde de
+ * recibirlo — y el que se olvide queda texto oscuro sobre fondo oscuro, sin
+ * que nada avise.
+ *
+ * Con variables CSS, la raíz de la página las define UNA vez a partir del
+ * tema del negocio y todo lo de adentro las hereda, incluido lo que se
+ * escriba mañana. El valor de respaldo es el look de siempre, así que una
+ * empresa sin tema se ve exactamente igual que antes de este cambio.
+ *
+ * OJO: son strings de CSS, no hexadecimales. No se les puede calcular
+ * transparencia con hexA().
+ */
+export const TINTA = "var(--vd-texto, #0c1015)";
+export const TINTA_SUAVE = "var(--vd-texto-suave, #4b5566)";
+export const BORDE = "var(--vd-borde, #e9ecf1)";
+export const SUPERFICIE = "var(--vd-superficie, #f6f7f9)";
+/** El fondo de las tarjetas. Con `bg-white` cableado, una plantilla oscura
+ *  dejaba tarjetas blancas flotando sobre el fondo negro. */
+export const TARJETA = "var(--vd-tarjeta, #ffffff)";
 export const ACENTO_DEFAULT = "#0ca88c";
 /** Verde oficial de WhatsApp: el botón se reconoce por el color, no por el texto. */
 export const VERDE_WHATSAPP = "#25D366";
@@ -538,7 +561,7 @@ export function Servicios({
             <button
               type="button"
               onClick={() => onElegir(s.id)}
-              className="group flex w-full items-center justify-between gap-4 rounded-2xl border bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="group flex w-full items-center justify-between gap-4 rounded-2xl border vd-tarjeta p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{ borderColor: BORDE, outlineColor: acento }}
             >
               <div className="min-w-0">
@@ -605,7 +628,7 @@ export function Equipo({ v, acento }: { v: Vidriera; acento: string }) {
                   type="button"
                   aria-label={label}
                   onClick={() => mover(dir)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border bg-white transition-colors hover:bg-[#eef0f4]"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border vd-tarjeta transition-colors hover:bg-[#eef0f4]"
                   style={{ borderColor: BORDE, color: TINTA }}
                 >
                   <Icono className="h-4 w-4" />
@@ -623,7 +646,7 @@ export function Equipo({ v, acento }: { v: Vidriera; acento: string }) {
             {v.recursos.map((r) => (
               <figure key={r.id} className="w-[160px] shrink-0 snap-start md:w-[190px]">
                 <div
-                  className="group relative mx-auto aspect-square w-[130px] overflow-hidden rounded-full border-2 bg-white md:w-[150px]"
+                  className="group relative mx-auto aspect-square w-[130px] overflow-hidden rounded-full border-2 vd-tarjeta md:w-[150px]"
                   style={{ borderColor: hexA(acento, 0.4) }}
                 >
                   {r.foto_url ? (
@@ -792,7 +815,7 @@ export function Horarios({ v, acento }: { v: Vidriera; acento: string }) {
           </p>
         </Reveal>
         <Reveal delay={0.08}>
-          <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: BORDE }}>
+          <div className="overflow-hidden rounded-2xl border vd-tarjeta" style={{ borderColor: BORDE }}>
             {(["lun", "mar", "mie", "jue", "vie", "sab", "dom"] as const).map((clave) => {
               const franjas = v.horarios_atencion?.[clave] ?? [];
               const esHoy = clave === hoy;
@@ -926,7 +949,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
         {garantias.map((g, i) => (
           <Reveal key={g.titulo} delay={i * 0.06}>
             <div
-              className="h-full rounded-2xl border bg-white p-6"
+              className="h-full rounded-2xl border vd-tarjeta p-6"
               style={{ borderColor: BORDE }}
             >
               <div
@@ -949,7 +972,7 @@ export function Confianza({ v, acento }: { v: Vidriera; acento: string }) {
       {/* Franja de integraciones (logos de marca reales) */}
       <Reveal delay={0.1}>
         <div
-          className="mt-16 rounded-2xl border bg-white px-5 py-9 md:mt-20"
+          className="mt-16 rounded-2xl border vd-tarjeta px-5 py-9 md:mt-20"
           style={{ borderColor: BORDE }}
         >
           <p
@@ -1036,7 +1059,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
+            className="flex items-center gap-1.5 rounded-full border vd-tarjeta px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
             style={{ borderColor: BORDE, color: TINTA }}
           >
             <IconoWhatsApp className="h-4 w-4" style={{ color: VERDE_WHATSAPP }} />
@@ -1046,7 +1069,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
         {v.telefono_publico && (
           <a
             href={`tel:${v.telefono_publico.replace(/\s/g, "")}`}
-            className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
+            className="flex items-center gap-1.5 rounded-full border vd-tarjeta px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
             style={{ borderColor: BORDE, color: TINTA }}
           >
             <Phone className="h-4 w-4" style={{ color: acento }} />
@@ -1056,7 +1079,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
         {v.email_publico && (
           <a
             href={`mailto:${v.email_publico}`}
-            className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
+            className="flex items-center gap-1.5 rounded-full border vd-tarjeta px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
             style={{ borderColor: BORDE, color: TINTA }}
           >
             <Mail className="h-4 w-4" style={{ color: acento }} />
@@ -1072,7 +1095,7 @@ export function Contacto({ v, acento }: { v: Vidriera; acento: string }) {
               href={hrefRed(clave, valor)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-full border bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
+              className="flex items-center gap-1.5 rounded-full border vd-tarjeta px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[#f6f7f9]"
               style={{ borderColor: BORDE, color: TINTA }}
             >
               <Icono className="h-4 w-4" style={{ color: meta.color }} />

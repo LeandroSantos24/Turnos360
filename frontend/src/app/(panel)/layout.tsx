@@ -145,10 +145,26 @@ export default function PanelLayout({
   // Se usa config directo porque estos hooks corren FUERA del ConfigRubroProvider.
   const term = config?.preset?.terminologia ?? {};
   const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const labelNav = (item: { href: string; label: string }) =>
-    item.href === "/clientes" && term.cliente
-      ? `${capitalizar(term.cliente)}s`
-      : item.label;
+  /**
+   * El nombre de cada sección, en el idioma del rubro.
+   *
+   * Antes solo traducía "Clientes" → "Pacientes". "Recursos" quedaba tal cual,
+   * y es la palabra MÁS técnica de todo el menú: no significa nada para el
+   * dueño de una barbería. El preset ya define cómo se llama ahí —barbero,
+   * médico, profesional, artista— y no se estaba usando en ningún lado del
+   * menú. La lista de abajo es explícita y no un mapeo genérico href→término:
+   * son dos casos, y un mapeo automático haría que agregar una sección nueva
+   * la renombrara sin querer.
+   */
+  const labelNav = (item: { href: string; label: string }) => {
+    if (item.href === "/clientes" && term.cliente) {
+      return `${capitalizar(term.cliente)}s`;
+    }
+    if (item.href === "/recursos" && term.recurso) {
+      return `${capitalizar(term.recurso)}s`;
+    }
+    return item.label;
+  };
 
   useEffect(() => {
     if (!isLoggedIn()) {

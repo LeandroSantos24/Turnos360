@@ -4,6 +4,7 @@
  */
 
 import { api } from "./api";
+import type { TemaVidriera } from "./tema-vidriera";
 
 export interface PresetRubro {
   terminologia?: Record<string, string>;
@@ -84,7 +85,8 @@ export interface LandingConfig {
   horarios_atencion: HorariosAtencion | null;
   redes: Redes;
   /** Galería de la landing: lista de URLs de fotos (máx. 12). */
-  galeria: string[];
+  galeria: string[];  /** El look de la página (ver lib/tema-vidriera.ts). */
+  tema?: Partial<TemaVidriera>;
 }
 
 /** Contenido actual de la landing del negocio (GET /empresa/landing). */
@@ -281,24 +283,51 @@ export function guardarSenas(datos: {
 export interface AutomSwitch {
   activa: boolean;
 }
+
+/**
+ * Un recordatorio, con cuántas horas antes sale.
+ *
+ * Las horas vienen de una lista cerrada (HORAS_RECORDATORIO en el backend):
+ * el barrido arma una consulta por cada valor en uso, y con un entero libre
+ * serían tantas consultas como empresas.
+ */
+export interface AutomRecordatorio extends AutomSwitch {
+  horas_antes: number;
+}
+
 export interface AutomCumple extends AutomSwitch {
   dias_antes: number;
+  /** Vacío = el asunto que escribimos nosotros. */
+  asunto: string;
   mensaje: string;
 }
+
 export interface AutomResena extends AutomSwitch {
   link: string;
+  /** Cuánto esperar después del turno antes de pedirla. */
+  horas_despues: number;
 }
+
 export interface AutomInactivos extends AutomSwitch {
   dias: number;
+  asunto: string;
   mensaje: string;
+  /** Visitas previas mínimas para entrar en la campaña. */
+  min_visitas: number;
 }
+
 export interface Automatizaciones {
-  recordatorio_24h: AutomSwitch;
-  recordatorio_2h: AutomSwitch;
+  /** Las claves son identificadores de ranura, no las horas: quedaron de
+   *  cuando el recordatorio era fijo. Las horas están en `horas_antes`. */
+  recordatorio_24h: AutomRecordatorio;
+  recordatorio_2h: AutomRecordatorio;
   cumple: AutomCumple;
   resena_google: AutomResena;
   inactivos: AutomInactivos;
 }
+
+/** Las anticipaciones que se pueden elegir. Espejo del backend. */
+export const HORAS_RECORDATORIO = [48, 24, 12, 6, 3, 2, 1];
 
 export function obtenerAutomatizaciones(): Promise<Automatizaciones> {
   return api.get<Automatizaciones>("/empresa/automatizaciones");
@@ -309,9 +338,18 @@ export function guardarAutomatizaciones(datos: Automatizaciones): Promise<Automa
 }
 
 
-export function probarCampana(tipo: string, destino: string): Promise<{ detalle: string }> {
+/**
+ * Manda una muestra de la campaña al email del usuario que la pide.
+ *
+ * Sin parámetro `destino`: el backend lo decide y lo ignora si viene. Cuando
+ * era un campo libre, con una cuenta de prueba gratuita se podía mandar
+ * cualquier contenido a cualquier casilla desde el remitente oficial de
+ * Turnos360 —phishing con nuestra marca— y de paso quemar la cuota diaria de
+ * envíos que comparten todos los negocios.
+ */
+export function probarCampana(tipo: string): Promise<{ detalle: string }> {
   return api.post<{ detalle: string }>(
-    `/empresa/automatizaciones/probar?tipo=${encodeURIComponent(tipo)}&destino=${encodeURIComponent(destino)}`,
+    `/empresa/automatizaciones/probar?tipo=${encodeURIComponent(tipo)}`,
     {},
   );
 }

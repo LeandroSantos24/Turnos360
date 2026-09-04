@@ -21,8 +21,9 @@ import { EditarRecursoDialog } from "./editar-recurso-dialog";
 import { SoloDueno } from "@/components/si-rol";
 import { HorarioSemanal } from "./horario-semanal";
 import { toast } from "sonner";
-import { Building2, CalendarClock, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Building2, CalendarClock, MoreVertical, Pencil, Trash2, UserCog } from "lucide-react";
 import { useSucursales } from "@/lib/use-sucursales";
+import { useTermino } from "@/lib/config-rubro";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,8 @@ function BotonFiltro({
   );
 }
 
+const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 const TIPO_LABEL: Record<string, string> = {
   persona: "Persona",
   box: "Box",
@@ -90,6 +93,9 @@ export default function RecursosPage() {
   // "todos" mientras el negocio tenga un solo local: el filtro ni se dibuja.
   const [filtroSucursal, setFiltroSucursal] = useState<string>("todas");
   const { abiertas, multi, nombreDe } = useSucursales();
+  const termino = useTermino();
+  const singular = capitalizar(termino("recurso", "recurso"));
+  const plural = `${singular}s`;
 
   // Recurso cuyo horario se muestra abajo. Se guarda el id y no el objeto
   // entero para que al recargar la lista (crear, editar, borrar) el panel
@@ -161,14 +167,20 @@ export default function RecursosPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="superficie min-h-full p-6 sm:p-8">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Recursos</h1>
-          <p className="text-sm text-muted-foreground">
-            <span className="tabular-nums">{visibles.length}</span> de{" "}
-            <span className="tabular-nums">{recursos.length}</span>{" "}
-            {recursos.length === 1 ? "recurso" : "recursos"}
+          {/* El título habla el idioma del rubro. "Recursos" es la palabra más
+              técnica del panel y no significa nada para el dueño de una
+              barbería; el preset ya define cómo se llama en cada rubro
+              —barbero, médico, profesional, artista— y no se estaba usando
+              acá ni en el menú. */}
+          <h1 className="titulo-pantalla">
+            Tus <b>{plural.toLowerCase()}</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Quién atiende, en qué local y con qué horario. De acá salen las
+            columnas de la agenda.
           </p>
         </div>
         <SoloDueno>
@@ -178,7 +190,7 @@ export default function RecursosPage() {
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
-          placeholder="Buscar recurso…"
+          placeholder={`Buscar ${singular.toLowerCase()}…`}
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
           className="max-w-sm"
@@ -212,16 +224,46 @@ export default function RecursosPage() {
       )}
 
       {cargando && !error && (
-        <p className="text-sm text-muted-foreground">Cargando recursos…</p>
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="tarjeta h-14 animate-pulse" />
+          ))}
+        </div>
       )}
 
+      {/* Una pantalla sin datos es la PRIMERA que ve todo el mundo. Dejarla en
+          un renglón de texto gris desaprovecha el único momento en que
+          tenemos toda la atención. */}
       {!cargando && !error && visibles.length === 0 && (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {buscar
-              ? "No se encontraron recursos con ese nombre."
-              : "Todavía no hay recursos. Creá el primero."}
-          </p>
+        <div className="tarjeta vacio" style={{ "--tono": "var(--acento-violeta)" } as React.CSSProperties}>
+          <span className="vacio-icono">
+            <UserCog className="h-8 w-8" />
+          </span>
+          {buscar ? (
+            <>
+              <p className="font-semibold">Sin resultados</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Ningún{singular.endsWith("a") ? "a" : ""} {singular.toLowerCase()} se
+                llama «{buscar}».
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">
+                Todavía no cargaste a nadie que atienda
+              </p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Cada {singular.toLowerCase()} que cargues es una columna en la
+                agenda, con su propio horario. Sin al menos uno, no hay dónde
+                anotar un turno.
+              </p>
+              <div className="mt-4">
+                <SoloDueno>
+                  <NuevoRecursoDialog onCreado={cargar} />
+                </SoloDueno>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -336,7 +378,7 @@ export default function RecursosPage() {
             ) : (
               <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-8 text-sm text-muted-foreground">
                 <CalendarClock size={16} />
-                Elegí un recurso de la lista para ver y editar su horario.
+                Elegí a {singular.toLowerCase() === "recurso" ? "alguien" : `un${singular.endsWith("a") ? "a" : ""} ${singular.toLowerCase()}`} de la lista para ver y editar su horario.
               </div>
             )}
           </div>
@@ -353,10 +395,10 @@ export default function RecursosPage() {
       <AlertDialog open={aBorrar !== null} onOpenChange={(o) => !o && setABorrar(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Borrar este recurso?</AlertDialogTitle>
+            <AlertDialogTitle>¿Borrar a {aBorrar?.nombre}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Vas a eliminar &quot;{aBorrar?.nombre}&quot;. Esta acción no se
-              puede deshacer.
+              Desaparece de la agenda y de los selectores. Los turnos que ya
+              atendió quedan como están.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

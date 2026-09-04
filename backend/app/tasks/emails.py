@@ -24,6 +24,7 @@ from sqlalchemy import extract, func, or_ as sa_or, select
 
 from app.celery_app import celery_app
 from app.core import mailer
+from app.core.cola import encolar
 from app.core.config import settings
 from app.core.reloj import ahora_de_pared
 from app.db.session import SessionLocal
@@ -72,6 +73,18 @@ def esc(valor) -> str:
 # ============================================================
 # Helpers de armado
 # ============================================================
+
+def _asunto_propio(cfg: dict, por_defecto: str) -> str:
+    """El asunto que escribió el dueño, o el nuestro si lo dejó vacío.
+
+    El asunto es lo ÚNICO que ve el cliente en la bandeja antes de decidir si
+    abre. Hasta acá era fijo y el negocio no podía tocarlo: todos los clientes
+    de todos los rubros recibían "Te extrañamos en X", escrito por nosotros.
+    Se recorta a 120 para que no se corte feo en el celular.
+    """
+    propio = (cfg.get("asunto") or "").strip()
+    return propio[:120] if propio else por_defecto
+
 
 def _plantilla(
     titulo: str,
@@ -575,13 +588,34 @@ def enviar_reset_password(usuario_id: int, token: str) -> None:
             raise
 
 
+def _horas_en_uso(db, ranura: str) -> set[int]:
+    """Qué anticipaciones tienen configuradas las empresas ACTIVAS, sin repetir.
+
+    Se lee del JSONB en vez de barrer las cinco opciones posibles porque casi
+    todas las empresas van a quedarse con el default: preguntar por las siete
+    horas cuando todo el mundo usa dos es cinco consultas de más en cada uno de
+    los 96 barridos del día.
+    """
+    horas: set[int] = set()
+    for empresa in db.scalars(select(Empresa).where(Empresa.activa.is_(True))):
+        cfg = automs_de(empresa).get(ranura, {})
+        if cfg.get("activa"):
+            horas.add(int(cfg.get("horas_antes", 24)))
+    return horas
+
+
 @celery_app.task(name="app.tasks.emails.encolar_recordatorios")
 def encolar_recordatorios() -> int:
-    """Beat cada 15 min: encola los recordatorios de 24 h y de 2 h que tocan.
+    """Beat cada 15 min: encola los recordatorios que tocan en este momento.
 
-    Ventanas con solapamiento (23-25 h y 1h45-2h30) + flags de dedup: ningún
-    turno se escapa aunque un ciclo se pierda, y jamás se manda dos veces.
-    Cada envío respeta el switch de SU empresa.
+    Las DOS ranuras (el aviso de "es mañana" y el de "es en un rato") salen a
+    las horas que eligió cada empresa, no a 24 y 2 fijas: el que atiende con
+    turnos del mismo día necesita avisar 3 horas antes, no 24, porque a 24
+    horas la persona todavía no había reservado.
+
+    Ventana de ±30 min alrededor del momento exacto + flags de dedup: ningún
+    turno se escapa aunque un ciclo del beat se pierda, y jamás se manda dos
+    veces. Cada envío respeta el switch de SU empresa.
     """
     # OJO: tiene que ser el reloj de pared, no datetime.now(UTC).
     #
@@ -603,45 +637,55 @@ def encolar_recordatorios() -> int:
                 empresas_cfg[empresa_id] = automs_de(db.get(Empresa, empresa_id))
             return empresas_cfg[empresa_id]
 
-        # --- 24 h ---
-        turnos = db.scalars(
-            select(Turno).where(
-                Turno.fecha_inicio >= ahora + dt.timedelta(hours=23),
-                Turno.fecha_inicio <= ahora + dt.timedelta(hours=25),
-                Turno.recordatorio_enviado.is_(False),
-                Turno.estado.in_([EstadoTurno.PENDIENTE, EstadoTurno.CONFIRMADO]),
-            )
-        ).all()
-        for turno in turnos:
-            # El flag se marca SOLO si el recordatorio se encola de verdad.
-            # Antes se marcaba siempre, incluso con la campaña apagada: los
-            # turnos que pasaban por la ventana con el switch en off quedaban
-            # marcados para siempre. El dueño prendía la campaña y "no
-            # funcionaba" durante el primer día, sin ningún error.
-            if not cfg_de(turno.empresa_id).get("recordatorio_24h", {}).get("activa"):
-                continue
-            turno.recordatorio_enviado = True
-            db.commit()
-            enviar_recordatorio.delay(turno.id)
-            encolados += 1
-
-        # --- 2 h ---
-        turnos2 = db.scalars(
-            select(Turno).where(
-                Turno.fecha_inicio >= ahora + dt.timedelta(minutes=105),
-                Turno.fecha_inicio <= ahora + dt.timedelta(minutes=150),
-                Turno.recordatorio_2h_enviado.is_(False),
-                Turno.estado.in_([EstadoTurno.PENDIENTE, EstadoTurno.CONFIRMADO]),
-            )
-        ).all()
-        for turno in turnos2:
-            # Mismo criterio que el de 24 h: marcar solo si se manda de verdad.
-            if not cfg_de(turno.empresa_id).get("recordatorio_2h", {}).get("activa"):
-                continue
-            turno.recordatorio_2h_enviado = True
-            db.commit()
-            enviar_recordatorio_2h.delay(turno.id)
-            encolados += 1
+        # Las dos ranuras de recordatorio, con las horas que eligió cada
+        # empresa. Antes las ventanas estaban cableadas (23-25 h y
+        # 1h45-2h30) y el dueño no podía moverlas: al que atiende con turnos
+        # del mismo día, un aviso 24 h antes le llega antes de que la persona
+        # haya reservado.
+        #
+        # Se agrupa POR HORAS y no por empresa: una consulta por cada valor
+        # distinto en uso, no una por negocio. Con siete valores posibles son
+        # como mucho catorce consultas por barrido, tenga el sistema diez
+        # empresas o dos mil.
+        for ranura, flag, tarea in (
+            ("recordatorio_24h", Turno.recordatorio_enviado, enviar_recordatorio),
+            ("recordatorio_2h", Turno.recordatorio_2h_enviado, enviar_recordatorio_2h),
+        ):
+            horas_en_uso = _horas_en_uso(db, ranura)
+            for horas in horas_en_uso:
+                # Ventana con solapamiento generoso: el barrido corre cada 15
+                # min, así que ±30 min alcanza para que ningún turno se escape
+                # aunque un ciclo se pierda. Los flags de dedup garantizan que
+                # tampoco se mande dos veces.
+                centro = ahora + dt.timedelta(hours=horas)
+                turnos = db.scalars(
+                    select(Turno).where(
+                        Turno.fecha_inicio >= centro - dt.timedelta(minutes=30),
+                        Turno.fecha_inicio <= centro + dt.timedelta(minutes=30),
+                        flag.is_(False),
+                        Turno.estado.in_(
+                            [EstadoTurno.PENDIENTE, EstadoTurno.CONFIRMADO]
+                        ),
+                    )
+                ).all()
+                for turno in turnos:
+                    cfg = cfg_de(turno.empresa_id).get(ranura, {})
+                    # El turno entró por la ventana de ESTAS horas: si esta
+                    # empresa configuró otras, no es su momento todavía.
+                    if int(cfg.get("horas_antes", 0)) != horas:
+                        continue
+                    # El flag se marca SOLO si el recordatorio se encola de
+                    # verdad. Antes se marcaba siempre, incluso con la campaña
+                    # apagada: los turnos que pasaban por la ventana con el
+                    # switch en off quedaban marcados para siempre. El dueño
+                    # prendía la campaña y "no funcionaba" durante el primer
+                    # día, sin ningún error.
+                    if not cfg.get("activa"):
+                        continue
+                    setattr(turno, flag.key, True)
+                    db.commit()
+                    encolar(tarea, turno.id)
+                    encolados += 1
     return encolados
 
 
@@ -695,7 +739,7 @@ def enviar_cumpleanios() -> int:
                 )
                 _mandar(
                     db, empresa, cliente.email,
-                    f"🎂 ¡{empresa.nombre} te quiere saludar!",
+                    _asunto_propio(cfg, f"🎂 ¡{empresa.nombre} te quiere saludar!"),
                     html, f"cumple cliente={cliente.id}",
                     cliente_id=cliente.id,
                 )
@@ -723,11 +767,20 @@ def enviar_inactivos() -> int:
             dias = int(cfg.get("dias", 60))
             corte = hoy - dt.timedelta(days=dias)
 
-            # Última visita FINALIZADA de cada cliente.
+            # Cuántas visitas hace falta haber tenido para entrar en la
+            # campaña. Mandarle "te extrañamos" a alguien que vino UNA vez
+            # hace tres meses no es fidelizar: es escribirle a un desconocido
+            # que probó una vez y no volvió, y encima quema la casilla. Con 2
+            # o más, la campaña habla solo con quien ya había vuelto alguna
+            # vez — que es exactamente a quien tiene sentido recuperar.
+            min_visitas = max(1, int(cfg.get("min_visitas", 1)))
+
+            # Última visita FINALIZADA de cada cliente, y cuántas lleva.
             sub = (
                 select(
                     Turno.cliente_id,
                     func.max(Turno.fecha_inicio).label("ultima"),
+                    func.count(Turno.id).label("visitas"),
                 )
                 .where(
                     Turno.empresa_id == empresa.id,
@@ -745,6 +798,8 @@ def enviar_inactivos() -> int:
                     Cliente.acepta_marketing.is_(True),
                     # Hace N días o MÁS que no viene.
                     func.date(sub.c.ultima) <= corte,
+                    # Y ya venía viniendo: no es alguien que probó una vez.
+                    sub.c.visitas >= min_visitas,
                     # Y no le avisamos hace poco (o nunca).
                     sa_or(
                         Cliente.ultimo_inactivo_enviado.is_(None),
@@ -770,7 +825,7 @@ def enviar_inactivos() -> int:
                 )
                 _mandar(
                     db, empresa, cliente.email,
-                    f"Te extrañamos en {empresa.nombre}",
+                    _asunto_propio(cfg, f"Te extrañamos en {empresa.nombre}"),
                     html, f"inactivo cliente={cliente.id}",
                     cliente_id=cliente.id,
                 )

@@ -127,6 +127,21 @@ class Empresa(Base):
     portada_url: Mapped[str | None] = mapped_column(String(300))
     color_marca: Mapped[str | None] = mapped_column(String(7))  # acento, ej. #00d4aa
 
+    # El LOOK de la vidriera: plantilla, fondo, forma de los botones y
+    # tipografía. JSONB y no seis columnas a propósito.
+    #
+    # Es una decisión distinta a la de las reglas de reserva de acá abajo,
+    # que sí son columnas: aquellas se consultan y se filtran (¿cuántos días
+    # de anticipación permite esta empresa?), y esto no se consulta nunca —se
+    # lee entero, se manda entero al navegador y se pinta—. Cada opción nueva
+    # de estilo (un patrón de fondo, una forma de botón, una tipografía más)
+    # sería una migración por algo que ninguna consulta va a mirar jamás.
+    #
+    # La forma la define `TemaVidriera` en schemas/empresa.py, que es donde se
+    # valida: NULL o {} significa "el look por defecto", que es el mismo que
+    # tenían todas las vidrieras hasta ahora.
+    tema: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+
     # --- Reglas de la reserva pública (configurables por el dueño) ---------
     # Antes vivían hardcodeadas en services/publico.py e iguales para todos.
     reserva_anticipacion_min: Mapped[int] = mapped_column(

@@ -14,7 +14,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Save, Copy, Check, ExternalLink, Plus, X, Globe } from "lucide-react";
+import {
+  Save,
+  Copy,
+  Check,
+  ExternalLink,
+  Plus,
+  X,
+  Globe,
+  Palette,
+  Store,
+  Share2,
+  Images,
+  Users,
+  Clock,
+  Wallet,
+  Link as LinkIcon,
+} from "lucide-react";
 
 import {
   obtenerLanding,
@@ -30,8 +46,12 @@ import {
   Redes,
 } from "@/lib/empresa-api";
 import { listarRecursos, editarRecurso, Recurso } from "@/lib/recursos-api";
+import { listarServicios } from "@/lib/servicios-api";
 import { ApiError } from "@/lib/api";
 import { RequiereDueno } from "@/components/requiere-rol";
+import { normalizarTema } from "@/lib/tema-vidriera";
+import { PanelLook } from "./panel-look";
+import { VistaPrevia } from "./vista-previa";
 import {
   IconoInstagram,
   IconoFacebook,
@@ -48,6 +68,52 @@ import { Textarea } from "@/components/ui/textarea";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 const MAX_FOTOS = 12;
+
+type SeccionId =
+  | "look"
+  | "info"
+  | "redes"
+  | "galeria"
+  | "equipo"
+  | "horarios"
+  | "senas"
+  | "link";
+
+/**
+ * Las secciones del editor, agrupadas por lo que resuelven.
+ *
+ * El orden es el del impacto: primero EL LOOK —un toque y la página cambia
+ * entera— y recién después los datos. Al revés, el que entra por primera vez
+ * se topa con seis campos de texto antes de ver que la página puede quedar
+ * linda, y se va pensando que esto es un formulario más.
+ */
+const GRUPOS_EDITOR: {
+  titulo: string;
+  items: { id: SeccionId; label: string; icono: typeof Palette }[];
+}[] = [
+  {
+    titulo: "El look",
+    items: [{ id: "look", label: "Look y colores", icono: Palette }],
+  },
+  {
+    titulo: "Tu información",
+    items: [
+      { id: "info", label: "El negocio", icono: Store },
+      { id: "redes", label: "Redes y links", icono: Share2 },
+      { id: "galeria", label: "Galería", icono: Images },
+      { id: "equipo", label: "Quiénes atienden", icono: Users },
+      { id: "horarios", label: "Horarios", icono: Clock },
+    ],
+  },
+  {
+    titulo: "Cómo cobrás",
+    items: [{ id: "senas", label: "Señas", icono: Wallet }],
+  },
+  {
+    titulo: "Compartir",
+    items: [{ id: "link", label: "Tu link y tu QR", icono: LinkIcon }],
+  },
+];
 
 const DIAS: { clave: string; label: string }[] = [
   { clave: "lun", label: "Lunes" },
@@ -499,18 +565,37 @@ function ContenidoMiPagina() {
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [seccion, setSeccion] = useState<SeccionId>("look");
+  const [nombreNegocio, setNombreNegocio] = useState("");
+  const [servicioEjemplo, setServicioEjemplo] = useState<
+    { nombre: string; precio: number | null; duracion_min: number } | null
+  >(null);
 
   useEffect(() => {
     Promise.all([
       obtenerLanding(),
       obtenerConfigEmpresa().catch(() => null),
       listarRecursos().catch(() => null),
+      // Un servicio REAL para la previa. Con uno inventado, lo que el dueño
+      // juzga no es su página: es una maqueta con datos de otro negocio.
+      listarServicios().catch(() => null),
     ])
-      .then(([data, config, pagina]) => {
+      .then(([data, config, pagina, servicios]) => {
         setForm({ ...VACIO, ...data, redes: data.redes ?? {}, galeria: data.galeria ?? [] });
-        if (config) setSlug(config.slug);
+        if (config) {
+          setSlug(config.slug);
+          setNombreNegocio(config.nombre);
+        }
         if (pagina)
           setRecursos(pagina.items.filter((r) => r.tipo === "persona" && r.activo));
+        const primero = servicios?.items?.find((s) => s.activo && s.agendable);
+        if (primero) {
+          setServicioEjemplo({
+            nombre: primero.nombre,
+            precio: primero.precio ?? null,
+            duracion_min: primero.duracion_min,
+          });
+        }
       })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : "Error al cargar"),
@@ -595,6 +680,7 @@ function ContenidoMiPagina() {
       horarios_atencion: tieneHorarios ? form.horarios_atencion : null,
       redes: redesLimpias,
       galeria: form.galeria.map((u) => u.trim()).filter(Boolean).slice(0, MAX_FOTOS),
+      tema: normalizarTema(form.tema),
     };
 
     try {
@@ -618,187 +704,282 @@ function ContenidoMiPagina() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold" style={SYNE}>
-            Mi página
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Lo que ven tus clientes en tu página pública. Se comparte con el link de tu
-            negocio.
-          </p>
+    <div className="superficie min-h-full">
+      {/* ── Cabecera ───────────────────────────────────────────────── */}
+      <div className="border-b bg-card/60 px-6 py-5 backdrop-blur sm:px-8">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="titulo-pantalla">
+              Tu <b>página</b>.
+            </h1>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              Lo que ven tus clientes cuando abren tu link. Elegí el look, cargá
+              tus datos y mirá cómo va quedando a la derecha.
+            </p>
+          </div>
+          <Button onClick={guardar} disabled={guardando} className="shrink-0">
+            <Save className="mr-1.5 h-4 w-4" />
+            {guardando ? "Guardando…" : "Publicar cambios"}
+          </Button>
         </div>
-        <Button onClick={guardar} disabled={guardando}>
-          <Save className="mr-1.5 h-4 w-4" />
-          {guardando ? "Guardando…" : "Guardar cambios"}
-        </Button>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <LinkPublico slug={slug} />
+      {/*
+        TRES COLUMNAS: qué editar · el editor · cómo queda.
 
-        <Seccion
-          titulo="Información del negocio"
-          descripcion="Lo básico que ve el cliente al entrar."
-        >
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="descripcion">Sobre nosotros</Label>
-              <Textarea
-                id="descripcion"
-                rows={4}
-                placeholder="Contá qué hace especial a tu negocio…"
-                value={form.descripcion ?? ""}
-                onChange={(e) => set("descripcion", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="direccion">Dirección</Label>
-              <Input
-                id="direccion"
-                placeholder="San Martín 1234, Mendoza"
-                value={form.direccion ?? ""}
-                onChange={(e) => set("direccion", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                De acá salen el mapa y el botón &ldquo;Cómo llegar&rdquo;.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="tel">Teléfono / WhatsApp</Label>
-                <Input
-                  id="tel"
-                  placeholder="+54 9 261 123 4567"
-                  value={form.telefono_publico ?? ""}
-                  onChange={(e) => set("telefono_publico", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="hola@tunegocio.com"
-                  value={form.email_publico ?? ""}
-                  onChange={(e) => set("email_publico", e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="logo">URL del logo</Label>
-                <Input
-                  id="logo"
-                  placeholder="https://…/logo.png"
-                  value={form.logo_url ?? ""}
-                  onChange={(e) => set("logo_url", e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Por ahora, pegá la URL.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="color">Color de marca</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="color"
-                    type="color"
-                    className="h-9 w-12 cursor-pointer rounded-md border bg-transparent"
-                    value={form.color_marca ?? "#00d4aa"}
-                    onChange={(e) => set("color_marca", e.target.value)}
-                  />
-                  <Input
-                    value={form.color_marca ?? ""}
-                    placeholder="#00d4aa"
-                    onChange={(e) => set("color_marca", e.target.value)}
-                    className="w-32"
-                  />
-                </div>
-              </div>
-            </div>
+        Antes era un formulario largo en dos columnas, con un link «Abrir»
+        arriba: para ver el efecto de un cambio había que guardar, cambiar de
+        pestaña, recargar y volver. Con ese costo por ajuste, nadie prueba
+        nada — se elige el primer color que suena bien y no se toca nunca más.
 
-            <div className="space-y-1.5">
-              <Label htmlFor="portada">Foto de portada</Label>
-              <Input
-                id="portada"
-                placeholder="https://…/local.jpg"
-                value={form.portada_url ?? ""}
-                onChange={(e) => set("portada_url", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Se muestra de fondo en la cabecera de tu página, con el nombre y
-                los botones encima. Va bien una foto del local en horizontal
-                (mínimo 1600&nbsp;px de ancho). Si la dejás vacía, la cabecera
-                queda blanca.
-              </p>
-              {portadaPrevia && (
-                <div
-                  className="mt-2 h-32 w-full overflow-hidden rounded-xl border bg-cover bg-center"
-                  style={{ backgroundImage: `url(${portadaPrevia})` }}
-                >
-                  <div className="flex h-full w-full items-end bg-gradient-to-b from-black/45 via-black/25 to-black/80 p-3">
-                    <span
-                      className="text-lg font-bold text-white"
-                      style={SYNE}
+        La previa está a la derecha y se actualiza mientras se escribe.
+      */}
+      <div className="mx-auto grid max-w-[1200px] gap-6 p-6 sm:p-8 lg:grid-cols-[210px_minmax(0,1fr)_340px]">
+        {/* Rail de secciones */}
+        <nav className="lg:sticky lg:top-6 lg:self-start">
+          <div className="flex gap-1.5 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
+            {GRUPOS_EDITOR.map((grupo) => (
+              <div key={grupo.titulo} className="contents lg:block">
+                <p className="mb-1.5 mt-4 hidden text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground lg:block">
+                  {grupo.titulo}
+                </p>
+                {grupo.items.map((s) => {
+                  const activa = seccion === s.id;
+                  const Icono = s.icono;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSeccion(s.id)}
+                      className={`flex w-full shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
+                        activa
+                          ? "bg-primary/10 font-semibold text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
                     >
-                      Así se va a ver
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </Seccion>
-
-        <Seccion titulo="Redes y links" descripcion="Dejá vacío lo que no uses.">
-          <div className="space-y-4">
-            {REDES.map(({ clave, label, placeholder, Icono }) => (
-              <div key={String(clave)} className="space-y-1.5">
-                <Label htmlFor={String(clave)} className="flex items-center gap-2">
-                  <Icono className="h-4 w-4 text-muted-foreground" />
-                  {label}
-                </Label>
-                <Input
-                  id={String(clave)}
-                  placeholder={placeholder}
-                  value={form.redes[clave] ?? ""}
-                  onChange={(e) => setRed(clave, e.target.value)}
-                />
+                      <Icono className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
-        </Seccion>
+        </nav>
 
-        <GaleriaEditor fotos={form.galeria} onChange={(g) => set("galeria", g)} />
+        {/* Panel de la sección elegida */}
+        <div className="min-w-0 space-y-5">
+          {seccion === "link" && <LinkPublico slug={slug} />}
 
-        <EquipoEditor
-          recursos={recursos}
-          onGuardado={(actualizado) =>
-            setRecursos((lista) =>
-              lista.map((r) => (r.id === actualizado.id ? actualizado : r)),
-            )
-          }
+          {seccion === "look" && (
+            <div className="tarjeta p-5">
+              <PanelLook
+                tema={normalizarTema(form.tema)}
+                acentoNegocio={form.color_marca ?? null}
+                onCambio={(nuevo) => set("tema", nuevo)}
+              />
+            </div>
+          )}
+
+          {seccion === "info" && (
+  <Seccion
+    titulo="Información del negocio"
+    descripcion="Lo básico que ve el cliente al entrar."
+  >
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="descripcion">Sobre nosotros</Label>
+        <Textarea
+          id="descripcion"
+          rows={4}
+          placeholder="Contá qué hace especial a tu negocio…"
+          value={form.descripcion ?? ""}
+          onChange={(e) => set("descripcion", e.target.value)}
         />
-
-        <Seccion
-          titulo="Horarios de atención"
-          descripcion="Solo para mostrar en tu página. Los turnos reservables salen de la agenda de cada profesional."
-          className="lg:col-span-2"
-        >
-          <HorariosEditor
-            value={form.horarios_atencion ?? {}}
-            onChange={(h) => set("horarios_atencion", h)}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="direccion">Dirección</Label>
+        <Input
+          id="direccion"
+          placeholder="San Martín 1234, Mendoza"
+          value={form.direccion ?? ""}
+          onChange={(e) => set("direccion", e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          De acá salen el mapa y el botón &ldquo;Cómo llegar&rdquo;.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="tel">Teléfono / WhatsApp</Label>
+          <Input
+            id="tel"
+            placeholder="+54 9 261 123 4567"
+            value={form.telefono_publico ?? ""}
+            onChange={(e) => set("telefono_publico", e.target.value)}
           />
-        </Seccion>
-
-        <SeccionSenas />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="hola@tunegocio.com"
+            value={form.email_publico ?? ""}
+            onChange={(e) => set("email_publico", e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="logo">URL del logo</Label>
+          <Input
+            id="logo"
+            placeholder="https://…/logo.png"
+            value={form.logo_url ?? ""}
+            onChange={(e) => set("logo_url", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Por ahora, pegá la URL.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="color">Color de marca</Label>
+          <div className="flex items-center gap-2">
+            <input
+              id="color"
+              type="color"
+              className="h-9 w-12 cursor-pointer rounded-md border bg-transparent"
+              value={form.color_marca ?? "#00d4aa"}
+              onChange={(e) => set("color_marca", e.target.value)}
+            />
+            <Input
+              value={form.color_marca ?? ""}
+              placeholder="#00d4aa"
+              onChange={(e) => set("color_marca", e.target.value)}
+              className="w-32"
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button onClick={guardar} disabled={guardando}>
-          <Save className="mr-1.5 h-4 w-4" />
-          {guardando ? "Guardando…" : "Guardar cambios"}
-        </Button>
+      <div className="space-y-1.5">
+        <Label htmlFor="portada">Foto de portada</Label>
+        <Input
+          id="portada"
+          placeholder="https://…/local.jpg"
+          value={form.portada_url ?? ""}
+          onChange={(e) => set("portada_url", e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Se muestra de fondo en la cabecera de tu página, con el nombre y
+          los botones encima. Va bien una foto del local en horizontal
+          (mínimo 1600&nbsp;px de ancho). Si la dejás vacía, la cabecera
+          queda blanca.
+        </p>
+        {portadaPrevia && (
+          <div
+            className="mt-2 h-32 w-full overflow-hidden rounded-xl border bg-cover bg-center"
+            style={{ backgroundImage: `url(${portadaPrevia})` }}
+          >
+            <div className="flex h-full w-full items-end bg-gradient-to-b from-black/45 via-black/25 to-black/80 p-3">
+              <span
+                className="text-lg font-bold text-white"
+                style={SYNE}
+              >
+                Así se va a ver
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </Seccion>
+          )}
+
+          {seccion === "redes" && (
+  <Seccion titulo="Redes y links" descripcion="Dejá vacío lo que no uses.">
+    <div className="space-y-4">
+      {REDES.map(({ clave, label, placeholder, Icono }) => (
+        <div key={String(clave)} className="space-y-1.5">
+          <Label htmlFor={String(clave)} className="flex items-center gap-2">
+            <Icono className="h-4 w-4 text-muted-foreground" />
+            {label}
+          </Label>
+          <Input
+            id={String(clave)}
+            placeholder={placeholder}
+            value={form.redes[clave] ?? ""}
+            onChange={(e) => setRed(clave, e.target.value)}
+          />
+        </div>
+      ))}
+    </div>
+  </Seccion>
+          )}
+
+          {seccion === "galeria" && (
+  <GaleriaEditor fotos={form.galeria} onChange={(g) => set("galeria", g)} />
+          )}
+
+          {seccion === "equipo" && (
+  <EquipoEditor
+    recursos={recursos}
+    onGuardado={(actualizado) =>
+      setRecursos((lista) =>
+        lista.map((r) => (r.id === actualizado.id ? actualizado : r)),
+      )
+    }
+  />
+          )}
+
+          {seccion === "horarios" && (
+  <Seccion
+    titulo="Horarios de atención"
+    descripcion="Solo para mostrar en tu página. Los turnos reservables salen de la agenda de cada profesional."
+    className="lg:col-span-2"
+  >
+    <HorariosEditor
+      value={form.horarios_atencion ?? {}}
+      onChange={(h) => set("horarios_atencion", h)}
+    />
+  </Seccion>
+          )}
+
+          {seccion === "senas" && <SeccionSenas />}
+        </div>
+
+        {/* Vista previa */}
+        <div className="hidden lg:block">
+          <VistaPrevia
+            tema={normalizarTema(form.tema)}
+            datos={{
+              nombre: nombreNegocio,
+              descripcion: form.descripcion,
+              direccion: form.direccion,
+              logo_url: form.logo_url,
+              portada_url: portadaPrevia,
+              color_marca: form.color_marca,
+              servicio: servicioEjemplo,
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="px-6 pb-10 sm:px-8 lg:hidden">
+        {/* En pantallas chicas la previa no entra al costado: va abajo, donde
+            igual se ve al scrollear. Esconderla del todo dejaría al que edita
+            desde el celular sin la mitad de la pantalla. */}
+        <VistaPrevia
+          tema={normalizarTema(form.tema)}
+          datos={{
+            nombre: nombreNegocio,
+            descripcion: form.descripcion,
+            direccion: form.direccion,
+            logo_url: form.logo_url,
+            portada_url: portadaPrevia,
+            color_marca: form.color_marca,
+            servicio: servicioEjemplo,
+          }}
+        />
       </div>
     </div>
   );

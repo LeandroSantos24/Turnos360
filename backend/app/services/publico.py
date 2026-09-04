@@ -181,6 +181,10 @@ def vidriera(db: Session, slug: str, sucursal_id: int | None = None) -> dict:
         "google_tag_id": empresa.google_tag_id,
         "google_conversion_label": empresa.google_conversion_label,
         "color_marca": empresa.color_marca,
+        # El look elegido en «Mi página». Vacío = el de siempre; la vidriera
+        # completa los defaults del lado del navegador para que una empresa
+        # que nunca lo tocó no tenga que llevar el objeto entero en el HTML.
+        "tema": empresa.tema or {},
         "horarios_atencion": empresa.horarios_atencion,
         "redes": empresa.redes or {},
         "galeria": empresa.galeria or [],

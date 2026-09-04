@@ -4,6 +4,7 @@
  */
 
 import { api } from "./api";
+import type { TemaVidriera } from "./tema-vidriera";
 
 export interface ServicioPublico {
   id: number;
@@ -49,6 +50,9 @@ export interface Vidriera {
   /** Solo con un tag AW-. Sin esto, Google Ads no cuenta la conversión. */
   google_conversion_label: string | null;
   color_marca: string | null;
+  /** El look elegido en «Mi página». Vacío = el de siempre (ver
+   *  lib/tema-vidriera.ts, que completa los defaults). */
+  tema?: Partial<TemaVidriera>;
   horarios_atencion: Record<string, Franja[]> | null;
   redes: Record<string, string>;
   galeria: string[];

@@ -438,12 +438,28 @@ def cambiar_estado(
 
     # Emails del workflow (por cola; jamás bloquean ni rompen la operación).
     try:
+        from app.core.cola import encolar
+        from app.services.empresa import automs_de
         from app.tasks.emails import enviar_cancelacion, pedir_resena
 
         if datos.estado == EstadoTurno.CANCELADO:
-            enviar_cancelacion.delay(turno.id)
+            encolar(enviar_cancelacion, turno.id)
         elif datos.estado == EstadoTurno.FINALIZADO:
-            pedir_resena.delay(turno.id)
+            # La reseña NO sale en el mismo momento en que se marca el turno
+            # como terminado: ahí la persona está pagando, poniéndose el
+            # abrigo y saliendo. O no ve el mail, o lo ve y le molesta —y un
+            # pedido de reseña que molesta es peor que no pedirla—. Sale unas
+            # horas después, cuando ya está en su casa y el buen rato es un
+            # recuerdo. El dueño elige cuántas en Campañas.
+            horas = int(
+                (automs_de(db.get(Empresa, empresa_id)) or {})
+                .get("resena_google", {})
+                .get("horas_despues", 2)
+            )
+            if horas > 0:
+                pedir_resena.apply_async((turno.id,), countdown=horas * 3600)
+            else:
+                encolar(pedir_resena, turno.id)
     except Exception:
         pass
 

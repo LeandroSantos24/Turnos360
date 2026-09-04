@@ -110,10 +110,22 @@ def encolar(db, monkeypatch):
     encolados: list[tuple[str, int]] = []
 
     class Cola:
+        """Imita a una tarea de Celery de verdad: .delay() Y .run().
+
+        Las dos hacen falta desde que el barrido usa `app.core.cola.encolar()`,
+        que cae a ejecutar en línea cuando no hay worker escuchando — que es
+        exactamente el caso en los tests. Un doble con solo .delay() hace que
+        el barrido no encole nada y el test falle por el motivo equivocado.
+        """
+
         def __init__(self, nombre):
             self.nombre = nombre
+            self.name = f"tarea.{nombre}"
 
         def delay(self, turno_id):
+            encolados.append((self.nombre, turno_id))
+
+        def run(self, turno_id):
             encolados.append((self.nombre, turno_id))
 
     monkeypatch.setattr(emails, "enviar_recordatorio", Cola("24h"))
@@ -531,3 +543,115 @@ def test_la_vidriera_arranca_en_el_dia_del_negocio(client, db, armar_empresa, mo
             f"con la zona en {zona} arrancó en {visto['desde']} "
             f"y el día del negocio era {hoy_de_pared()}"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Las horas del recordatorio las elige cada negocio
+# ══════════════════════════════════════════════════════════════════════
+#
+# Antes las dos ventanas estaban cableadas (23-25 h y 1h45-2h30) y no había
+# forma de moverlas. Al que atiende con turnos del mismo día —una barbería sin
+# cita previa, una guardia— un aviso 24 h antes le llega antes de que la
+# persona haya reservado, así que la campaña le servía para nada.
+
+
+def _prender_con(db, empresa, ranura: str, horas: int):
+    empresa.automatizaciones = {ranura: {"activa": True, "horas_antes": horas}}
+    db.flush()
+
+
+def test_un_negocio_puede_avisar_3_horas_antes(db, armar_empresa, encolar):
+    """El caso que no se podía: turnos del mismo día."""
+    ctx = armar_empresa()
+    _prender_con(db, ctx.empresa, "recordatorio_2h", 3)
+    turno = _turno_en(db, ctx, ahora_de_pared() + dt.timedelta(hours=3))
+
+    assert ("2h", turno.id) in encolar()
+
+
+def test_un_negocio_puede_avisar_48_horas_antes(db, armar_empresa, encolar):
+    """El otro extremo: el que agenda con mucha anticipación y quiere que la
+    persona tenga tiempo de reprogramar en vez de faltar."""
+    ctx = armar_empresa()
+    _prender_con(db, ctx.empresa, "recordatorio_24h", 48)
+    turno = _turno_en(db, ctx, ahora_de_pared() + dt.timedelta(hours=48))
+
+    assert ("24h", turno.id) in encolar()
+
+
+def test_a_las_24_no_sale_si_el_negocio_configuro_3(db, armar_empresa, encolar):
+    """La ventana vieja no puede seguir disparando por su cuenta.
+
+    Es el error fácil al hacer esto configurable: dejar la consulta vieja
+    andando además de la nueva, y que el cliente reciba DOS recordatorios.
+    """
+    ctx = armar_empresa()
+    _prender_con(db, ctx.empresa, "recordatorio_2h", 3)
+    turno = _turno_en(db, ctx, ahora_de_pared() + dt.timedelta(hours=24))
+
+    assert ("2h", turno.id) not in encolar()
+
+
+def test_dos_negocios_con_horas_distintas_no_se_pisan(db, armar_empresa, encolar):
+    """El barrido agrupa por horas, no por empresa: hay que verificar que cada
+    turno cae en la ventana de SU negocio y no en la del otro."""
+    a = armar_empresa("Turnos del día")
+    b = armar_empresa("Con anticipación")
+    _prender_con(db, a.empresa, "recordatorio_24h", 3)
+    _prender_con(db, b.empresa, "recordatorio_24h", 24)
+
+    turno_a = _turno_en(db, a, ahora_de_pared() + dt.timedelta(hours=3))
+    turno_b = _turno_en(db, b, ahora_de_pared() + dt.timedelta(hours=24))
+
+    encolados = encolar()
+    assert ("24h", turno_a.id) in encolados
+    assert ("24h", turno_b.id) in encolados
+
+
+def test_el_turno_del_otro_negocio_no_entra_por_la_ventana_ajena(
+    db, armar_empresa, encolar
+):
+    """Regla 1 aplicada al barrido: la ventana de 3 h de un negocio no puede
+    disparar el recordatorio de un turno de otro."""
+    a = armar_empresa("Avisa a las 3")
+    b = armar_empresa("Avisa a las 24")
+    _prender_con(db, a.empresa, "recordatorio_24h", 3)
+    _prender_con(db, b.empresa, "recordatorio_24h", 24)
+
+    # Un turno de B a 3 horas: cae en la ventana que abrió A, pero B
+    # configuró 24, así que no le toca.
+    turno_b_cerca = _turno_en(db, b, ahora_de_pared() + dt.timedelta(hours=3))
+
+    assert ("24h", turno_b_cerca.id) not in encolar()
+
+
+def test_sin_ninguna_campana_prendida_no_se_consulta_nada(db, armar_empresa, encolar):
+    """Con todo apagado el barrido no arma ninguna ventana: no hay horas en
+    uso. Es lo que hace que el costo del barrido crezca con las
+    CONFIGURACIONES distintas y no con la cantidad de empresas.
+
+    Ojo con el `{}`: un diccionario vacío NO es "todo apagado". `automs_de`
+    completa con los defaults, y el recordatorio de 24 h viene PRENDIDO de
+    fábrica —a propósito: es el anti-ausencias, lo que se vende—. Hay que
+    apagarlo explícitamente.
+    """
+    ctx = armar_empresa()
+    ctx.empresa.automatizaciones = {
+        "recordatorio_24h": {"activa": False},
+        "recordatorio_2h": {"activa": False},
+    }
+    db.flush()
+    _turno_en(db, ctx, ahora_de_pared() + dt.timedelta(hours=24))
+
+    assert encolar() == []
+
+
+def test_el_recordatorio_de_24h_viene_prendido_de_fabrica(db, armar_empresa, encolar):
+    """El default importa: es la campaña que evita el ausente, y el negocio que
+    nunca entra a Campañas igual tiene que tenerla andando."""
+    ctx = armar_empresa()
+    ctx.empresa.automatizaciones = {}
+    db.flush()
+    turno = _turno_en(db, ctx, ahora_de_pared() + dt.timedelta(hours=24))
+
+    assert ("24h", turno.id) in encolar()

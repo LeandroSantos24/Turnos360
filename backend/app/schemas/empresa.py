@@ -57,6 +57,68 @@ class EmpresaActualOut(BaseModel):
     funciones: list[str] = []
 
 
+class TemaVidriera(BaseModel):
+    """El LOOK de la página pública del negocio.
+
+    POR QUÉ ESTO EXISTE
+    ───────────────────
+    Hasta acá lo único configurable era `color_marca`: un acento sobre un
+    fondo blanco, igual para todos. Dos barberías de la misma cuadra tenían la
+    misma página con distinto logo — y la página pública es literalmente la
+    cara del negocio, lo que comparte en su Instagram. Que se parezcan todas
+    entre sí es el argumento más fuerte para no usarla.
+
+    POR QUÉ SON LISTAS CERRADAS Y NO CAMPOS LIBRES
+    ──────────────────────────────────────────────
+    Nada de esto es un CSS libre ni un selector de fuente abierto. Cada opción
+    es una de un puñado, elegidas para que TODAS las combinaciones se vean
+    bien: un dueño de barbería no tiene por qué saber que gris sobre gris no
+    se lee, ni que una tipografía de display a 14 px es ilegible. La libertad
+    total acá no produce páginas lindas, produce páginas rotas, y las rotas
+    también nos representan a nosotros.
+
+    Los colores son la excepción —ahí sí elige el hex que quiera— porque es su
+    marca, y porque el contraste del texto lo calcula la vidriera sola a
+    partir del fondo, así que no puede quedar ilegible.
+    """
+
+    # Una combinación lista de fondo + tipografía + botones. "propio" = el
+    # dueño tocó los ajustes finos y manda lo que eligió campo por campo.
+    plantilla: Literal[
+        "claro", "oscuro", "arena", "bosque", "vino", "noche", "propio"
+    ] = "claro"
+
+    fondo_tipo: Literal["solido", "gradiente", "patron"] = "solido"
+    fondo_color: str | None = None      # hex; None = el de la plantilla
+    fondo_color_2: str | None = None    # segundo color del gradiente
+
+    # La forma de los botones es lo que más cambia la personalidad de la
+    # página con menos riesgo: ninguna de las cuatro puede quedar mal.
+    boton_forma: Literal["recto", "suave", "medio", "pildora"] = "medio"
+    boton_estilo: Literal["solido", "contorno", "sombra"] = "solido"
+
+    # La tipografía de los títulos. El cuerpo del texto NO se toca: es lo que
+    # hay que poder leer de un celular en la calle.
+    titulos: Literal["sans", "serif", "display"] = "sans"
+
+    # Redondeo del logo y qué tan grande se muestra en la cabecera.
+    logo_forma: Literal["circulo", "cuadrado"] = "circulo"
+    logo_tamano: Literal["chico", "grande"] = "grande"
+
+    @field_validator("fondo_color", "fondo_color_2", mode="after")
+    @classmethod
+    def _validar_hex(cls, v: str | None) -> str | None:
+        """Solo #rrggbb. Estos valores terminan dentro de una declaración CSS
+        de la página pública: cualquier otra cosa se descarta en silencio
+        antes que dejarla llegar al navegador."""
+        s = (v or "").strip()
+        if not s:
+            return None
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", s):
+            return None
+        return s.lower()
+
+
 class LandingConfig(BaseModel):
     """Contenido editable de la landing pública del negocio (pantalla "Mi página").
 
@@ -82,6 +144,8 @@ class LandingConfig(BaseModel):
     redes: dict = {}
     # Galería de la landing: lista de URLs de fotos (máx. razonable: 12).
     galeria: list[str] = []
+    # El look de la página. Ausente = el de siempre (claro, botón medio).
+    tema: TemaVidriera = TemaVidriera()
 
     @field_validator("logo_url", "portada_url", mode="after")
     @classmethod
@@ -129,25 +193,46 @@ class AutomSwitch(BaseModel):
     activa: bool = False
 
 
+class AutomRecordatorio(AutomSwitch):
+    """Un recordatorio, con cuántas horas antes sale.
+
+    `horas_antes` viene de una lista cerrada (ver HORAS_RECORDATORIO en
+    services/empresa.py): el barrido arma una consulta por cada valor en uso, y
+    con un entero libre serían tantas consultas como empresas.
+    """
+
+    horas_antes: int = Field(default=24, ge=1, le=48)
+
+
 class AutomCumple(AutomSwitch):
     dias_antes: int = Field(default=7, ge=0, le=30)
+    # Asunto propio. Vacío = el nuestro. Es lo primero que ve el cliente en la
+    # bandeja y hasta acá no se podía tocar.
+    asunto: str = Field(default="", max_length=120)
     mensaje: str = Field(default="", max_length=500)
 
 
 class AutomResena(AutomSwitch):
     link: str = Field(default="", max_length=300)
+    # Cuánto esperar después del turno. Pedir la reseña en el mismo momento en
+    # que la persona está pagando y saliendo es el peor momento posible: o no
+    # lo ve, o lo ve y le molesta.
+    horas_despues: int = Field(default=2, ge=0, le=72)
 
 
 class AutomInactivos(AutomSwitch):
     dias: int = Field(default=60, ge=7, le=365)
+    asunto: str = Field(default="", max_length=120)
     mensaje: str = Field(default="", max_length=500)
+    # Visitas mínimas para entrar en la campaña. Ver AUTOMS_DEFAULTS.
+    min_visitas: int = Field(default=1, ge=1, le=20)
 
 
 class AutomatizacionesConfig(BaseModel):
     """La pantalla Campañas: cada automatización con su switch y su config."""
 
-    recordatorio_24h: AutomSwitch = AutomSwitch(activa=True)
-    recordatorio_2h: AutomSwitch = AutomSwitch()
+    recordatorio_24h: AutomRecordatorio = AutomRecordatorio(activa=True, horas_antes=24)
+    recordatorio_2h: AutomRecordatorio = AutomRecordatorio(horas_antes=2)
     cumple: AutomCumple = AutomCumple()
     resena_google: AutomResena = AutomResena()
     inactivos: AutomInactivos = AutomInactivos()
