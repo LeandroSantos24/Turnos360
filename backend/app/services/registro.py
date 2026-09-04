@@ -136,23 +136,53 @@ def registrar(db: Session, datos) -> tuple[Empresa, Usuario, str]:
 
 
 def verificar(db: Session, token: str) -> Usuario:
-    """Marca el email como verificado. El token sirve una sola vez."""
+    """Marca el email como verificado.
+
+    ABRIR EL LINK DOS VECES NO ES UN ERROR
+    ──────────────────────────────────────
+    Antes, verificar BORRABA el hash del token. La primera llamada confirmaba
+    la cuenta y la segunda —con el mismo link— no encontraba nada y contestaba
+    «ese link no sirve o ya venció». El usuario quedaba verificado y viendo una
+    pantalla roja que le decía lo contrario.
+
+    Y no hace falta ser distraído para que pase. El `useEffect` de la pantalla
+    dispara dos veces bajo React StrictMode; un refresh, un «atrás y adelante»,
+    un antivirus o un cliente de correo que pre-visita los links del mensaje
+    hacen exactamente lo mismo. Es la primera pantalla que ve alguien que
+    acaba de registrarse: ahí no se puede fallar.
+
+    Ahora el hash SOBREVIVE al uso y lo que marca el consumo es la fecha de
+    expiración puesta en el pasado. Así el token gastado sigue siendo
+    reconocible, y se puede distinguir «este link ya se usó y la cuenta está
+    confirmada» (que es un éxito, y se contesta como tal) de «este link no
+    existe» (que sí es un error). Un token vencido de verdad tampoco puede
+    reactivar nada: solo se confirma si el usuario YA estaba verificado.
+    """
     token_hash = hashlib.sha256((token or "").encode()).hexdigest()
     usuario = db.scalar(
         select(Usuario).where(Usuario.verif_token_hash == token_hash)
     )
+    if usuario is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ese link no sirve o ya venció. Pedí uno nuevo desde tu panel.",
+        )
+
+    # Ya confirmado: es el mismo link abierto de nuevo. Idempotente.
+    if usuario.email_verificado:
+        return usuario
+
     ahora = dt.datetime.now(dt.timezone.utc)
-    if usuario is None or (
-        usuario.verif_token_expira is not None and usuario.verif_token_expira < ahora
-    ):
+    if usuario.verif_token_expira is not None and usuario.verif_token_expira < ahora:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Ese link no sirve o ya venció. Pedí uno nuevo desde tu panel.",
         )
 
     usuario.email_verificado = True
-    usuario.verif_token_hash = None
-    usuario.verif_token_expira = None
+    # El hash queda. Lo que marca «gastado» es la fecha en el pasado, que es
+    # lo que permite reconocer el mismo link si se vuelve a abrir.
+    usuario.verif_token_expira = ahora - dt.timedelta(seconds=1)
     db.commit()
     db.refresh(usuario)
     return usuario

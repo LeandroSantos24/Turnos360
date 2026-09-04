@@ -121,14 +121,76 @@ def test_verificar_enciende_la_vidriera(client, db, rubro):
     assert r.status_code == 200, "Verificado, la página tiene que estar online."
 
 
-def test_el_token_sirve_una_sola_vez(client, db, rubro):
+def test_abrir_el_link_dos_veces_no_da_error(client, db, rubro):
+    """EL bug que encontró Leandro probando el alta como un cliente real.
+
+    Los logs mostraban CUATRO llamadas a verificar-email en dos intentos, de a
+    pares con milisegundos de diferencia: el `useEffect` de la pantalla dispara
+    dos veces bajo React StrictMode. La primera confirmaba la cuenta, la
+    segunda no encontraba el token —porque verificar lo BORRABA— y pintaba
+    «ese link no sirve o ya venció» sobre una cuenta que acababa de quedar
+    perfectamente verificada.
+
+    Y el StrictMode es solo el disparador más ruidoso: un refresh, un «atrás y
+    adelante», un antivirus o un cliente de correo que pre-visita los links del
+    mensaje producen el mismo doble pedido en producción. Es la primera
+    pantalla de alguien que se acaba de registrar — no puede mentirle.
+
+    Confirmar dos veces el mismo email es idempotente: la segunda vez el
+    resultado ya está, y decirlo es la respuesta correcta.
+    """
     datos = _alta(rubro)
     client.post("/publico/registro", json=datos)
     usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
     token = svc.reenviar(db, usuario)
 
+    primera = client.post(f"/publico/verificar-email?token={token}")
+    segunda = client.post(f"/publico/verificar-email?token={token}")
+
+    assert primera.status_code == 200, primera.text
+    assert segunda.status_code == 200, (
+        "Reabrir el link de una cuenta ya confirmada no es un error."
+    )
+
+    db.expire_all()
+    usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
+    assert usuario.email_verificado is True
+
+
+def test_el_token_gastado_no_reactiva_una_cuenta_desverificada(client, db, rubro):
+    """El token consumido sigue en la base para poder reconocerlo, pero no
+    puede volver a verificar nada: lo que lo hace inofensivo es que la fecha
+    quedó en el pasado."""
+    datos = _alta(rubro)
+    client.post("/publico/registro", json=datos)
+    usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
+    token = svc.reenviar(db, usuario)
     assert client.post(f"/publico/verificar-email?token={token}").status_code == 200
+
+    # Alguien le saca la verificación (un admin, un soporte, lo que sea).
+    db.expire_all()
+    usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
+    usuario.email_verificado = False
+    db.commit()
+
     assert client.post(f"/publico/verificar-email?token={token}").status_code == 400
+
+
+def test_pedir_un_link_nuevo_invalida_el_anterior(client, db, rubro):
+    """Si el viejo siguiera sirviendo, reenviar no protegería de un link que
+    quedó dando vueltas en una casilla ajena."""
+    datos = _alta(rubro)
+    client.post("/publico/registro", json=datos)
+    usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
+    viejo = svc.reenviar(db, usuario)
+
+    db.expire_all()
+    usuario = db.scalar(select(Usuario).where(Usuario.email == datos["email"]))
+    nuevo = svc.reenviar(db, usuario)
+    assert nuevo != viejo
+
+    assert client.post(f"/publico/verificar-email?token={viejo}").status_code == 400
+    assert client.post(f"/publico/verificar-email?token={nuevo}").status_code == 200
 
 
 def test_un_token_vencido_no_sirve(client, db, rubro):

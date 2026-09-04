@@ -7,7 +7,7 @@
  * acá, la vidriera responde 404 — ver services/publico.py::resolver_empresa.
  */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -20,6 +20,17 @@ function Contenido() {
   const token = params.get("token");
   const [estado, setEstado] = useState<"cargando" | "ok" | "error">("cargando");
   const [mensaje, setMensaje] = useState("");
+  /**
+   * El último token que ya se mandó a verificar.
+   *
+   * Bajo React StrictMode el efecto corre DOS veces, y verificar consume el
+   * token: la primera llamada confirmaba la cuenta y la segunda mostraba «ese
+   * link no sirve» sobre una cuenta recién confirmada. El backend ahora es
+   * idempotente y contesta bien igual, pero mandar la misma confirmación dos
+   * veces sigue sin tener sentido — y esta guarda es lo que evita el pedido
+   * duplicado en vez de taparlo.
+   */
+  const enviado = useRef<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -27,6 +38,9 @@ function Contenido() {
       setMensaje("El link no tiene el código de verificación.");
       return;
     }
+    if (enviado.current === token) return;
+    enviado.current = token;
+
     verificarEmail(token)
       .then((r) => {
         setEstado("ok");
