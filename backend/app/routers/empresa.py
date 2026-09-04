@@ -1,13 +1,17 @@
 """Endpoints de la empresa actual: preset del rubro + landing pública editable."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
-from app.schemas.empresa import AvisoPagoIn, MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
+from app.schemas.empresa import AvisoPagoIn, CambioPlanIn, MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
 from app.services import mercadopago as mp
 from app.services import mp_suscripcion as mp_sus
+
+log = logging.getLogger("turnos360.empresa")
 
 router = APIRouter(prefix="/empresa", tags=["empresa"])
 
@@ -185,13 +189,23 @@ def leer_mi_suscripcion(empresa_id: EmpresaActual, db: DB) -> MiSuscripcionOut:
 
 @router.post("/suscripcion/pagar-mp", dependencies=[Depends(gate_dueno)])
 @limiter.limit("10/minute")
-def pagar_suscripcion_mp(request: Request, empresa_id: EmpresaActual, db: DB) -> dict:
-    """Arranca el pago de la cuota con Checkout de Mercado Pago.
+def pagar_suscripcion_mp(
+    request: Request,
+    empresa_id: EmpresaActual,
+    db: DB,
+    plan: str | None = None,
+) -> dict:
+    """Arranca el pago de la cuota —o del plan elegido— por Mercado Pago.
 
     Devuelve la URL a la que hay que mandar al dueño. El pago se acredita solo
     cuando Mercado Pago avisa por el webhook y nosotros verificamos el pago
-    contra su API: acá no se toca el vencimiento.
+    contra su API: acá no se toca ni el plan ni el vencimiento. Eso es lo que
+    hace que un checkout abandonado no deje a nadie con un plan que no pagó.
+
+    `plan` viaja hasta el webhook dentro del external_reference. Sin él, un
+    upgrade cobraría el precio nuevo y dejaría a la empresa en el plan viejo.
     """
+    from app.core import planes
     from app.models.organizacion import Empresa
 
     if not mp_sus.esta_activo():
@@ -204,7 +218,20 @@ def pagar_suscripcion_mp(request: Request, empresa_id: EmpresaActual, db: DB) ->
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
 
-    url = mp_sus.crear_preferencia(empresa)
+    # Se valida ACÁ y no en el webhook. Enterprise no tiene precio de lista,
+    # así que un link de pago para Enterprise cobraría el precio de entrada y
+    # activaría cupos ilimitados: es la única forma de que este endpoint
+    # regale un plan, y por eso se corta antes de generar nada.
+    if plan is not None:
+        elegido = planes.plan_de(plan)
+        if not planes.se_vende_solo(elegido):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Ese plan no se contrata online. Escribinos y lo armamos con vos.",
+            )
+        plan = elegido.value
+
+    url = mp_sus.crear_preferencia(empresa, plan)
     if not url:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
@@ -212,6 +239,95 @@ def pagar_suscripcion_mp(request: Request, empresa_id: EmpresaActual, db: DB) ->
             "pagá por transferencia.",
         )
     return {"url": url}
+
+
+@router.post("/suscripcion/cambiar-plan", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/minute")
+def cambiar_plan(
+    request: Request,
+    datos: CambioPlanIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> dict:
+    """Cambia de plan sin que intervenga nadie de Turnos360.
+
+    SUBIR se paga: este endpoint NO activa el plan, devuelve el link de pago.
+    El plan se activa cuando la plata entra de verdad, por el webhook. Si
+    activara acá, cualquiera subiría a Multi, cerraría el checkout y se
+    quedaría con el plan gratis.
+
+    BAJAR se anota: el ciclo actual ya está pagado y se usa entero. Al vencer,
+    el barrido diario aplica la baja.
+    """
+    from app.core import planes
+    from app.models.organizacion import Empresa
+    from app.services import cobranza
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+
+    destino = planes.plan_de(datos.plan)
+    if not planes.se_vende_solo(destino):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ese plan no se contrata online. Escribinos y lo armamos con vos.",
+        )
+
+    movimiento = cobranza.cambio_de_plan(empresa, destino.value)
+
+    if movimiento == "mismo":
+        # Puede ser el que quiere CANCELAR una baja: eligió de nuevo el plan
+        # que ya tiene. Es la forma más natural de arrepentirse y no hace
+        # falta un botón aparte.
+        if empresa.plan_programado:
+            cobranza.cancelar_baja_programada(db, empresa, hecho_por=usuario.email)
+            db.commit()
+            return {
+                "accion": "cancelada",
+                "detalle": f"Listo, seguís en {planes.limites_de(empresa.plan).etiqueta}.",
+            }
+        return {"accion": "ninguna", "detalle": "Ya estás en ese plan."}
+
+    if movimiento == "baja":
+        cuando = cobranza.programar_baja(db, empresa, destino.value, hecho_por=usuario.email)
+        db.commit()
+        if cuando is None:
+            return {
+                "accion": "aplicada",
+                "detalle": f"Pasaste a {planes.limites_de(destino.value).etiqueta}.",
+            }
+        return {
+            "accion": "programada",
+            "desde": cuando.isoformat(),
+            "detalle": (
+                f"El mes que ya pagaste lo usás entero: seguís en "
+                f"{planes.limites_de(empresa.plan).etiqueta} hasta el "
+                f"{cuando.strftime('%d/%m/%Y')} y ahí pasás a "
+                f"{planes.limites_de(destino.value).etiqueta}."
+            ),
+        }
+
+    # Sube: hay que pagar.
+    if not mp_sus.esta_activo():
+        return {
+            "accion": "pagar_transferencia",
+            "detalle": (
+                f"Para pasar a {planes.limites_de(destino.value).etiqueta} "
+                "transferí el importe con los datos de esta pantalla y avisanos "
+                "acá mismo. Lo activamos apenas lo veamos en el banco."
+            ),
+        }
+
+    url = mp_sus.crear_preferencia(empresa, destino.value)
+    if not url:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "No se pudo generar el link de pago. Probá de nuevo en un rato o "
+            "pagá por transferencia.",
+        )
+    return {"accion": "pagar", "url": url}
 
 
 @router.post("/suscripcion/aviso-pago", dependencies=[Depends(gate_dueno)])
@@ -244,6 +360,25 @@ def avisar_pago(
         referencia=datos.referencia,
         avisado_por=usuario.email,
     )
+
+    # Este es el aviso MÁS urgente de los dos: es el único que necesita que
+    # alguien haga algo (verificarlo contra el banco). El de Mercado Pago se
+    # acredita solo; este se queda esperando.
+    try:
+        from app.core.cola import encolar
+        from app.tasks.emails import avisar_pago_recibido
+
+        encolar(
+            avisar_pago_recibido,
+            empresa_id,
+            float(datos.monto or 0),
+            "transferencia",
+            referencia=datos.referencia,
+            confirmado=False,
+        )
+    except Exception:
+        log.exception("No se pudo avisar la transferencia (empresa %s)", empresa_id)
+
     return {
         "detalle": (
             "¡Gracias! Tu pago quedó en proceso. Lo confirmamos dentro de las "

@@ -93,4 +93,14 @@ export const PLANES = [
     resumen: "Profesionales ilimitados · hasta 5 locales",
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
   },
+  {
+    // Precio 0 = a convenir, NO gratis. El super-admin le carga el precio
+    // real en `precio_mensual` de la ficha comercial, que es lo que se cobra.
+    // No se contrata online: no tiene precio de lista que cobrar.
+    codigo: "enterprise",
+    etiqueta: "Enterprise",
+    precio: 0,
+    resumen: "Todo ilimitado · locales a medida",
+    paraQuien: "Cadenas y franquicias. Precio y cupos pactados a mano.",
+  },
 ];

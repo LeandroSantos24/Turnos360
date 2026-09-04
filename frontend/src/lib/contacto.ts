@@ -39,3 +39,15 @@ export function linkWa(mensaje: string): string {
 export const WA_LINK_DEMO = linkWa(
   "Hola! Quiero probar Turnos360 en mi negocio.",
 );
+
+/**
+ * El CTA del plan Enterprise.
+ *
+ * Enterprise es el único plan que no se contrata solo: no tiene precio de
+ * lista porque los cupos y el precio se arman con cada cliente. El mensaje
+ * viene precargado para que la conversación arranque sabiendo de qué se
+ * habla — un "Hola" pelado obliga a preguntar todo de nuevo.
+ */
+export const WA_LINK_ENTERPRISE = linkWa(
+  "Hola! Necesito Turnos360 para varios locales. ¿Me pasás precio del plan Enterprise?",
+);

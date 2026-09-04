@@ -166,6 +166,20 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
             empresa.plan, empresa.limite_recursos
         ),
         "grilla": planes.para_mostrar(),
+        "plan_codigo": planes.plan_de(empresa.plan).value,
+        # La baja anotada para el fin del ciclo. La pantalla la muestra como
+        # un aviso con opción de cancelarla: sin eso, alguien que pidió bajar
+        # y se arrepintió no tiene forma de deshacerlo y termina escribiendo.
+        "plan_programado": empresa.plan_programado,
+        "plan_programado_etiqueta": (
+            planes.limites_de(empresa.plan_programado).etiqueta
+            if empresa.plan_programado
+            else None
+        ),
+        # Sin token del SaaS no hay botón de pago: la pantalla ofrece solo
+        # transferencia. Mostrar un botón que devuelve 503 es peor que no
+        # mostrarlo.
+        "mp_disponible": mp_sus.esta_activo(),
         "dias_prorroga": DIAS_PRORROGA,
         "pagos": [
             {

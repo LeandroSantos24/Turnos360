@@ -293,15 +293,30 @@ def registrar_pago(
     notas: str | None = None,
     registrado_por: str | None = None,
     renovar: bool = True,
+    plan: str | None = None,
 ) -> PagoSuscripcion:
-    """Anota una cuota cobrada y (por defecto) empuja el vencimiento 30 días.
+    """Anota una cuota cobrada, activa el plan comprado y corre el vencimiento.
 
-    De dónde se cuentan los 30 días:
+    DE DÓNDE SE CUENTAN LOS 30 DÍAS
+    ───────────────────────────────
     - Si paga DENTRO de la prórroga (hasta 10 días tarde), se cuenta desde el
       vencimiento viejo: el negocio nunca dejó de estar cubierto y no pierde
       los días de atraso.
     - Si paga DESPUÉS de la prórroga, se cuenta desde hoy. Estuvo cortado, así
       que no se le regalan las semanas que no pagó.
+    - Y NUNCA queda con menos días de los que ya tenía. Sin ese piso, alguien
+      que pagó ayer y hoy sube a Pro perdería 29 días que ya pagó: cobra el
+      plan nuevo completo, sí, pero no puede salir con menos vencimiento del
+      que entró.
+
+    `plan` ES LO QUE HACE QUE EL COBRO SEA AUTOMÁTICO
+    ─────────────────────────────────────────────────
+    Viene del external_reference del pago de Mercado Pago (o lo elige el
+    super-admin al registrar una transferencia). Antes no existía: el pago
+    entraba, el vencimiento se corría, y el plan quedaba como estaba. Un
+    upgrade a Pro cobraba Pro y dejaba al negocio en Inicial hasta que alguien
+    lo arreglara a mano — que es exactamente el trabajo manual que este cambio
+    viene a sacar.
     """
     fecha = fecha or dt.date.today()
     desde = empresa.suscripcion_vence
@@ -315,18 +330,28 @@ def registrar_pago(
         registrado_por=registrado_por,
     )
 
-    # Quien paga deja de estar en prueba. Antes el plan y el cobro vivían
-    # desacoplados: una empresa podía pagar por Mercado Pago durante un año y
-    # seguir figurando en "gratuito", con los límites de la prueba. El único
-    # lugar del backend que escribía "pro" era un efecto lateral del botón
-    # "Renovar 30 días", que además saltaba el plan de entrada.
-    if renovar and planes.plan_de(empresa.plan) is planes.Plan.GRATUITO:
-        empresa.plan = planes.PLAN_DE_ENTRADA.value
-
     if renovar:
+        if plan:
+            # Compró un plan concreto: se activa, sea subida o bajada. Y se
+            # cancela cualquier baja programada — acaba de decidir de nuevo.
+            empresa.plan = plan
+            empresa.plan_programado = None
+        elif planes.plan_de(empresa.plan) is planes.Plan.GRATUITO:
+            # Renovación sin plan elegido (el botón viejo, o una transferencia
+            # registrada a mano sin indicar cuál). Quien paga deja de estar en
+            # prueba y cae en el plan de ENTRADA, no en el del medio.
+            #
+            # Antes el plan y el cobro vivían desacoplados: una empresa podía
+            # pagar por Mercado Pago durante un año y seguir figurando en
+            # "gratuito", con los límites de la prueba.
+            empresa.plan = planes.PLAN_DE_ENTRADA.value
+
         limite_continuidad = fecha - dt.timedelta(days=DIAS_PRORROGA)
         base = desde if desde and desde >= limite_continuidad else fecha
         nuevo = base + dt.timedelta(days=DIAS_CICLO)
+        # El piso: nunca menos días de los que ya tenía.
+        if desde and desde > nuevo:
+            nuevo = desde
         pago.periodo_desde = base
         pago.periodo_hasta = nuevo
         empresa.suscripcion_vence = nuevo
@@ -340,7 +365,10 @@ def registrar_pago(
         tipo="pago",
         vence_antes=desde,
         vence_despues=empresa.suscripcion_vence,
-        detalle=f"Cuota de ${float(monto):,.0f} por {metodo}".replace(",", "."),
+        detalle=(
+            f"Cuota de ${float(monto):,.0f} por {metodo}"
+            + (f" · pasa a {planes.limites_de(plan).etiqueta}" if plan else "")
+        ).replace(",", "."),
         pago_id=pago.id,
         hecho_por=registrado_por,
     )
@@ -616,3 +644,141 @@ def resolver_aviso(
     aviso.resuelto_por = (resuelto_por or "")[:160] or None
     aviso.pago_id = pago_id
     db.commit()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Cambio de plan por autoservicio
+# ══════════════════════════════════════════════════════════════════════
+#
+# La regla, en una línea: SUBIR se paga y se activa al toque; BAJAR se anota
+# y se aplica cuando vence el ciclo que ya está pagado.
+#
+# Por qué no al revés. Una subida que espera al fin del mes es alguien que
+# pagó más y no recibe nada hasta dentro de tres semanas — nadie paga así. Una
+# bajada inmediata es quitarle algo que ya pagó, y es exactamente el motivo
+# por el que alguien pasa de bajar de plan a dar de baja la cuenta.
+
+
+def cambio_de_plan(empresa: Empresa, destino: str) -> str:
+    """Qué tipo de movimiento es: 'sube', 'baja' o 'mismo'.
+
+    Se compara por PRECIO y no por el orden del enum: es la única definición
+    que no se rompe el día que se agregue un plan en el medio de la grilla.
+    """
+    actual = planes.limites_de(empresa.plan).precio
+    nuevo = planes.limites_de(destino).precio
+    if nuevo > actual:
+        return "sube"
+    if nuevo < actual:
+        return "baja"
+    return "mismo"
+
+
+def programar_baja(
+    db: Session, empresa: Empresa, destino: str, hecho_por: str | None = None
+) -> dt.date | None:
+    """Anota que al vencer el ciclo la empresa cae al plan `destino`.
+
+    No toca el plan actual ni el vencimiento: el mes ya está pagado y se usa
+    entero. Devuelve la fecha en que se va a aplicar.
+
+    Si la empresa no tiene vencimiento (está en prueba, o es una cuenta
+    bonificada), la baja se aplica ya: no hay ciclo pago que respetar.
+    """
+    destino = planes.plan_de(destino).value
+    if empresa.suscripcion_vence is None:
+        antes = empresa.plan
+        empresa.plan = destino
+        empresa.plan_programado = None
+        registrar_ajuste(
+            db,
+            empresa,
+            tipo="plan",
+            vence_antes=None,
+            vence_despues=None,
+            detalle=(
+                f"Cambio de plan: {planes.limites_de(antes).etiqueta} → "
+                f"{planes.limites_de(destino).etiqueta}"
+            ),
+            hecho_por=hecho_por,
+        )
+        db.flush()
+        return None
+
+    empresa.plan_programado = destino
+    registrar_ajuste(
+        db,
+        empresa,
+        tipo="plan",
+        vence_antes=empresa.suscripcion_vence,
+        vence_despues=empresa.suscripcion_vence,
+        detalle=(
+            f"Baja programada a {planes.limites_de(destino).etiqueta} "
+            f"para el {empresa.suscripcion_vence.isoformat()}"
+        ),
+        hecho_por=hecho_por,
+    )
+    db.flush()
+    return empresa.suscripcion_vence
+
+
+def cancelar_baja_programada(
+    db: Session, empresa: Empresa, hecho_por: str | None = None
+) -> None:
+    """Se arrepintió. Sigue en el plan que tiene."""
+    if empresa.plan_programado is None:
+        return
+    destino = empresa.plan_programado
+    empresa.plan_programado = None
+    registrar_ajuste(
+        db,
+        empresa,
+        tipo="plan",
+        vence_antes=empresa.suscripcion_vence,
+        vence_despues=empresa.suscripcion_vence,
+        detalle=f"Se canceló la baja a {planes.limites_de(destino).etiqueta}",
+        hecho_por=hecho_por,
+    )
+    db.flush()
+
+
+def aplicar_bajas_programadas(db: Session, hoy: dt.date | None = None) -> int:
+    """Baja de plan a las empresas cuyo ciclo ya venció. Devuelve cuántas.
+
+    Lo corre el barrido diario. Es idempotente: al aplicarla se limpia
+    `plan_programado`, así que correrlo dos veces el mismo día no hace nada la
+    segunda vez.
+
+    NO toca el vencimiento. Que la empresa quede vencida o no es asunto del
+    cobro, no del cambio de plan — mezclar las dos cosas acá haría que una
+    bajada de plan renovara la suscripción de arriba.
+    """
+    hoy = hoy or dt.date.today()
+    pendientes = list(
+        db.scalars(
+            select(Empresa).where(
+                Empresa.plan_programado.is_not(None),
+                Empresa.suscripcion_vence.is_not(None),
+                Empresa.suscripcion_vence <= hoy,
+            )
+        )
+    )
+    for empresa in pendientes:
+        antes = empresa.plan
+        empresa.plan = empresa.plan_programado
+        empresa.plan_programado = None
+        registrar_ajuste(
+            db,
+            empresa,
+            tipo="plan",
+            vence_antes=empresa.suscripcion_vence,
+            vence_despues=empresa.suscripcion_vence,
+            detalle=(
+                f"Baja aplicada: {planes.limites_de(antes).etiqueta} → "
+                f"{planes.limites_de(empresa.plan).etiqueta}"
+            ),
+            hecho_por="sistema",
+        )
+    if pendientes:
+        db.commit()
+    return len(pendientes)

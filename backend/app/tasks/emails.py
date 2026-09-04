@@ -992,7 +992,23 @@ def avisar_vencimientos() -> None:
     negocio paga y la fecha se corre, el ciclo siguiente vuelve a avisar.
     """
     from app.core.config import settings
+    from app.services import cobranza
     from app.services.suscripcion import DIAS_PRORROGA
+
+    # Las bajas de plan anotadas cuyo ciclo ya venció se aplican ACÁ, en el
+    # mismo barrido diario. Va primero, antes de mandar ningún aviso: si se
+    # hiciera después, el mail del día del vencimiento saldría con el plan
+    # viejo y diría un precio que ya no corresponde.
+    #
+    # Tiene su propia sesión y su propio try: una baja que falle no puede
+    # dejar sin avisos de cobranza a todo el sistema.
+    try:
+        with SessionLocal() as db_planes:
+            aplicadas = cobranza.aplicar_bajas_programadas(db_planes)
+        if aplicadas:
+            log.info("Bajas de plan aplicadas: %s", aplicadas)
+    except Exception:
+        log.exception("Falló aplicar las bajas de plan programadas")
 
     hoy = dt.date.today()
     with SessionLocal() as db:
@@ -1013,11 +1029,18 @@ def avisar_vencimientos() -> None:
             clave, asunto = hito
 
             # Una sola vez por hito y por ciclo.
-            log = f"aviso_vencimiento {clave} vence={vence}"
+            #
+            # La variable se llamaba `log`, y eso hacía que el logger del
+            # módulo quedara SOMBREADO en toda esta función: cualquier
+            # `log.info(...)` acá adentro —aunque estuviera cien líneas más
+            # arriba— reventaba con UnboundLocalError. Es el tipo de trampa
+            # que se cobra a quien venga después a agregar una línea de log en
+            # el barrido de cobranza, y que solo explota en producción.
+            marca = f"aviso_vencimiento {clave} vence={vence}"
             ya = db.scalar(
                 select(Mensaje).where(
                     Mensaje.empresa_id == empresa.id,
-                    Mensaje.contenido == log,
+                    Mensaje.contenido == marca,
                     Mensaje.estado == EstadoMensaje.ENVIADO,
                 )
             )
@@ -1079,7 +1102,7 @@ def avisar_vencimientos() -> None:
                 boton=boton,
                 marca="Turnos360",
             )
-            _mandar(db, empresa, destino, asunto, html, log)
+            _mandar(db, empresa, destino, asunto, html, marca)
 
 
 # ============================================================
@@ -1327,3 +1350,99 @@ def enviar_verificacion_email(usuario_id: int, token: str) -> None:
                 "No se pudo mandar el email de verificación (usuario %s)",
                 usuario_id,
             )
+
+
+@celery_app.task(name="app.tasks.emails.avisar_pago_recibido")
+def avisar_pago_recibido(
+    empresa_id: int,
+    monto: float,
+    metodo: str,
+    plan: str | None = None,
+    referencia: str | None = None,
+    confirmado: bool = True,
+) -> None:
+    """Avisa a la casilla oficial que entró plata, y de quién.
+
+    POR QUÉ HACE FALTA
+    ──────────────────
+    Con el cobro por Mercado Pago automatizado, un pago entra, activa el plan y
+    corre el vencimiento sin que nadie mire nada. Eso está bien para el
+    cliente y es todo el punto del autoservicio — pero significa que quien
+    vive de esto puede pasar una semana sin enterarse de si cobró.
+
+    El panel de cobranza tiene los números, sí. Pero hay que entrar a mirarlos,
+    y lo que uno quiere es que la plata avise sola.
+
+    `confirmado=False` es el aviso de TRANSFERENCIA: alguien dijo que
+    transfirió y todavía no se verificó contra el banco. Se manda igual —de
+    hecho es el más urgente, porque es el único que necesita que alguien haga
+    algo— pero el asunto lo dice, para que no se confunda con plata acreditada.
+    """
+    destino = settings.admin_alerta_email.strip()
+    if not destino:
+        return
+
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        if empresa is None:
+            return
+
+        plata = f"${monto:,.0f}".replace(",", ".")
+        etiqueta_plan = ""
+        if plan:
+            from app.core import planes
+
+            etiqueta_plan = planes.limites_de(plan).etiqueta
+
+        if confirmado:
+            asunto = f"💰 {plata} · {empresa.nombre}"
+            titulo = "Entró un pago"
+            apertura = (
+                f"<b>{esc(empresa.nombre)}</b> pagó <b>{plata}</b> por "
+                f"{esc(metodo)}."
+            )
+            cierre = (
+                "Ya está acreditado: el plan quedó activo y el vencimiento "
+                "corrido. No hay nada que hacer."
+            )
+        else:
+            asunto = f"⏳ Avisan un pago de {plata} · {empresa.nombre}"
+            titulo = "Avisaron una transferencia"
+            apertura = (
+                f"<b>{esc(empresa.nombre)}</b> dice que transfirió "
+                f"<b>{plata}</b>."
+            )
+            cierre = (
+                "<b>Esto SÍ necesita que hagas algo:</b> verificalo contra el "
+                "banco y confirmalo desde el panel de cobranza. Hasta que lo "
+                "confirmes, el vencimiento no se movió."
+            )
+
+        lineas = [apertura]
+        if etiqueta_plan:
+            lineas.append(f"Plan: <b>{esc(etiqueta_plan)}</b>.")
+        if referencia:
+            lineas.append(f"Referencia: {esc(referencia)}")
+        vence = empresa.suscripcion_vence
+        if vence:
+            lineas.append(f"Vence: <b>{vence.strftime('%d/%m/%Y')}</b>.")
+        lineas.append(cierre)
+
+        html = _plantilla(
+            titulo,
+            lineas,
+            "Turnos360 · aviso interno de cobranza",
+            boton=("Ver en el panel", f"{settings.public_base_url}/admin/cobranza"),
+            marca="Turnos360 · Cobranza",
+        )
+
+        # Sin _mandar(): ese helper escribe en la tabla Mensaje, que es la
+        # mensajería POR EMPRESA con sus clientes finales. Esto es un aviso de
+        # la plataforma para nosotros y no tiene por qué ensuciar el historial
+        # de mensajes de nadie.
+        try:
+            mailer.enviar(destino, asunto, html)
+        except mailer.MailerNoConfigurado:
+            log.warning("Aviso de pago sin mandar: SMTP sin configurar")
+        except Exception:
+            log.exception("No se pudo mandar el aviso de pago (empresa %s)", empresa_id)

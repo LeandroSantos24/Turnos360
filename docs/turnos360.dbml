@@ -311,6 +311,7 @@ Table empresa {
   sena_monto numeric(12, 2)
   activa boolean [not null]
   plan varchar(20) [not null]
+  plan_programado varchar(20)
   suscripcion_vence date
   prueba_hasta date
   razon_social varchar(160)

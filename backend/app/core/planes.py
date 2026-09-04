@@ -59,6 +59,11 @@ class Plan(str, enum.Enum):
     INICIAL = "inicial"
     PRO = "pro"
     MULTI = "multi"
+    # No se vende solo: no tiene precio de lista y el botón lleva a WhatsApp.
+    # Los cupos y el precio los pone el super-admin en la ficha comercial
+    # (`precio_mensual`, `limite_recursos`, `limite_sucursales`), que ya
+    # existían y son exactamente el mecanismo que este plan necesita.
+    ENTERPRISE = "enterprise"
 
 
 class Funcion(str, enum.Enum):
@@ -131,16 +136,22 @@ GRILLA: dict[Plan, Limites] = {
     Plan.GRATUITO: Limites(
         etiqueta="Prueba",
         precio=0,
-        # La prueba da los cupos del plan más alto: que el negocio cargue todo
-        # su equipo y sus dos locales y VEA el producto andando con sus datos
-        # reales. Un cupo apretado durante la prueba es una forma cara de que
-        # se vaya sin haber probado nada.
-        profesionales=None,
-        usuarios=None,
-        sucursales=2,
-        resumen="Todo desbloqueado mientras dure",
+        # LOS CUPOS DE PRO, PERO UN SOLO LOCAL.
+        #
+        # Que pruebe todo lo que va a usar de verdad —su equipo entero,
+        # membresías, gift cards, cupones, campañas— porque justamente eso es
+        # lo que hace que se quede. Un cupo apretado durante la prueba es una
+        # forma cara de que se vaya sin haber visto la mitad del producto.
+        #
+        # El único techo es el segundo local, que es exactamente lo que
+        # justifica pagar Multi. Multisucursal no se regala en la prueba: si
+        # se probara gratis, el plan más caro perdería su único argumento.
+        profesionales=8,
+        usuarios=10,
+        sucursales=1,
+        resumen="Todo lo de Pro por 14 días, en un local",
         para_quien="Para probarlo con tus turnos de verdad, sin tarjeta.",
-        funciones=DE_MULTI,
+        funciones=DE_PRO,
     ),
     Plan.INICIAL: Limites(
         etiqueta="Inicial",
@@ -172,7 +183,35 @@ GRILLA: dict[Plan, Limites] = {
         para_quien="El que abrió el segundo local y necesita compararlos.",
         funciones=DE_MULTI,
     ),
+    Plan.ENTERPRISE: Limites(
+        etiqueta="Enterprise",
+        # precio 0 = a convenir. NO es gratis: `a_convenir` de abajo es lo que
+        # hace que la pantalla muestre «Hablemos» en vez de «$0», y el cobro
+        # automático se saltea este plan justamente porque no tiene precio de
+        # lista. El de verdad lo carga el super-admin en `precio_mensual`.
+        precio=0,
+        profesionales=None,
+        usuarios=None,
+        # Un número alto y no ilimitado: el tope real lo pone
+        # `limite_sucursales` en la ficha de cada cliente. Sin ningún tope, un
+        # error de tipeo en un alta podría crear cien locales sin que nada
+        # frene.
+        sucursales=50,
+        resumen="Todo ilimitado · locales a medida",
+        para_quien="Cadenas y franquicias. Lo armamos con vos.",
+        funciones=DE_MULTI,
+    ),
 }
+
+# Los planes que se compran solos desde «Mi suscripción», en orden de precio.
+# Enterprise NO está: no tiene precio de lista, así que no puede generar un
+# link de pago. GRATUITO tampoco: no se vende, se vence.
+PLANES_A_LA_VENTA = (Plan.INICIAL, Plan.PRO, Plan.MULTI)
+
+
+def se_vende_solo(plan: Plan) -> bool:
+    """¿Este plan se puede pagar sin que intervenga nadie de Turnos360?"""
+    return plan in PLANES_A_LA_VENTA
 
 # El plan con el que arranca quien paga por primera vez viniendo de la prueba.
 PLAN_DE_ENTRADA = Plan.INICIAL
@@ -252,6 +291,9 @@ def para_mostrar() -> list[dict]:
             "resumen": lim.resumen,
             "para_quien": lim.para_quien,
             "funciones": sorted(f.value for f in lim.funciones),
+            # La pantalla decide con esto si dibuja un precio y un botón de
+            # pago, o «Hablemos» con el link a WhatsApp.
+            "a_convenir": not se_vende_solo(p),
         }
         for p, lim in GRILLA.items()
         if p is not Plan.GRATUITO  # la prueba no se vende

@@ -200,6 +200,15 @@ class Empresa(Base):
     plan: Mapped[str] = mapped_column(
         String(20), default="gratuito", server_default="gratuito"
     )
+    # A qué plan CAE cuando venza el ciclo actual. NULL = sigue en el suyo.
+    #
+    # Existe porque una baja de plan no puede aplicarse en el momento: el mes
+    # ya está pagado, y quitarle Multi a alguien que lo pagó hasta fin de mes
+    # es el tipo de cosa por la que se pide la baja completa. Se anota acá, se
+    # respeta el ciclo, y el barrido diario lo aplica cuando corresponde.
+    #
+    # Se limpia solo en cuanto paga: si pagó, volvió a elegir.
+    plan_programado: Mapped[str | None] = mapped_column(String(20))
     suscripcion_vence: Mapped[dt.date | None] = mapped_column(Date)
     # Fin del período de prueba. NULL = cliente normal.
     # Mientras hoy <= prueba_hasta el negocio NO es moroso ni cliente al día:

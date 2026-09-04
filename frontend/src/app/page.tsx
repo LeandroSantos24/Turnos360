@@ -150,6 +150,24 @@ const planes = [
     ],
     destacado: false,
   },
+  {
+    // Sin precio: los cupos se arman con cada cliente. `precio: null` es lo
+    // que hace que la tarjeta muestre "A convenir" y el botón vaya a
+    // WhatsApp en vez de al registro.
+    codigo: "enterprise",
+    nombre: "Enterprise",
+    precio: null,
+    paraQuien: "Cadenas y franquicias. Lo armamos con vos.",
+    cupos: ["Todo ilimitado", "Locales a medida", "Precio pactado"],
+    tituloLista: "Todo lo de Multi, más:",
+    incluye: [
+      "Los locales que necesites",
+      "Acompañamiento en la puesta en marcha",
+      "Migración de tus datos actuales",
+      "Soporte prioritario",
+    ],
+    destacado: false,
+  },
 ];
 
 const enPesos = (n: number) => `$${n.toLocaleString("es-AR")}`;
@@ -486,9 +504,17 @@ export default function Page() {
            forma más barata de decir "este" sin escribirlo. */
         .grilla-planes {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
           align-items: stretch;
+        }
+        /* Cuatro columnas necesitan más ancho del que hay en una notebook
+           chica. A partir de ahí, dos y dos: mejor que apretarlas hasta que
+           el precio se corte en dos renglones. */
+        @media (max-width: 1180px) {
+          .grilla-planes { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+          .plan-destacado { transform: none; }
+          .plan-destacado:hover { transform: translateY(-4px); }
         }
         .plan {
           display: flex;
@@ -539,7 +565,7 @@ export default function Page() {
           padding: 4px 11px; border-radius: 999px;
         }
 
-        @media (max-width: 940px) {
+        @media (max-width: 720px) {
           .grilla-planes { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; gap: 26px; }
           /* Apilados, levantar el del medio deja un hueco raro arriba y otro
              abajo. La cinta sola alcanza para distinguirlo. */
@@ -1113,10 +1139,12 @@ export default function Page() {
                       {PRECIO_NORMAL_TEXTO}
                     </span>
                   )}
-                  <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(32px,3.6vw,42px)", letterSpacing: "-0.02em" }}>
-                    {enPesos(p.precio)}
+                  <span style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: p.precio === null ? "clamp(24px,2.6vw,30px)" : "clamp(32px,3.6vw,42px)", letterSpacing: "-0.02em" }}>
+                    {p.precio === null ? "A convenir" : enPesos(p.precio)}
                   </span>
-                  <span style={{ color: "#5d6578", fontSize: 16, fontWeight: 500 }}>/ mes</span>
+                  {p.precio !== null && (
+                    <span style={{ color: "#5d6578", fontSize: 16, fontWeight: 500 }}>/ mes</span>
+                  )}
                 </div>
                 {PROMO_ACTIVA && p.codigo === "inicial" && (
                   <div style={{ display: "inline-flex", background: "#fff4e0", color: "#9a6212", fontWeight: 700, fontSize: 12, padding: "4px 11px", borderRadius: 999, marginTop: 8 }}>
@@ -1145,14 +1173,27 @@ export default function Page() {
                   ))}
                 </div>
 
-                <Link
-                  href="/registro"
-                  className={`cta ${p.destacado ? "cta-fuerte" : "cta-suave"}`}
-                  style={{ width: "100%" }}
-                >
-                  Probalo {DIAS_PRUEBA} días gratis
-                  <span aria-hidden className="cta-flecha">→</span>
-                </Link>
+                {p.precio === null ? (
+                  <a
+                    href={WA_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cta cta-suave"
+                    style={{ width: "100%" }}
+                  >
+                    Hablemos
+                    <span aria-hidden className="cta-flecha">→</span>
+                  </a>
+                ) : (
+                  <Link
+                    href="/registro"
+                    className={`cta ${p.destacado ? "cta-fuerte" : "cta-suave"}`}
+                    style={{ width: "100%" }}
+                  >
+                    Probalo {DIAS_PRUEBA} días gratis
+                    <span aria-hidden className="cta-flecha">→</span>
+                  </Link>
+                )}
               </div>
             ))}
           </div>

@@ -300,6 +300,21 @@ class MiSuscripcionOut(SuscripcionOut):
     profesionales_usados: int = 0
     profesionales_tope: int | None = None
     grilla: list[dict] = []
+    # El plan que tiene, en código: la pantalla lo usa para saber cuál de las
+    # columnas es la suya y qué botón poner en cada una de las otras.
+    plan_codigo: str = "gratuito"
+    # Baja anotada para el fin del ciclo. El mes pagado se usa entero.
+    plan_programado: str | None = None
+    plan_programado_etiqueta: str | None = None
+    # ¿El cobro por Mercado Pago está habilitado? Sin token del SaaS no hay
+    # botón de pago y la pantalla ofrece solo transferencia.
+    mp_disponible: bool = False
+
+
+class CambioPlanIn(BaseModel):
+    """El dueño elige a qué plan pasar desde «Mi suscripción»."""
+
+    plan: str = Field(min_length=1, max_length=20)
 
 
 class ReglasReservaConfig(BaseModel):

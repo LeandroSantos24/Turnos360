@@ -172,6 +172,13 @@ export interface MiSuscripcion {
   /** null = sin tope (plan Multi). */
   profesionales_tope: number | null;
   grilla: PlanDeLaGrilla[];
+  /** El plan en código: con esto la pantalla sabe cuál columna es la suya. */
+  plan_codigo: string;
+  /** Baja anotada para el fin del ciclo. null = no hay ninguna. */
+  plan_programado: string | null;
+  plan_programado_etiqueta: string | null;
+  /** Sin token del SaaS no hay botón de pago: solo transferencia. */
+  mp_disponible: boolean;
 }
 
 export interface PlanDeLaGrilla {
@@ -180,8 +187,49 @@ export interface PlanDeLaGrilla {
   precio: number;
   /** null = ilimitados. */
   profesionales: number | null;
+  usuarios: number | null;
   sucursales: number;
   resumen: string;
+  para_quien: string;
+  /**
+   * Sin precio de lista: no se contrata online. La pantalla muestra
+   * «Hablemos» con el link a WhatsApp en vez de un botón de pago.
+   */
+  a_convenir: boolean;
+}
+
+/** Qué pasó al pedir un cambio de plan. */
+export interface CambioDePlan {
+  /**
+   * - `pagar`: subió, hay que ir al checkout (viene `url`).
+   * - `pagar_transferencia`: subió pero MP está apagado; paga por transferencia.
+   * - `programada`: bajó; se aplica al vencer el ciclo pago (viene `desde`).
+   * - `aplicada`: bajó y no había ciclo pago que respetar.
+   * - `cancelada`: eligió el plan que ya tiene y se anuló la baja anotada.
+   * - `ninguna`: ya estaba en ese plan.
+   */
+  accion:
+    | "pagar"
+    | "pagar_transferencia"
+    | "programada"
+    | "aplicada"
+    | "cancelada"
+    | "ninguna";
+  url?: string;
+  desde?: string;
+  detalle?: string;
+}
+
+/**
+ * Pide el cambio de plan.
+ *
+ * SUBIR no activa nada acá: devuelve el link de pago y el plan se activa
+ * cuando la plata entra de verdad, por el webhook de Mercado Pago. Si se
+ * activara al pedirlo, cualquiera subiría a Multi, cerraría el checkout y se
+ * quedaría con el plan gratis.
+ */
+export function cambiarPlan(plan: string): Promise<CambioDePlan> {
+  return api.post<CambioDePlan>("/empresa/suscripcion/cambiar-plan", { plan });
 }
 
 export function leerMiSuscripcion(): Promise<MiSuscripcion> {
@@ -189,8 +237,9 @@ export function leerMiSuscripcion(): Promise<MiSuscripcion> {
 }
 
 /** Arranca el pago de la cuota con Checkout de Mercado Pago. Devuelve la URL. */
-export function pagarSuscripcionMP(): Promise<{ url: string }> {
-  return api.post<{ url: string }>("/empresa/suscripcion/pagar-mp", {});
+export function pagarSuscripcionMP(plan?: string): Promise<{ url: string }> {
+  const q = plan ? `?plan=${encodeURIComponent(plan)}` : "";
+  return api.post<{ url: string }>(`/empresa/suscripcion/pagar-mp${q}`, {});
 }
 
 /** "Ya te transferí". Queda pendiente de que lo confirmemos contra el banco. */

@@ -22,10 +22,12 @@ import {
   avisarPagoSuscripcion,
   leerAvisoPago,
   leerMiSuscripcion,
+  cambiarPlan,
   pagarSuscripcionMP,
   type MiSuscripcion,
 } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
+import { WA_LINK_ENTERPRISE } from "@/lib/contacto";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
@@ -98,6 +100,10 @@ export default function SuscripcionPage() {
   const [yendoAMP, setYendoAMP] = useState(false);
   const [avisando, setAvisando] = useState(false);
   const [referencia, setReferencia] = useState("");
+  // Qué plan se está pidiendo. Guardar el CÓDIGO y no un booleano deja
+  // deshabilitar todos los botones y mostrar "Un momento…" solo en el que se
+  // tocó: con un booleano, los cuatro parecerían estar procesando.
+  const [cambiando, setCambiando] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -114,6 +120,42 @@ export default function SuscripcionPage() {
       setCargando(false);
     }
   }, []);
+
+  /**
+   * Pide el cambio de plan y hace lo que corresponda con la respuesta.
+   *
+   * El backend decide qué tipo de movimiento es —subir, bajar, o cancelar una
+   * baja— y esta función solo obedece. Calcularlo acá significaría tener la
+   * regla en dos lugares, y el día que se separen el que manda es el que NO se
+   * ve: la pantalla diría "bajás al vencer" mientras el servidor cobra.
+   */
+  async function pedirCambio(plan: string) {
+    setCambiando(plan);
+    try {
+      const r = await cambiarPlan(plan);
+
+      if (r.accion === "pagar" && r.url) {
+        // Misma pestaña: el dueño vuelve solo por las back_urls y así no se
+        // pierde entre ventanas en el celular.
+        window.location.href = r.url;
+        return;
+      }
+
+      if (r.detalle) {
+        toast.success(r.detalle);
+      }
+      if (r.accion === "pagar_transferencia") {
+        // Sin Mercado Pago no hay checkout: se lo lleva a los datos para
+        // transferir, que están más abajo en esta misma pantalla.
+        document.getElementById("como-pagar")?.scrollIntoView({ behavior: "smooth" });
+      }
+      await cargar();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo cambiar el plan");
+    } finally {
+      setCambiando(null);
+    }
+  }
 
   async function irAMercadoPago() {
     setYendoAMP(true);
@@ -160,6 +202,11 @@ export default function SuscripcionPage() {
 
   const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
   const precioAPagar = datos.precio_mensual ?? datos.precio_lista;
+  // El precio del plan que tiene hoy. Es lo que decide si cada botón dice
+  // "Pasar a" o "Bajar a" — se compara por PRECIO y no por el orden de la
+  // grilla, igual que en el backend, para que digan lo mismo siempre.
+  const miPrecio =
+    datos.grilla.find((p) => p.codigo === datos.plan_codigo)?.precio ?? 0;
   const c = datos.cobro;
   const hayTransferencia = Boolean(c.cbu || c.alias);
   // c.mp_checkout es el Checkout de verdad (genera el pago y lo acredita solo).
@@ -322,20 +369,42 @@ export default function SuscripcionPage() {
             </div>
           )}
 
+          {/* La baja anotada. Va ARRIBA de la grilla y no abajo: es el estado
+              más importante de la pantalla para quien la pidió, y quien se
+              arrepintió tiene que encontrar cómo deshacerla sin buscar. */}
+          {datos.plan_programado && (
+            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/50 bg-amber-50 p-3.5 text-sm dark:border-amber-700/50 dark:bg-amber-950/40">
+              <Clock className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+              <p className="min-w-0 flex-1 text-amber-900 dark:text-amber-200">
+                El mes que ya pagaste lo usás entero: seguís en{" "}
+                <b>{datos.plan_etiqueta}</b>
+                {datos.vence ? ` hasta el ${datos.vence}` : ""} y ahí pasás a{" "}
+                <b>{datos.plan_programado_etiqueta}</b>.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={cambiando !== null}
+                onClick={() => pedirCambio(datos.plan_codigo)}
+              >
+                Seguir en {datos.plan_etiqueta}
+              </Button>
+            </div>
+          )}
+
           {datos.grilla.length > 0 && (
-            <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {datos.grilla.map((p) => {
-                const esElMio =
-                  p.etiqueta.toLowerCase() ===
-                  (datos.plan_etiqueta ?? "").toLowerCase();
+                const esElMio = p.codigo === datos.plan_codigo;
+                const enCurso = cambiando === p.codigo;
                 return (
                   <div
                     key={p.codigo}
-                    className={`rounded-xl border p-3.5 ${
+                    className={`flex flex-col rounded-xl border p-4 ${
                       esElMio ? "border-primary bg-primary/5" : ""
                     }`}
                   >
-                    <p className="flex items-center gap-1.5 text-sm font-semibold">
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
                       {p.etiqueta}
                       {esElMio && (
                         <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
@@ -343,12 +412,49 @@ export default function SuscripcionPage() {
                         </span>
                       )}
                     </p>
-                    <p className="mt-0.5 text-lg font-bold tabular-nums">
-                      {pesos(p.precio)}
+
+                    <p className="mt-1 text-lg font-bold tabular-nums">
+                      {p.a_convenir ? "A convenir" : pesos(p.precio)}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {p.resumen}
                     </p>
+                    <p className="mt-2 flex-1 text-xs text-muted-foreground">
+                      {p.para_quien}
+                    </p>
+
+                    <div className="mt-3">
+                      {p.a_convenir ? (
+                        /* Enterprise no se contrata online: los cupos y el
+                           precio se arman con cada cliente. */
+                        <a
+                          href={WA_LINK_ENTERPRISE}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted"
+                        >
+                          Hablemos <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : esElMio ? (
+                        <p className="py-2 text-center text-xs text-muted-foreground">
+                          Es el que tenés
+                        </p>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant={p.precio > (miPrecio ?? 0) ? "default" : "outline"}
+                          className="w-full"
+                          disabled={cambiando !== null}
+                          onClick={() => pedirCambio(p.codigo)}
+                        >
+                          {enCurso
+                            ? "Un momento…"
+                            : p.precio > (miPrecio ?? 0)
+                              ? `Pasar a ${p.etiqueta}`
+                              : `Bajar a ${p.etiqueta}`}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

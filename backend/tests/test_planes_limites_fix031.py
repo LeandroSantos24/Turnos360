@@ -115,16 +115,23 @@ def test_el_plan_viejo_basico_sigue_entrando_como_inicial():
     assert planes.plan_de("  BASICO ") is planes.Plan.INICIAL
 
 
-def test_la_prueba_da_todo_desbloqueado():
-    """Una prueba recortada no deja probar lo que uno querría vender.
+def test_la_prueba_da_todo_lo_de_pro_menos_el_segundo_local():
+    """Una prueba recortada no deja probar lo que uno querría vender: que el
+    negocio cargue su equipo entero y use membresías, gift cards y campañas con
+    sus datos de verdad, porque eso es lo que hace que se quede.
 
-    Que el negocio cargue su equipo entero y vea el producto andando con sus
-    datos de verdad; al vencer cae a Inicial y ahí recién aprietan los cupos.
+    El ÚNICO techo es el segundo local, y es a propósito: si multisucursal se
+    probara gratis, el plan más caro perdería su único argumento — el que ya lo
+    usó catorce días no ve por qué pagarlo.
     """
     prueba = planes.GRILLA[planes.Plan.GRATUITO]
-    assert prueba.profesionales is None
-    assert prueba.usuarios is None
-    assert prueba.funciones == planes.GRILLA[planes.Plan.MULTI].funciones
+    pro = planes.GRILLA[planes.Plan.PRO]
+
+    assert prueba.profesionales == pro.profesionales
+    assert prueba.usuarios == pro.usuarios
+    assert prueba.funciones == pro.funciones
+    assert prueba.sucursales == 1
+    assert not planes.incluye("gratuito", planes.Funcion.MULTISUCURSAL)
 
 
 def test_cada_plan_incluye_todo_lo_del_anterior():
@@ -165,7 +172,13 @@ def test_un_plan_desconocido_cae_al_mas_restrictivo():
 def test_la_prueba_no_se_ofrece_como_plan_a_la_venta():
     codigos = [p["codigo"] for p in planes.para_mostrar()]
     assert "gratuito" not in codigos
-    assert codigos == ["inicial", "pro", "multi"]
+    # Enterprise SÍ se ofrece —es una columna más de la grilla— pero sin
+    # precio: `a_convenir` es lo que hace que la pantalla muestre «Hablemos»
+    # en vez de un botón de pago.
+    assert codigos == ["inicial", "pro", "multi", "enterprise"]
+    porcodigo = {p["codigo"]: p for p in planes.para_mostrar()}
+    assert porcodigo["enterprise"]["a_convenir"] is True
+    assert porcodigo["pro"]["a_convenir"] is False
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -343,7 +356,7 @@ def test_mi_suscripcion_muestra_el_cupo_y_la_grilla(client, db, armar_empresa):
     assert d["plan_etiqueta"] == "Inicial"
     assert d["profesionales_tope"] == 2
     assert d["profesionales_usados"] == 2
-    assert len(d["grilla"]) == 3
+    assert len(d["grilla"]) == 4  # inicial, pro, multi y enterprise
 
 
 # ══════════════════════════════════════════════════════════════════════
