@@ -9,6 +9,7 @@ import {
   listarServicios,
   borrarServicio,
   Servicio,
+  catalogoEsDeEjemplo,
 } from "@/lib/servicios-api";
 import { useSucursales } from "@/lib/use-sucursales";
 import { ApiError } from "@/lib/api";
@@ -45,6 +46,56 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { duracionLegible } from "@/lib/duracion";
+
+/**
+ * «Estos servicios son de ejemplo».
+ *
+ * EL PROBLEMA QUE TAPA
+ * ────────────────────
+ * Al darse de alta, el negocio recibe los servicios típicos de su rubro para
+ * que la agenda no arranque vacía —que es lo correcto: una pantalla en blanco
+ * el primer día es peor—. Pero nadie le avisa que son EJEMPLOS. Aparecen
+ * como si fueran suyos, con precios que no son los suyos, y el primer turno se
+ * puede cobrar mal sin que nadie note por qué. Lo dijo Leandro probando el
+ * alta: «ya tenía unos servicios precargados, eso está mal».
+ *
+ * El cartel se va SOLO en cuanto toca cualquiera de los servicios (editar,
+ * renombrar, o crear uno propio), porque el backend lo calcula comparando
+ * contra el preset del rubro y no con una marca guardada que haya que apagar.
+ * No hay que descartarlo a mano: quien ya empezó a armar su catálogo no
+ * necesita que le expliquen de dónde salieron los otros.
+ */
+function AvisoDeEjemplo({ cantidad }: { cantidad: number }) {
+  const [mostrar, setMostrar] = useState(false);
+
+  useEffect(() => {
+    if (cantidad === 0) {
+      setMostrar(false);
+      return;
+    }
+    let vivo = true;
+    catalogoEsDeEjemplo()
+      .then((r) => vivo && setMostrar(r.de_ejemplo))
+      .catch(() => vivo && setMostrar(false));
+    return () => {
+      vivo = false;
+    };
+  }, [cantidad]);
+
+  if (!mostrar) return null;
+
+  return (
+    <div className="mb-5 rounded-2xl border border-amber-500/50 bg-amber-500/5 p-4">
+      <p className="font-medium">Estos son servicios de ejemplo de tu rubro</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Los cargamos para que la agenda no arranque vacía, pero{" "}
+        <b>los precios y las duraciones no son los tuyos</b>. Editá los que uses
+        y borrá los que no — apenas toques uno, este aviso desaparece.
+      </p>
+    </div>
+  );
+}
+
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
@@ -104,6 +155,8 @@ export default function ServiciosPage() {
 
   return (
     <div className="p-8">
+      <AvisoDeEjemplo cantidad={servicios.length} />
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Servicios</h1>

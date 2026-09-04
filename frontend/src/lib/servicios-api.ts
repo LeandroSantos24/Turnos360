@@ -78,3 +78,13 @@ export function editarServicio(
 export function borrarServicio(id: number): Promise<void> {
   return api.delete<void>(`/servicios/${id}`);
 }
+/**
+ * ¿El catálogo sigue siendo el que vino de fábrica con el rubro?
+ *
+ * Se calcula comparando los nombres actuales contra el preset, así que no
+ * puede desincronizarse: en cuanto el dueño edita, renombra o agrega uno,
+ * deja de ser «el de ejemplo» y el cartel desaparece solo.
+ */
+export function catalogoEsDeEjemplo(): Promise<{ de_ejemplo: boolean }> {
+  return api.get<{ de_ejemplo: boolean }>("/servicios/son-de-ejemplo");
+}

@@ -27,6 +27,25 @@ def listar_servicios(
     )
 
 
+@router.get("/son-de-ejemplo")
+def son_de_ejemplo(empresa_id: EmpresaActual, db: DB) -> dict:
+    """¿El catálogo sigue siendo el que vino de fábrica?
+
+    Al darse de alta, el negocio recibe los servicios típicos de su rubro para
+    que la agenda no arranque vacía. Pero nadie le avisa que son ejemplos, así
+    que aparecen como si fueran suyos —con precios que no son los suyos— y el
+    primer turno se puede cobrar mal. Lo notó Leandro probando el alta: «ya
+    tenía unos servicios precargados, eso está mal».
+
+    Esta ruta va ANTES de /{servicio_id} a propósito: si estuviera después,
+    FastAPI matchearía «son-de-ejemplo» como si fuera un id y devolvería un
+    422 en vez de esto.
+    """
+    from app.services import catalogo_inicial
+
+    return {"de_ejemplo": catalogo_inicial.sigue_siendo_el_de_ejemplo(db, empresa_id)}
+
+
 @router.get("/{servicio_id}", response_model=ServicioOut)
 def obtener_servicio(servicio_id: int, empresa_id: EmpresaActual, db: DB) -> ServicioOut:
     servicio = svc.obtener(db, empresa_id, servicio_id)

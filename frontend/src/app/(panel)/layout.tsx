@@ -231,7 +231,23 @@ export default function PanelLayout({
           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
           <Link href={inicioHref} className="group flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1 transition-transform group-hover:scale-105">
+            {/*
+              MÁS AIRE, NO MÁS PÍXELES.
+              El archivo ya es de 1080×1080: la resolución nunca fue el
+              problema. La caja medía 36px y tenía 4px de padding, así que el
+              logo se dibujaba a 28 — y a ese tamaño el aro, las agujas y el
+              tilde se empastan en una mancha. Ahora la caja es de 44px y el
+              padding es mínimo, con un anillo suave que lo despega del navy
+              sin ponerle un borde duro alrededor.
+
+              El detalle fino del dibujo sigue siendo mucho para un ícono chico
+              (un favicon de 16px va a ser una mancha igual): eso se resuelve
+              con una versión simplificada de la marca, no con CSS.
+            */}
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-0.5 transition-transform group-hover:scale-105"
+              style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.12), 0 2px 8px rgba(0,0,0,0.25)" }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/marca/logo-turnos360.webp"
@@ -242,7 +258,7 @@ export default function PanelLayout({
             <div>
               <div
                 className="font-semibold leading-none text-white"
-                style={{ fontFamily: "var(--fuente-marca)", fontSize: "16px" }}
+                style={{ fontFamily: "var(--fuente-marca)", fontSize: "17px" }}
               >
                 Turnos360
               </div>

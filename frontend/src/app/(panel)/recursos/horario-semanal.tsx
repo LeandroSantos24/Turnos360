@@ -61,7 +61,21 @@ for (let h = 0; h < 24; h++) {
 export function HorarioSemanal({ recursoId }: { recursoId: number }) {
   const confirmar = useConfirmar();
   const [horarios, setHorarios] = useState<Horario[]>([]);
-  const [cargando, setCargando] = useState(true);
+  /**
+   * Solo la PRIMERA carga, la que todavía no tiene nada que mostrar.
+   *
+   * Antes esto se prendía también al recargar después de agregar o quitar una
+   * franja, y eso era el bug que más molestaba de la pantalla: el contenido
+   * entero se reemplazaba por «Cargando horarios…», la página se encogía a dos
+   * líneas y el navegador —sin nada que scrollear— te devolvía al principio.
+   * Si estabas cargando el viernes, terminabas arriba de todo y tenías que
+   * bajar de nuevo por cada franja. Lo contó Leandro así: «me tira al
+   * principio de la página y capaz me faltaba viernes».
+   *
+   * Recargar la lista NO es lo mismo que no tener lista: ya hay algo en
+   * pantalla y tiene que quedarse ahí mientras llegan los datos nuevos.
+   */
+  const [primeraCarga, setPrimeraCarga] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Form "agregar franja" por día: { [dia]: { desde, hasta } }
@@ -70,21 +84,23 @@ export function HorarioSemanal({ recursoId }: { recursoId: number }) {
   >({});
 
   const cargar = useCallback(async () => {
-    setCargando(true);
     setError(null);
     try {
       setHorarios(await listarHorarios(recursoId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     } finally {
-      setCargando(false);
+      setPrimeraCarga(false);
     }
   }, [recursoId]);
 
   useEffect(() => {
     // Al cambiar de recurso se limpian los borradores del formulario: si no,
-    // las horas tipeadas para un barbero aparecían en el siguiente.
+    // las horas tipeadas para un barbero aparecían en el siguiente. Y vuelve a
+    // ser «primera carga»: los horarios en pantalla son de OTRO recurso, así
+    // que mostrarlos mientras llegan los del nuevo sería mentir.
     setNuevos({});
+    setPrimeraCarga(true);
     cargar();
   }, [cargar]);
 
@@ -139,7 +155,7 @@ export function HorarioSemanal({ recursoId }: { recursoId: number }) {
     }
   }
 
-  if (cargando) {
+  if (primeraCarga) {
     return <p className="text-sm text-muted-foreground">Cargando horarios…</p>;
   }
 

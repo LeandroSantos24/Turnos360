@@ -86,6 +86,12 @@ const TIPO_LABEL: Record<string, string> = {
 
 export default function RecursosPage() {
   const [recursos, setRecursos] = useState<Recurso[]>([]);
+  /**
+   * Solo la primera carga. Ver la nota larga en horario-semanal.tsx: recargar
+   * la lista después de crear o editar NO puede desmontar lo que ya está en
+   * pantalla, porque abajo puede haber un horario a medio cargar y la página
+   * se encoge hasta mandar el scroll al principio.
+   */
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [buscar, setBuscar] = useState("");
@@ -106,7 +112,6 @@ export default function RecursosPage() {
   const [aBorrar, setABorrar] = useState<Recurso | null>(null);
 
   const cargar = useCallback(async () => {
-    setCargando(true);
     setError(null);
     try {
       const data = await listarRecursos();

@@ -713,7 +713,7 @@ export default function Page() {
       <header style={{ borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
       <nav className="nav-barra" style={{ gap: 16, padding: "12px clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/img/logo.png" alt="Turnos360" style={{ width: 38, height: 38, objectFit: "contain" }} />
+          <img src="/marca/logo-turnos360.webp" alt="Turnos360" style={{ width: 44, height: 44, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div className="nav-links">
@@ -1265,7 +1265,7 @@ export default function Page() {
       {/* FOOTER */}
       <footer style={{ borderTop: "1px solid #eef1f5", padding: "28px clamp(16px,5vw,64px)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/img/logo.png" alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
+          <img src="/marca/logo-turnos360.webp" alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 16 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>

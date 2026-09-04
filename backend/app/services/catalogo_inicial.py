@@ -105,3 +105,52 @@ def sembrar(db: Session, empresa_id: int) -> list[Servicio]:
             extra={"empresa_id": empresa_id, "servicios": len(creados)},
         )
     return creados
+
+
+def nombres_del_preset(db: Session, empresa_id: int) -> set[str]:
+    """Los nombres de servicio que ESTA empresa recibió de fábrica."""
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        return set()
+    rubro = db.get(Rubro, empresa.rubro_id) if empresa.rubro_id else None
+    preset = dict(rubro.preset) if rubro and rubro.preset else {}
+    if empresa.config_pack:
+        preset.update(empresa.config_pack)
+    return {
+        str(p.get("nombre") or "").strip().lower()
+        for p in (preset.get("servicios") or [])
+        if str(p.get("nombre") or "").strip()
+    }
+
+
+def sigue_siendo_el_de_ejemplo(db: Session, empresa_id: int) -> bool:
+    """¿El catálogo es todavía el que vino de fábrica, sin tocar?
+
+    POR QUÉ SE COMPARA CONTRA EL PRESET Y NO SE GUARDA UNA MARCA
+    ────────────────────────────────────────────────────────────
+    Una columna «es_de_ejemplo» habría que mantenerla: apagarla al editar el
+    servicio, al cambiarle el precio, al renombrarlo. El día que un camino se
+    olvide de apagarla, el cartel le dice «esto es de ejemplo» a alguien que
+    lleva medio año trabajando con ese servicio. Comparar contra el preset no
+    se puede desincronizar: si el nombre está en el preset es de fábrica, y si
+    no está es porque alguien lo tocó.
+
+    Alcanza con que UNO no sea del preset —creado a mano, o renombrado— para
+    que el catálogo deje de ser el de ejemplo. Quien ya empezó a armar el suyo
+    no necesita que le expliquen de dónde salieron los otros.
+    """
+    del_preset = nombres_del_preset(db, empresa_id)
+    if not del_preset:
+        return False
+
+    actuales = [
+        (n or "").strip().lower()
+        for n in db.scalars(
+            select(Servicio.nombre).where(
+                Servicio.empresa_id == empresa_id, Servicio.activo.is_(True)
+            )
+        ).all()
+    ]
+    if not actuales:
+        return False
+    return all(n in del_preset for n in actuales)
