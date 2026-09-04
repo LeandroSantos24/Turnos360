@@ -104,6 +104,10 @@ export default function SuscripcionPage() {
   // deshabilitar todos los botones y mostrar "Un momento…" solo en el que se
   // tocó: con un booleano, los cuatro parecerían estar procesando.
   const [cambiando, setCambiando] = useState<string | null>(null);
+  // El plan que se está comprando por transferencia. Es lo que permite que
+  // «Cómo pagar» diga cuánto transferir y que el aviso salga por ese monto,
+  // en vez de por el del plan que la empresa tiene hoy.
+  const [planAComprar, setPlanAComprar] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -141,13 +145,39 @@ export default function SuscripcionPage() {
         return;
       }
 
+      if (r.accion === "pagar_transferencia") {
+        /*
+         * ACÁ SE PERDÍA LA COMPRA.
+         *
+         * Antes esto hacía scroll a #como-pagar y nada más. Pero esa sección
+         * SOLO se renderiza si la empresa ya está por vencer: durante la
+         * prueba no existe en el DOM, así que el scroll no iba a ningún lado
+         * y del intento de compra quedaba únicamente un cartelito verde en la
+         * esquina. Alguien que quería pagar terminaba sin saber qué hacer, que
+         * es la peor forma de perder a un cliente: la que no deja rastro.
+         *
+         * Ahora `pagando` abre la sección y `planAComprar` recuerda QUÉ plan
+         * se está comprando, para poder mostrar su precio y avisar el pago por
+         * el monto correcto y no por el del plan viejo.
+         */
+        setPlanAComprar(plan);
+        setPagando(true);
+        if (r.detalle) toast.success(r.detalle);
+        // El scroll va después del repintado, si no la sección todavía no
+        // existe cuando se lo pedimos.
+        setTimeout(
+          () =>
+            document
+              .getElementById("como-pagar")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          80,
+        );
+        await cargar();
+        return;
+      }
+
       if (r.detalle) {
         toast.success(r.detalle);
-      }
-      if (r.accion === "pagar_transferencia") {
-        // Sin Mercado Pago no hay checkout: se lo lleva a los datos para
-        // transferir, que están más abajo en esta misma pantalla.
-        document.getElementById("como-pagar")?.scrollIntoView({ behavior: "smooth" });
       }
       await cargar();
     } catch (e) {
@@ -176,7 +206,11 @@ export default function SuscripcionPage() {
     setAvisando(true);
     try {
       const r = await avisarPagoSuscripcion({
-        monto: datos?.precio_mensual ?? datos?.precio_lista ?? null,
+        // El monto del plan que está COMPRANDO, no el de su plan actual: si
+        // pasa de la prueba a Pro, avisó por Pro. Sin esto el aviso llegaba
+        // al panel con el número equivocado y la comparación «avisado vs
+        // esperado» marcaba diferencia en todas las altas.
+        monto: montoAPagar,
         referencia: referencia.trim() || null,
       });
       toast.success(r.detalle);
@@ -202,6 +236,12 @@ export default function SuscripcionPage() {
 
   const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
   const precioAPagar = datos.precio_mensual ?? datos.precio_lista;
+  // Lo que hay que transferir AHORA: el precio del plan que se está
+  // comprando si vino de la grilla, y si no el de la cuota de siempre.
+  const planComprando = planAComprar
+    ? datos.grilla.find((p) => p.codigo === planAComprar)
+    : undefined;
+  const montoAPagar = planComprando?.precio ?? precioAPagar;
   // El precio del plan que tiene hoy. Es lo que decide si cada botón dice
   // "Pasar a" o "Bajar a" — se compara por PRECIO y no por el orden de la
   // grilla, igual que en el backend, para que digan lo mismo siempre.
@@ -467,8 +507,27 @@ export default function SuscripcionPage() {
       {hayCobro && (pagando || avisoPendiente || datos.estado !== "prueba") && (
         <section id="como-pagar" className="rounded-2xl border bg-card p-5 md:p-6">
           <h2 className="text-base font-bold" style={SYNE}>
-            Cómo pagar
+            {planComprando ? `Pasar a ${planComprando.etiqueta}` : "Cómo pagar"}
           </h2>
+
+          {/* CUÁNTO transferir, arriba de todo y en grande.
+              El dato que la persona necesita para ir al homebanking es el
+              monto; tenerlo que deducir de la grilla de más arriba es
+              exactamente donde se transfiere de menos. */}
+          {planComprando && (
+            <div className="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-3.5">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Transferí exactamente
+              </p>
+              <p className="text-2xl font-bold tabular-nums" style={SYNE}>
+                {pesos(planComprando.precio)}
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {planComprando.resumen}. Tu plan cambia cuando confirmamos la
+                transferencia contra el banco.
+              </p>
+            </div>
+          )}
 
           {avisoPendiente && (
             <div className="mt-4 flex gap-3 rounded-xl border border-sky-500/40 bg-sky-500/10 p-3.5">
@@ -548,7 +607,10 @@ export default function SuscripcionPage() {
               <div className="mt-3 rounded-xl border bg-muted/40 p-3.5">
                 <p className="text-sm font-medium">Cómo sigue</p>
                 <ol className="mt-1.5 space-y-1 pl-4 text-sm text-muted-foreground">
-                  <li className="list-decimal">Transferís a los datos de arriba.</li>
+                  <li className="list-decimal">
+                    Transferís {montoAPagar ? <b>{pesos(montoAPagar)}</b> : "el importe"}{" "}
+                    a los datos de arriba.
+                  </li>
                   <li className="list-decimal">
                     Tocás <b>Ya transferí</b> acá abajo. Si querés, además nos
                     mandás el comprobante por WhatsApp.

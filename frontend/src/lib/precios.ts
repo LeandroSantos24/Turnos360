@@ -16,7 +16,7 @@
  */
 
 /** Precio normal, de lista. El que se cobra cuando no hay promoción. */
-export const PRECIO_NORMAL = 11900;
+export const PRECIO_NORMAL = 13900;
 
 /**
  * Promoción, apagada por defecto.
@@ -31,7 +31,7 @@ export const PRECIO_NORMAL = 11900;
  * con qué precio nacen las empresas nuevas.
  */
 export const PROMO_ACTIVA = false;
-export const PRECIO_PROMO = 9900;
+export const PRECIO_PROMO = 11900;
 export const PROMO_ETIQUETA = "Precio de lanzamiento";
 
 /** El precio que se cobra hoy. */
@@ -39,7 +39,7 @@ export const PRECIO_MENSUAL = PROMO_ACTIVA ? PRECIO_PROMO : PRECIO_NORMAL;
 
 const enPesos = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
-/** "$14.990" — el precio vigente, formateado. */
+/** El precio vigente, formateado. */
 export const PRECIO_MENSUAL_TEXTO = enPesos(PRECIO_MENSUAL);
 
 /** El normal formateado. Solo se muestra (tachado) si hay promo activa. */
@@ -69,28 +69,31 @@ export const PLANES = [
     codigo: "gratuito",
     etiqueta: "Prueba",
     precio: 0,
-    resumen: "Todo desbloqueado mientras dure",
+    resumen: "Todo desbloqueado, con los cupos de Inicial",
     paraQuien: "Para probarlo con tus turnos de verdad, sin tarjeta.",
   },
   {
+    // Los cupos se cuentan como los cuenta el dueño: él y los que atienden
+    // con él. «3 profesionales · 3 cuentas» son el mismo equipo dicho dos
+    // veces, y obligaba a cruzar dos números para entender un solo límite.
     codigo: "inicial",
     etiqueta: "Inicial",
-    precio: 11900,
-    resumen: "2 profesionales · 3 cuentas · 1 local",
+    precio: 13900,
+    resumen: "1 dueño + 2 que atienden · 1 local",
     paraQuien: "El que atiende solo o con una persona más.",
   },
   {
     codigo: "pro",
     etiqueta: "Pro",
     precio: 19900,
-    resumen: "8 profesionales · 10 cuentas · 1 local",
+    resumen: "1 dueño + 9 que atienden · 1 local",
     paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
   },
   {
     codigo: "multi",
     etiqueta: "Multi",
-    precio: 32900,
-    resumen: "Profesionales ilimitados · hasta 5 locales",
+    precio: 33900,
+    resumen: "Equipo ilimitado · hasta 3 locales",
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
   },
   {

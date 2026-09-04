@@ -186,7 +186,7 @@ class Settings(BaseSettings):
     # la landing se compila en el bundle y no puede leer esta variable) Y
     # backend/app/core/planes.py, que es la grilla de verdad — esta variable es
     # el precio del PLAN DE ENTRADA, y los dos tienen que decir lo mismo.
-    precio_lista_mensual: float = 11900
+    precio_lista_mensual: float = 13900
 
     # --- Precio promocional (opcional) --------------------------------------
     # Estrategia de lanzamiento: si PROMO_ACTIVA=true, la landing muestra el

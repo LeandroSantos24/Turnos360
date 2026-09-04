@@ -6,12 +6,16 @@ empresa del plan de tres podía cargar cuarenta. Y pagar la cuota no cambiaba el
 plan, así que se podía pagar por Mercado Pago un año entero y seguir figurando
 en "gratuito", con los límites de la prueba.
 
-La grilla acordada (revisada antes del deploy, para entrar por debajo de la
-competencia directa: Ágora cobra $11.900 con plan único):
+La grilla acordada (revisada probando el alta como un cliente real):
 
-    Inicial  $11.900 →  2 profesionales ·  3 usuarios · 1 local
-    Pro      $19.900 →  8 profesionales · 10 usuarios · 1 local
-    Multi    $32.900 → ilimitados       · ilimitados  · 5 locales
+    Prueba   gratis  →  3 profesionales ·  3 usuarios · 1 local
+    Inicial  $13.900 →  3 profesionales ·  3 usuarios · 1 local
+    Pro      $19.900 → 10 profesionales · 10 usuarios · 1 local
+    Multi    $33.900 → ilimitados       · ilimitados  · 3 locales
+
+La prueba comparte los CUPOS con Inicial y no con Pro. El motivo está en el
+test de más abajo, y es lo único de esta grilla que no es una decisión de
+precio sino una de diseño.
 
 Los tres ejes van separados a propósito. PROFESIONAL es quien ocupa una columna
 de la agenda —lo que de verdad escala con el tamaño del negocio y lo que se
@@ -79,26 +83,29 @@ def _crear_prof(client, ctx, nombre="Nuevo"):
 def test_la_grilla_es_la_acordada():
     """La grilla comercial, fijada acá para que no se mueva sin querer.
 
-    Inicial entra a $11.900 —lo mismo que cobra Ágora con plan único— y da la
-    agenda completa: página de reservas, señas y recordatorios. El salto a Pro
-    se paga por el equipo más grande y por lo que hace ganar plata; el de Multi,
-    por varios locales de verdad.
+    Inicial da la agenda completa: página de reservas, señas y recordatorios.
+    El salto a Pro se paga por el equipo más grande y por lo que hace ganar
+    plata; el de Multi, por varios locales de verdad.
+
+    Multi da TRES locales y no cinco: con cinco por $33.900, Enterprise se
+    queda sin razón de ser salvo para cadenas muy grandes, y el salto de
+    precio entre uno y otro deja de tener sentido comercial.
     """
     g = planes.GRILLA
-    assert g[planes.Plan.INICIAL].precio == 11900
-    assert g[planes.Plan.INICIAL].profesionales == 2
+    assert g[planes.Plan.INICIAL].precio == 13900
+    assert g[planes.Plan.INICIAL].profesionales == 3
     assert g[planes.Plan.INICIAL].usuarios == 3
     assert g[planes.Plan.INICIAL].sucursales == 1
 
     assert g[planes.Plan.PRO].precio == 19900
-    assert g[planes.Plan.PRO].profesionales == 8
+    assert g[planes.Plan.PRO].profesionales == 10
     assert g[planes.Plan.PRO].usuarios == 10
     assert g[planes.Plan.PRO].sucursales == 1
 
-    assert g[planes.Plan.MULTI].precio == 32900
+    assert g[planes.Plan.MULTI].precio == 33900
     assert g[planes.Plan.MULTI].profesionales is None, "Multi = ilimitados"
     assert g[planes.Plan.MULTI].usuarios is None
-    assert g[planes.Plan.MULTI].sucursales == 5
+    assert g[planes.Plan.MULTI].sucursales == 3
 
     # Cada escalón cuesta más y da más: una grilla donde un plan más caro da
     # menos de algo es una grilla mal armada, y se descubre vendiendo.
@@ -115,23 +122,57 @@ def test_el_plan_viejo_basico_sigue_entrando_como_inicial():
     assert planes.plan_de("  BASICO ") is planes.Plan.INICIAL
 
 
-def test_la_prueba_da_todo_lo_de_pro_menos_el_segundo_local():
-    """Una prueba recortada no deja probar lo que uno querría vender: que el
-    negocio cargue su equipo entero y use membresías, gift cards y campañas con
-    sus datos de verdad, porque eso es lo que hace que se quede.
+def test_la_prueba_da_todas_las_funciones_con_los_cupos_de_inicial():
+    """LA regla que evita el cliente enojado el día que paga.
 
-    El ÚNICO techo es el segundo local, y es a propósito: si multisucursal se
-    probara gratis, el plan más caro perdería su único argumento — el que ya lo
-    usó catorce días no ve por qué pagarlo.
+    Antes la prueba daba los cupos de Pro. Quien cargaba ocho profesionales
+    durante los catorce días y después pagaba Inicial —que da tres— quedaba
+    con cinco personas sobrantes, y las dos salidas posibles eran malas:
+    borrárselas (perder datos que él cargó) o dejarlas pasar (y entonces el
+    tope no existe, y nadie sube de plan nunca). Lo planteó Leandro probando
+    el alta: «si crea 8 usuarios y después solo paga el plan de 2, ¿qué
+    hacemos con los que sobran?».
+
+    La prueba no puede dejar crear más de lo que el plan de entrada soporta.
+    Así el día que elige plan no pierde absolutamente nada.
+
+    Las FUNCIONES sí van todas: membresías, gift cards, cupones y campañas son
+    lo que hace que se quede, y si para verlas hay que pagar primero, nunca
+    las ve. Lo que se acota son los CUPOS, que es lo único que genera el
+    problema de arriba.
     """
     prueba = planes.GRILLA[planes.Plan.GRATUITO]
+    inicial = planes.GRILLA[planes.Plan.INICIAL]
     pro = planes.GRILLA[planes.Plan.PRO]
 
-    assert prueba.profesionales == pro.profesionales
-    assert prueba.usuarios == pro.usuarios
+    # Cupos: los de Inicial, para que nada sobre al pagar.
+    assert prueba.profesionales == inicial.profesionales
+    assert prueba.usuarios == inicial.usuarios
+    assert prueba.sucursales == inicial.sucursales
+
+    # Funciones: las de Pro, para que vea lo que compra.
     assert prueba.funciones == pro.funciones
+
+    # Multisucursal no se regala: es el único argumento del plan más caro.
     assert prueba.sucursales == 1
     assert not planes.incluye("gratuito", planes.Funcion.MULTISUCURSAL)
+
+
+def test_pasar_de_la_prueba_a_inicial_no_deja_nada_afuera():
+    """La propiedad de fondo, escrita como invariante y no como números.
+
+    Mientras esto valga, el paso de la prueba al plan de entrada no puede
+    obligar a borrarle nada a nadie. Si alguien sube los cupos de la prueba
+    sin subir los de Inicial, este test es el que avisa.
+    """
+    prueba = planes.GRILLA[planes.Plan.GRATUITO]
+    entrada = planes.GRILLA[planes.PLAN_DE_ENTRADA]
+
+    assert prueba.profesionales is not None
+    assert entrada.profesionales is not None
+    assert prueba.profesionales <= entrada.profesionales
+    assert prueba.usuarios <= entrada.usuarios
+    assert prueba.sucursales <= entrada.sucursales
 
 
 def test_cada_plan_incluye_todo_lo_del_anterior():
@@ -185,28 +226,35 @@ def test_la_prueba_no_se_ofrece_como_plan_a_la_venta():
 #  El tope BLOQUEA
 # ══════════════════════════════════════════════════════════════════════
 
-def test_el_plan_inicial_frena_en_el_tercer_profesional(client, db, armar_empresa):
+def test_el_plan_inicial_frena_al_pasarse_del_cupo(client, db, armar_empresa):
+    """El tope se lee de la GRILLA y no está escrito acá a mano: así el test
+    sigue protegiendo la regla cuando el número cambie, que ya pasó una vez."""
+    tope = planes.GRILLA[planes.Plan.INICIAL].profesionales
     ctx = armar_empresa()
     _plan(db, ctx, "inicial")
-    # armar_empresa ya deja los 2 profesionales que Inicial permite.
-    assert _profesionales(db, ctx.empresa.id) == 2
 
-    r = _crear_prof(client, ctx, "El tercero")
-    assert r.status_code == 409, "El plan de 2 tiene que frenar en el tercero."
+    while _profesionales(db, ctx.empresa.id) < tope:
+        assert _crear_prof(client, ctx, f"P{uuid.uuid4().hex[:5]}").status_code == 201
+        db.expire_all()
+    assert _profesionales(db, ctx.empresa.id) == tope
+
+    r = _crear_prof(client, ctx, "Uno de más")
+    assert r.status_code == 409, f"El plan de {tope} tiene que frenar en el siguiente."
     assert "Inicial" in r.json()["detail"]
     assert "Mi suscripción" in r.json()["detail"], (
         "El mensaje tiene que decir a dónde ir, no solo que no se puede."
     )
 
 
-def test_el_plan_pro_deja_llegar_a_ocho(client, db, armar_empresa):
+def test_el_plan_pro_deja_llegar_a_su_cupo(client, db, armar_empresa):
+    tope = planes.GRILLA[planes.Plan.PRO].profesionales
     ctx = armar_empresa()
     _plan(db, ctx, "pro")
-    while _profesionales(db, ctx.empresa.id) < 8:
+    while _profesionales(db, ctx.empresa.id) < tope:
         r = _crear_prof(client, ctx, f"P{uuid.uuid4().hex[:5]}")
         assert r.status_code == 201, r.text
         db.expire_all()
-    assert _crear_prof(client, ctx, "El noveno").status_code == 409
+    assert _crear_prof(client, ctx, "Uno de más").status_code == 409
 
 
 def test_el_plan_multi_no_tiene_tope_de_profesionales(client, db, armar_empresa):
@@ -216,10 +264,27 @@ def test_el_plan_multi_no_tiene_tope_de_profesionales(client, db, armar_empresa)
         assert _crear_prof(client, ctx, f"Multi{i}").status_code == 201
 
 
+def _llenar_cupo(client, db, ctx, plan="inicial"):
+    """Deja la empresa JUSTO en el tope de profesionales de su plan.
+
+    Antes varios tests se apoyaban en que `armar_empresa` creaba exactamente
+    los que Inicial permitía. Eso ató los tests a un número de la grilla por
+    la puerta de atrás: el día que Inicial pasó de 2 a 3 profesionales,
+    fallaron cuatro tests que no hablaban de precios. Ahora se llena hasta el
+    tope, sea cual sea.
+    """
+    tope = planes.GRILLA[planes.plan_de(plan)].profesionales
+    while _profesionales(db, ctx.empresa.id) < tope:
+        assert _crear_prof(client, ctx, f"P{uuid.uuid4().hex[:5]}").status_code == 201
+        db.expire_all()
+    return tope
+
+
 def test_un_box_no_ocupa_asiento_del_plan(client, db, armar_empresa):
     """El cupo es de PROFESIONALES. Un box o un equipo no paga asiento."""
     ctx = armar_empresa()
-    _plan(db, ctx, "inicial")  # ya está en su tope de 2 profesionales
+    _plan(db, ctx, "inicial")
+    _llenar_cupo(client, db, ctx)
 
     r = client.post(
         "/recursos", headers=token_de(ctx.dueno), json={"nombre": "Box 1", "tipo": "box"}
@@ -230,7 +295,8 @@ def test_un_box_no_ocupa_asiento_del_plan(client, db, armar_empresa):
 def test_desactivar_a_alguien_libera_su_lugar(client, db, armar_empresa):
     """El que se fue del negocio no tiene que seguir ocupando un asiento."""
     ctx = armar_empresa()
-    _plan(db, ctx, "inicial")  # ya está en su tope de 2 profesionales
+    _plan(db, ctx, "inicial")
+    _llenar_cupo(client, db, ctx)
     assert _crear_prof(client, ctx, "Sobra").status_code == 409
 
     client.patch(
@@ -243,12 +309,13 @@ def test_desactivar_a_alguien_libera_su_lugar(client, db, armar_empresa):
 def test_no_se_puede_esquivar_el_cupo_reactivando(client, db, armar_empresa):
     """Desactivar a uno, crear al cuarto, y volver a activar al primero."""
     ctx = armar_empresa()
-    _plan(db, ctx, "inicial")  # ya está en su tope de 2 profesionales
+    _plan(db, ctx, "inicial")
+    _llenar_cupo(client, db, ctx)
 
     client.patch(
         f"/recursos/{ctx.lucas.id}", headers=token_de(ctx.dueno), json={"activo": False}
     )
-    _crear_prof(client, ctx, "El tercero")
+    _crear_prof(client, ctx, "El que entra en el lugar liberado")
     db.expire_all()
 
     r = client.patch(
@@ -354,8 +421,8 @@ def test_mi_suscripcion_muestra_el_cupo_y_la_grilla(client, db, armar_empresa):
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["plan_etiqueta"] == "Inicial"
-    assert d["profesionales_tope"] == 2
-    assert d["profesionales_usados"] == 2
+    assert d["profesionales_tope"] == planes.GRILLA[planes.Plan.INICIAL].profesionales
+    assert d["profesionales_usados"] == _profesionales(db, ctx.empresa.id)
     assert len(d["grilla"]) == 4  # inicial, pro, multi y enterprise
 
 

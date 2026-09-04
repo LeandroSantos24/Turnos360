@@ -26,17 +26,34 @@ sale caro:
     caja—.
   · SUCURSAL es un local con su propia caja, su equipo y su agenda.
 
-EL PRECIO ENTRA POR DEBAJO DE LA COMPETENCIA
-────────────────────────────────────────────
-Ágora —el competidor directo en Argentina— cobra $11.900 con plan único.
-Inicial sale lo mismo y da la agenda completa con página de reservas y señas;
-el salto a Pro se paga por el equipo más grande y por lo que hace ganar plata
-(membresías, gift cards, cupones, campañas), y el salto a Multi por lo que
-ningún competidor del segmento tiene terminado: varios locales de verdad.
+EL PRECIO Y CONTRA QUÉ SE COMPARA
+─────────────────────────────────
+Ágora —el competidor directo en Argentina— venía con plan único alrededor de
+los $11.900. Inicial entra un escalón arriba y da la agenda completa con
+página de reservas y señas; el salto a Pro se paga por el equipo más grande y
+por lo que hace ganar plata (membresías, gift cards, cupones, campañas), y el
+salto a Multi por lo que ningún competidor del segmento tiene terminado:
+varios locales de verdad.
+
+Los precios de la competencia se mueven, así que este párrafo envejece: antes
+de usarlo como argumento de venta, verificalo. Lo que NO envejece es la forma
+de la grilla —tres ejes separados, cada salto pagando algo concreto—, que es
+lo que este archivo protege.
+
+UNA SOLA FUENTE, DE VERDAD
+──────────────────────────
+Estos números estuvieron escritos a mano en CUATRO lugares: acá, en
+config.py, en frontend/src/lib/precios.ts y en una tercera copia adentro de
+la landing. Los defaults de docker-compose decían $14.990 mientras la grilla
+decía $11.900. Con el precio repartido, cambiarlo significa acordarse de
+todos los lugares, y el que se olvida queda contradiciendo a la landing
+delante del cliente. El frontend tiene que seguir teniendo su copia (estos
+valores se compilan dentro del bundle), pero hay un test que verifica que
+config.py y la grilla coinciden: si se separan, la suite avisa.
 
 EL PLAN DE ENTRADA ES EL CRITERIO DE ACEPTACIÓN
 ───────────────────────────────────────────────
-Todo lo que se construya tiene que dejar al negocio de un solo local y dos
+Todo lo que se construya tiene que dejar al negocio de un solo local y tres
 profesionales viendo la aplicación exactamente igual de simple. Los límites de
 arriba no se le muestran hasta que los toca.
 """
@@ -136,50 +153,69 @@ GRILLA: dict[Plan, Limites] = {
     Plan.GRATUITO: Limites(
         etiqueta="Prueba",
         precio=0,
-        # LOS CUPOS DE PRO, PERO UN SOLO LOCAL.
+        # TODAS LAS FUNCIONES, PERO LOS CUPOS DEL PLAN MÁS BARATO.
         #
-        # Que pruebe todo lo que va a usar de verdad —su equipo entero,
-        # membresías, gift cards, cupones, campañas— porque justamente eso es
-        # lo que hace que se quede. Un cupo apretado durante la prueba es una
-        # forma cara de que se vaya sin haber visto la mitad del producto.
+        # Antes la prueba daba los cupos de Pro (8 profesionales, 10 cuentas)
+        # y eso creaba un problema sin salida buena: quien cargaba 8
+        # profesionales durante la prueba y después pagaba Inicial —que da
+        # 3— quedaba con 5 personas sobrantes. Las dos respuestas posibles
+        # eran malas: borrárselas (perder datos que el cliente cargó) o
+        # dejarlas pasar (y entonces el tope no existe, y nadie sube de plan
+        # nunca). Lo dijo Leandro probando el alta: «si crea 8 usuarios y
+        # después solo paga el plan de 2, ¿qué hacemos con los que sobran?».
         #
-        # El único techo es el segundo local, que es exactamente lo que
-        # justifica pagar Multi. Multisucursal no se regala en la prueba: si
-        # se probara gratis, el plan más caro perdería su único argumento.
-        profesionales=8,
-        usuarios=10,
+        # La salida es que la prueba nunca deje crear más de lo que el plan
+        # de entrada soporta. Así no se acumula nada que después haya que
+        # quitar, y el día que paga no pierde absolutamente nada.
+        #
+        # Las FUNCIONES sí siguen todas desbloqueadas: membresías, gift
+        # cards, cupones y campañas son lo que hace que se quede, y si para
+        # verlas hay que pagar primero, nunca las ve. Lo que se acota son los
+        # CUPOS, que es lo único que genera el problema de arriba.
+        #
+        # El otro techo es el segundo local, que es lo que justifica pagar
+        # Multi: si multisucursal se probara gratis, el plan más caro
+        # perdería su único argumento.
+        profesionales=3,
+        usuarios=3,
         sucursales=1,
-        resumen="Todo lo de Pro por 14 días, en un local",
+        resumen="Todo desbloqueado por 14 días, con los cupos de Inicial",
         para_quien="Para probarlo con tus turnos de verdad, sin tarjeta.",
         funciones=DE_PRO,
     ),
     Plan.INICIAL: Limites(
         etiqueta="Inicial",
-        precio=11900,
-        profesionales=2,
+        precio=13900,
+        profesionales=3,
         usuarios=3,
         sucursales=1,
-        resumen="2 profesionales · 1 local",
+        # Los cupos se cuentan como los cuenta el dueño: él y dos personas
+        # más. «3 profesionales» y «3 cuentas» son el mismo equipo visto de
+        # dos maneras, no dos límites que haya que cruzar mentalmente.
+        resumen="1 dueño + 2 que atienden · 1 local",
         para_quien="El que atiende solo o con una persona más.",
         funciones=DE_INICIAL,
     ),
     Plan.PRO: Limites(
         etiqueta="Pro",
         precio=19900,
-        profesionales=8,
+        profesionales=10,
         usuarios=10,
         sucursales=1,
-        resumen="8 profesionales · 1 local",
+        resumen="1 dueño + 9 que atienden · 1 local",
         para_quien="El local con equipo, que ya quiere vender más a los que tiene.",
         funciones=DE_PRO,
     ),
     Plan.MULTI: Limites(
         etiqueta="Multi",
-        precio=32900,
+        precio=33900,
         profesionales=None,
         usuarios=None,
-        sucursales=5,
-        resumen="Profesionales ilimitados · hasta 5 locales",
+        # Tres y no cinco: con cinco locales por $33.900, Enterprise se queda
+        # sin razón de ser salvo para cadenas muy grandes, y el salto de
+        # precio entre uno y otro deja de tener sentido comercial.
+        sucursales=3,
+        resumen="Equipo ilimitado · hasta 3 locales",
         para_quien="El que abrió el segundo local y necesita compararlos.",
         funciones=DE_MULTI,
     ),

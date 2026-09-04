@@ -46,10 +46,16 @@ def test_la_prueba_no_incluye_multisucursal():
 
 def test_la_prueba_si_deja_probar_todo_lo_demas():
     """Lo que hace que se quede —membresías, gift cards, cupones— tiene que
-    poder probarlo. Si para verlo hay que pagar primero, nunca lo ve."""
+    poder probarlo. Si para verlo hay que pagar primero, nunca lo ve.
+
+    Son las FUNCIONES las que van completas. Los CUPOS son los de Inicial, y
+    eso es a propósito: la prueba no puede dejar crear más gente de la que el
+    plan de entrada soporta, porque después habría que quitársela. La regla
+    vive en test_planes_limites_fix031.py.
+    """
     prueba = planes.GRILLA[planes.Plan.GRATUITO]
-    assert prueba.profesionales == planes.GRILLA[planes.Plan.PRO].profesionales
     assert prueba.funciones == planes.GRILLA[planes.Plan.PRO].funciones
+    assert prueba.profesionales == planes.GRILLA[planes.Plan.INICIAL].profesionales
 
 
 def test_enterprise_no_se_vende_solo():
@@ -104,9 +110,14 @@ def test_cada_plan_cobra_lo_suyo(db, armar_empresa):
     ctx.empresa.precio_mensual = None
     db.flush()
 
-    assert mp_sus.precio_de(ctx.empresa, "inicial") == 11900
-    assert mp_sus.precio_de(ctx.empresa, "pro") == 19900
-    assert mp_sus.precio_de(ctx.empresa, "multi") == 32900
+    # Contra la GRILLA y no contra números escritos acá: lo que este test
+    # protege es que cada plan cobre LO SUYO, no cuánto sale hoy cada uno.
+    for codigo, plan in (
+        ("inicial", planes.Plan.INICIAL),
+        ("pro", planes.Plan.PRO),
+        ("multi", planes.Plan.MULTI),
+    ):
+        assert mp_sus.precio_de(ctx.empresa, codigo) == planes.GRILLA[plan].precio
 
 
 def test_el_precio_pactado_le_gana_a_la_grilla(db, armar_empresa):

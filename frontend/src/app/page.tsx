@@ -90,7 +90,7 @@ const locales = [
 ];
 
 /**
- * Los tres planes, espejo de backend/app/core/planes.py.
+ * Los cuatro planes, espejo de backend/app/core/planes.py.
  *
  * `incluye` es lo que ESE plan suma sobre el anterior, no la lista completa:
  * repetir las nueve líneas en las tres columnas hace que las tres se lean
@@ -111,9 +111,13 @@ const planes = [
   {
     codigo: "inicial",
     nombre: "Inicial",
-    precio: 11900,
+    precio: 13900,
     paraQuien: "El que atiende solo o con una persona más.",
-    cupos: ["2 profesionales", "3 cuentas con clave", "1 local"],
+    // Los cupos, dichos como los cuenta el dueño. «3 cuentas con clave» era
+    // el mismo equipo contado por segunda vez y obligaba a cruzar dos
+    // números para entender un solo límite: quien mira la grilla quiere
+    // saber cuánta gente entra, no cuántos asientos de software compra.
+    cupos: ["1 dueño + 2 que atienden", "1 local"],
     tituloLista: "Todo lo que hace falta para atender:",
     incluye: BASE_INCLUIDA,
     destacado: false,
@@ -123,7 +127,7 @@ const planes = [
     nombre: "Pro",
     precio: 19900,
     paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
-    cupos: ["8 profesionales", "10 cuentas con clave", "1 local"],
+    cupos: ["1 dueño + 9 que atienden", "1 local"],
     tituloLista: "Todo lo de Inicial, más:",
     incluye: [
       "Membresías y abonos mensuales",
@@ -137,9 +141,9 @@ const planes = [
   {
     codigo: "multi",
     nombre: "Multi",
-    precio: 32900,
+    precio: 33900,
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
-    cupos: ["Profesionales ilimitados", "Cuentas ilimitadas", "Hasta 5 locales"],
+    cupos: ["Equipo ilimitado", "Hasta 3 locales"],
     tituloLista: "Todo lo de Pro, más:",
     incluye: [
       "Una caja por local, con su arqueo",
@@ -158,7 +162,7 @@ const planes = [
     nombre: "Enterprise",
     precio: null,
     paraQuien: "Cadenas y franquicias. Lo armamos con vos.",
-    cupos: ["Todo ilimitado", "Locales a medida", "Precio pactado"],
+    cupos: ["Equipo ilimitado", "Los locales que necesites", "Precio pactado"],
     tituloLista: "Todo lo de Multi, más:",
     incluye: [
       "Los locales que necesites",
@@ -185,8 +189,8 @@ const faqs = [
   { q: "¿Sirve si tengo varios barberos trabajando a la vez?", a: "Es para lo que está hecho. La agenda muestra carriles paralelos: mientras uno corta, otro puede estar haciendo color y otro barba, sin que los turnos se pisen. Y cada uno tiene su comisión calculada." },
   { q: "¿Qué pasa con los que reservan y no vienen?", a: "Dos frenos: el cobro anticipado con Mercado Pago —elegís si pedís una seña o el total— y los recordatorios automáticos por email 24 horas y 2 horas antes." },
   { q: "¿Qué pasa si me queda chico el plan?", a: "Cambiás de plan cuando quieras desde «Mi suscripción» y se aplica al toque: no hay que migrar nada ni volver a cargar tus datos. Y si un mes bajás de plan, no perdés nada de lo que ya tenías cargado — simplemente no podés sumar más hasta volver a subir." },
-  { q: "¿Cuál plan me conviene?", a: "Contá cuántas personas atienden a la vez. Hasta dos, Inicial. Si tenés un equipo y querés vender membresías, gift cards o cupones, Pro. Si tenés más de un local, Multi. Durante la prueba tenés todo desbloqueado, así que probás las tres cosas y después elegís sabiendo." },
-  { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis con TODO desbloqueado —incluido lo de los planes de arriba— para que lo pruebes con clientes reales antes de elegir. No pedimos tarjeta: te das de alta solo y al día ${DIAS_PRUEBA} decidís si seguís.` },
+  { q: "¿Cuál plan me conviene?", a: "Contá cuántas personas atienden, vos incluido. Hasta tres, Inicial. Si son más, o querés vender membresías, gift cards y cupones, Pro. Si tenés más de un local, Multi. Durante la prueba tenés todas las funciones desbloqueadas, así que las probás todas y después elegís sabiendo." },
+  { q: "¿Puedo probarlo antes de pagar?", a: `Sí, ${DIAS_PRUEBA} días gratis con todas las funciones desbloqueadas —membresías, gift cards, cupones y campañas incluidas— para que lo pruebes con clientes reales antes de elegir. Durante la prueba trabajás con los cupos de Inicial: hasta tres personas atendiendo y un local, así el día que elegís plan no perdés nada de lo que cargaste. No pedimos tarjeta: te das de alta solo y al día ${DIAS_PRUEBA} decidís si seguís.` },
 ];
 
 /**
@@ -1033,7 +1037,7 @@ export default function Page() {
               ))}
               <div style={{ borderTop: "1px solid #eef1f5", paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 13.5, color: "#5d6578" }}>Caja abierta hoy</span>
-                <span style={{ fontSize: 13.5, fontWeight: 700 }}>2 de 2 locales</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700 }}>2 de 3 locales</span>
               </div>
             </div>
             <p style={{ fontSize: 13, color: "#8b93a7", margin: "14px 4px 0", textAlign: "center" }}>
