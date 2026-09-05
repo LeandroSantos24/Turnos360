@@ -3,6 +3,20 @@ COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
 up:          ## Levanta db + redis + api
 	$(COMPOSE) up -d --build
 
+deps-front:  ## Rehace node_modules del contenedor (usar al sumar una dependencia)
+	# POR QUÉ HACE FALTA UN COMANDO APARTE
+	# El compose monta ../frontend sobre /app, y para que eso no tape el
+	# node_modules instalado en la imagen hay un volumen ANÓNIMO en
+	# /app/node_modules. Ese volumen sobrevive a `up --build`: docker reusa el
+	# de la corrida anterior. Resultado: la imagen nueva TIENE la dependencia,
+	# el contenedor monta encima el node_modules viejo que NO la tiene, y el
+	# build falla con "Module not found" señalando un paquete que sí está en
+	# package.json y en el lock. Es de los errores que peor apuntan a su causa.
+	#
+	# -V (--renew-anon-volumes) descarta ese volumen y lo rehace desde la
+	# imagen. Se corre cuando cambia package.json, no en cada arranque.
+	$(COMPOSE) up -d --build -V frontend
+
 down:
 	$(COMPOSE) down
 
