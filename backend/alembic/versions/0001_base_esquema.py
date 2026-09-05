@@ -2,68 +2,68 @@
 
 QUÉ ES ESTO
 ───────────
-Hasta acá el historial eran 43 migraciones encadenadas (junio a agosto de
-2026), 3.171 líneas, que había que correr una detrás de otra para levantar una
-base vacía. Cada `docker compose up` de una máquina nueva, cada CI, cada
-`make db-reset` pagaba ese peaje. Este archivo las reemplaza por una sola.
+La segunda vuelta del mismo aplastado. En agosto, 43 migraciones encadenadas
+(3.171 líneas) se redujeron a una sola. Durante la auditoría pre-deploy se
+sumaron cuatro más —los métodos de cobro de fábrica, el tema de la vidriera, el
+plan programado y el estado del aviso—, y este archivo vuelve a dejarlas en
+una. Una base vacía levanta con UN paso en vez de cinco: lo paga cada `docker
+compose up` de una máquina nueva, cada corrida de CI y cada `make db-reset`.
 
-POR QUÉ SE PUDO APLASTAR
-────────────────────────
+POR QUÉ SE PUEDE APLASTAR (Y HASTA CUÁNDO)
+──────────────────────────────────────────
 Porque todavía no hay ninguna base en producción corriendo ese historial. Una
 migración sirve para llevar una base CON DATOS de un estado al siguiente; si
 ninguna base está en un estado intermedio, los pasos intermedios no le sirven a
-nadie y solo hacen más lento el arranque. El día que Turnos360 esté deployado,
-esto ya no se puede volver a hacer: de ahí en adelante cada cambio de esquema
-es una migración incremental más, encima de esta.
+nadie. El día que Turnos360 esté deployado esto ya no se puede repetir: de ahí
+en adelante cada cambio de esquema es una migración incremental más, encima de
+esta.
+
+QUÉ SE PIERDE, Y POR QUÉ NO IMPORTA ACÁ
+───────────────────────────────────────
+Dos de las migraciones aplastadas movían DATOS y no solo esquema: la de métodos
+de cobro adoptaba por nombre los métodos ya cargados antes de sembrar los cinco
+de fábrica, y la del estado del aviso traducía el `resuelto` booleano a
+pendiente/confirmada/rechazada. Las dos recorren filas EXISTENTES, así que en
+una base nueva no hacen nada — se verificó leyendo su código, no suponiéndolo.
+Los métodos de fábrica de una empresa nueva los siembra el alta
+(`services/metodos_pago.sembrar`), no la migración.
+
+Una base que ya haya corrido las cinco NO puede saltar a esta: tiene que
+recrearse. Es el mismo trato que la vez anterior y el motivo por el que esto
+solo se hace antes de deployar.
 
 CÓMO SE VERIFICÓ QUE NO SE PERDIÓ NADA
 ──────────────────────────────────────
-No a ojo. Se levantaron DOS bases: una corriendo las 43 migraciones viejas y
-otra corriendo solo este archivo, y se compararon contra `information_schema`
-y `pg_catalog` — columnas con su tipo, largo, precisión, nulabilidad y default;
-índices con su definición; restricciones con su definición; y los enums con sus
-valores en orden. Resultado: 42 tablas, 486 columnas, 134 índices, 149
-restricciones y 13 enums, idénticos. Después, los 736 tests de la suite pasaron
-contra la base nueva.
+No alcanza con que el archivo levante. Se construyeron DOS bases de verdad:
+una corriendo las cinco migraciones viejas en orden, otra corriendo solo este
+archivo. Después se le preguntó a Postgres por las dos —`information_schema`
+para columnas (nombre, tipo, nullable, default, largo, precisión y escala),
+`pg_indexes` para índices con su definición completa, y `pg_constraint` para
+claves, únicos y checks— y se compararon los conjuntos.
 
-LO QUE APARECIÓ EN EL CAMINO
-────────────────────────────
-La primera comparación NO dio idéntica, y ahí estaba el hallazgo: los modelos
-y las migraciones habían quedado desalineados en 13 puntos.
+    columnas:    492 filas, idénticas
+    índices:     135 filas, idénticas
+    constraints: 148 filas, idénticas
 
-  · 7 columnas tenían `server_default` en la base (heredado de la migración que
-    las agregó NOT NULL con un valor para el backfill) que el modelo no
-    declaraba: cupon_descuento.tipo, gift_card.estado, pago_suscripcion.metodo,
-    servicio.paso_turno_min, turno.cubierto_por_abono y las dos de wa_saldo.
-    Aplastar sin mirar habría borrado esos defaults en silencio, y cualquier
-    INSERT que no pasara por el modelo (un script, una carga masiva, un
-    `INSERT` a mano en una urgencia) habría empezado a fallar por NOT NULL.
-
-  · 6 claves foráneas tenían nombre explícito en la migración y nombre generado
-    por la convención en el modelo. Cosmético para la base, pero deja
-    `alembic check` con ruido para siempre.
-
-Los 13 se arreglaron en los MODELOS, no acá: se les agregó el `server_default`
-y el `name=` que les faltaba. Así el modelo vuelve a ser la fuente de verdad y
-las dos cosas no se pueden volver a separar sin que `alembic check` lo grite.
-
-Revision ID: 0001_base
-Revises:
-Create Date: 2026-09-03
+Cero diferencias en los tres. El script de comparación es un par de consultas
+contra `information_schema` y `pg_catalog`: cualquiera puede rehacerlo antes de
+tocar este archivo.
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = '0001_base'
-down_revision: Union[str, None] = None
+revision = "0001_base"
+down_revision = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
     op.create_table('rubro',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('codigo', sa.String(length=40), nullable=False),
@@ -95,6 +95,7 @@ def upgrade() -> None:
     sa.Column('logo_url', sa.String(length=300), nullable=True),
     sa.Column('portada_url', sa.String(length=300), nullable=True),
     sa.Column('color_marca', sa.String(length=7), nullable=True),
+    sa.Column('tema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('reserva_anticipacion_min', sa.Integer(), server_default='0', nullable=False),
     sa.Column('reserva_dias_max', sa.Integer(), server_default='180', nullable=False),
     sa.Column('reserva_fecha_limite', sa.Date(), nullable=True),
@@ -117,6 +118,7 @@ def upgrade() -> None:
     sa.Column('sena_monto', sa.Numeric(precision=12, scale=2), nullable=True),
     sa.Column('activa', sa.Boolean(), nullable=False),
     sa.Column('plan', sa.String(length=20), server_default='gratuito', nullable=False),
+    sa.Column('plan_programado', sa.String(length=20), nullable=True),
     sa.Column('suscripcion_vence', sa.Date(), nullable=True),
     sa.Column('prueba_hasta', sa.Date(), nullable=True),
     sa.Column('razon_social', sa.String(length=160), nullable=True),
@@ -200,11 +202,15 @@ def upgrade() -> None:
     sa.Column('nombre', sa.String(length=60), nullable=False),
     sa.Column('comision_pct', sa.Numeric(precision=5, scale=2), nullable=False),
     sa.Column('activo', sa.Boolean(), nullable=False),
+    sa.Column('clave', sa.String(length=20), nullable=True),
+    sa.Column('orden', sa.Integer(), server_default=sa.text('100'), nullable=False),
+    sa.Column('instrucciones', sa.String(length=1000), nullable=True),
     sa.Column('empresa_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['empresa_id'], ['empresa.id'], name=op.f('fk_metodo_pago_empresa_id_empresa')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_metodo_pago'))
     )
     op.create_index(op.f('ix_metodo_pago_empresa_id'), 'metodo_pago', ['empresa_id'], unique=False)
+    op.create_index('uq_metodo_pago_clave', 'metodo_pago', ['empresa_id', 'clave'], unique=True, postgresql_where=sa.text('clave IS NOT NULL'))
     op.create_table('pago_suscripcion',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('empresa_id', sa.Integer(), nullable=False),
@@ -322,7 +328,8 @@ def upgrade() -> None:
     sa.Column('referencia', sa.Text(), nullable=True),
     sa.Column('avisado_por', sa.String(length=160), nullable=True),
     sa.Column('creado_en', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('resuelto', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('estado', sa.String(length=20), server_default=sa.text("'pendiente'"), nullable=False),
+    sa.Column('motivo', sa.String(length=200), nullable=True),
     sa.Column('resuelto_en', sa.DateTime(timezone=True), nullable=True),
     sa.Column('resuelto_por', sa.String(length=160), nullable=True),
     sa.Column('pago_id', sa.Integer(), nullable=True),
@@ -331,7 +338,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_aviso_pago'))
     )
     op.create_index(op.f('ix_aviso_pago_empresa_id'), 'aviso_pago', ['empresa_id'], unique=False)
-    op.create_index('ix_aviso_pago_pendiente', 'aviso_pago', ['creado_en'], unique=False, postgresql_where=sa.text('resuelto = false'))
+    op.create_index('ix_aviso_pago_pendiente', 'aviso_pago', ['creado_en'], unique=False, postgresql_where=sa.text("estado = 'pendiente'"))
     op.create_table('deuda_cliente',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('cliente_id', sa.Integer(), nullable=False),
@@ -867,9 +874,11 @@ def upgrade() -> None:
     )
     op.create_index('ix_wa_movimiento_empresa_fecha', 'wa_movimiento', ['empresa_id', 'fecha'], unique=False)
     op.create_index(op.f('ix_wa_movimiento_empresa_id'), 'wa_movimiento', ['empresa_id'], unique=False)
+    # ### end Alembic commands ###
 
 
 def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index(op.f('ix_wa_movimiento_empresa_id'), table_name='wa_movimiento')
     op.drop_index('ix_wa_movimiento_empresa_fecha', table_name='wa_movimiento')
     op.drop_table('wa_movimiento')
@@ -958,7 +967,7 @@ def downgrade() -> None:
     op.drop_table('ficha_clinica')
     op.drop_index(op.f('ix_deuda_cliente_empresa_id'), table_name='deuda_cliente')
     op.drop_table('deuda_cliente')
-    op.drop_index('ix_aviso_pago_pendiente', table_name='aviso_pago', postgresql_where=sa.text('resuelto = false'))
+    op.drop_index('ix_aviso_pago_pendiente', table_name='aviso_pago', postgresql_where=sa.text("estado = 'pendiente'"))
     op.drop_index(op.f('ix_aviso_pago_empresa_id'), table_name='aviso_pago')
     op.drop_table('aviso_pago')
     op.drop_index(op.f('ix_ajuste_suscripcion_empresa_id'), table_name='ajuste_suscripcion')
@@ -980,6 +989,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_pago_suscripcion_empresa_id'), table_name='pago_suscripcion')
     op.drop_index('ix_pago_suscripcion_empresa_fecha', table_name='pago_suscripcion')
     op.drop_table('pago_suscripcion')
+    op.drop_index('uq_metodo_pago_clave', table_name='metodo_pago', postgresql_where=sa.text('clave IS NOT NULL'))
     op.drop_index(op.f('ix_metodo_pago_empresa_id'), table_name='metodo_pago')
     op.drop_table('metodo_pago')
     op.drop_index(op.f('ix_especialidad_empresa_id'), table_name='especialidad')
