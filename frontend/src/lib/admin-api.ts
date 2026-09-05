@@ -338,8 +338,10 @@ export interface AvisoPago {
   coincide: boolean;
 }
 
-export function listarAvisosPago(): Promise<AvisoPago[]> {
-  return adminRequest<AvisoPago[]>("/admin/cobranza/avisos");
+export function listarAvisosPago(soloPendientes = true): Promise<AvisoPago[]> {
+  return adminRequest<AvisoPago[]>(
+    `/admin/cobranza/avisos?pendientes=${soloPendientes}`,
+  );
 }
 
 /**

@@ -19,6 +19,7 @@ import { AlertTriangle, CalendarPlus, DollarSign, Search, Users } from "lucide-r
 import { toast } from "sonner";
 import { useConfirmar } from "@/components/confirmar";
 import { AvisosDePago } from "./avisos-de-pago";
+import { HistorialAvisos } from "./historial-avisos";
 
 import {
   AvisoPago,
@@ -325,6 +326,10 @@ export default function CobranzaPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Lo ya resuelto, al final y cerrado: es material de consulta, no
+          trabajo pendiente, y arriba competiría con la bandeja. */}
+      <HistorialAvisos recargar={refrescoAvisos} />
 
       {cobrando && (
         <DialogCobro
