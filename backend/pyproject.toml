@@ -19,6 +19,10 @@ dependencies = [
     "python-multipart>=0.0.18",
     "httpx>=0.28",
     "slowapi>=0.1.9",
+    # Para validar y re-codificar las imágenes que sube el negocio. Ver
+    # routers/subidas.py: re-codificar es lo que hace seguro servir un
+    # archivo que subió un desconocido.
+    "pillow>=11.0",
 ]
 
 [project.optional-dependencies]

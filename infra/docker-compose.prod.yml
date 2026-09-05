@@ -254,3 +254,7 @@ services:
 
 volumes:
   pgdata:
+  # Las fotos del equipo, el logo y la portada de CADA cliente. Sin este
+  # volumen viven adentro del contenedor, y el primer redeploy las borra
+  # todas sin aviso ni forma de recuperarlas. Va al backup junto con pgdata.
+  uploads:

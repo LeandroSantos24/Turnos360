@@ -18,7 +18,11 @@ from app.core.observabilidad import (
     registrar_observabilidad,
 )
 from app.core.rate_limit import limiter
-from app.routers import cupones, equipo, sucursales, whatsapp
+from pathlib import Path
+
+from fastapi.staticfiles import StaticFiles
+
+from app.routers import cupones, equipo, sucursales, subidas, whatsapp
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico, giftcards
 
 
@@ -73,6 +77,16 @@ async def agregar_security_headers(request: Request, call_next):
 
 
 # Routers
+# Las imágenes que sube el negocio se sirven desde acá.
+#
+# `check_dir=False` a propósito: la carpeta puede no existir todavía en un
+# arranque limpio, y sin esto el backend no levanta —falla en el import, con un
+# error que no menciona las imágenes por ningún lado—. La crea el primer
+# archivo que se sube.
+_uploads = Path(settings.uploads_dir)
+_uploads.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads), check_dir=False), name="uploads")
+
 app.include_router(auth.router)
 app.include_router(clientes.router)
 app.include_router(recursos.router)
@@ -85,6 +99,7 @@ app.include_router(giftcards.router)
 app.include_router(salud.router)
 app.include_router(empresa.router)
 app.include_router(equipo.router)
+app.include_router(subidas.router)
 app.include_router(sucursales.router)
 app.include_router(whatsapp.router)
 app.include_router(whatsapp.router_admin)

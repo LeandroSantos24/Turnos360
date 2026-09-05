@@ -112,8 +112,15 @@ async function request<T>(path: string, options: OpcionesRequest = {}): Promise<
   const { _reintento, ...init } = options;
   const token = getToken();
 
+  // Con FormData el Content-Type NO lo ponemos nosotros: el navegador tiene
+  // que generarlo él para incluir el `boundary` que separa las partes del
+  // multipart. Si se lo escribimos a mano, el servidor no puede parsear el
+  // cuerpo y contesta un 422 que no menciona el boundary por ningún lado —
+  // media hora de buscar el error en el lugar equivocado.
+  const esFormulario = init.body instanceof FormData;
+
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(esFormulario ? {} : { "Content-Type": "application/json" }),
     ...(init.headers as Record<string, string>),
   };
   if (token) {
@@ -180,4 +187,7 @@ export const api = {
     request<T>(path, { method: "PUT", body: JSON.stringify(body), signal }),
   delete: <T>(path: string, signal?: AbortSignal) =>
     request<T>(path, { method: "DELETE", signal }),
+  /** Sube archivos. El cuerpo va como FormData, sin Content-Type a mano. */
+  postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
+    request<T>(path, { method: "POST", body: form, signal }),
 };

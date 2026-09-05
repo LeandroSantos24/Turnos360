@@ -265,9 +265,11 @@ function ContenidoEquipo() {
           ¿Cómo agrego o saco gente del equipo?
         </p>
         <p className="mt-1">
-          Las altas y bajas de usuarios las hacemos nosotros: escribinos y lo
-          resolvemos en el momento. Desde acá podés ver quién tiene cuenta y
-          darle una contraseña nueva a quien la haya perdido.
+          Lo hacés vos desde acá: <b>Sumar a alguien</b> le crea la cuenta y te
+          da un link para que elija su contraseña. <b>Dar de baja</b> le saca el
+          acceso sin borrar nada de lo que ya trabajó, y libera un lugar de tu
+          plan. Si alguien perdió la clave, <b>Generar link de contraseña</b> le
+          da uno nuevo.
         </p>
       </div>
 

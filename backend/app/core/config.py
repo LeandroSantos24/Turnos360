@@ -44,6 +44,18 @@ class Settings(BaseSettings):
 
     env: str = "dev"
 
+    # --- Archivos que sube el negocio ----------------------------------
+    # Dónde caen las fotos del equipo, el logo y la portada. Tiene que ser un
+    # VOLUMEN en producción: si vive dentro del contenedor, el primer deploy
+    # borra las fotos de todos los clientes y no hay forma de recuperarlas.
+    uploads_dir: str = "/app/uploads"
+    # Techo por archivo. Una foto de celular ronda los 3-5 MB; 8 deja margen
+    # sin que alguien pueda llenar el disco subiendo un video renombrado.
+    upload_max_mb: int = 8
+    # A cuánto se reduce cada imagen vive en routers/subidas.py (LADOS), y no
+    # acá, porque depende de PARA QUÉ es: un avatar no necesita lo mismo que
+    # una foto de la galería.
+
     # --- Observabilidad ------------------------------------------------
     # Antes no había NADA: ni logging configurado, ni manejador global de
     # excepciones, ni alertas. Un error en producción se descubría porque

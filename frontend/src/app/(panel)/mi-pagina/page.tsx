@@ -19,7 +19,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Plus,
   X,
   Globe,
   Palette,
@@ -48,6 +47,7 @@ import {
 import { listarRecursos, editarRecurso, Recurso } from "@/lib/recursos-api";
 import { listarServicios } from "@/lib/servicios-api";
 import { ApiError } from "@/lib/api";
+import { SubirImagen } from "@/components/subir-imagen";
 import { RequiereDueno } from "@/components/requiere-rol";
 import { normalizarTema } from "@/lib/tema-vidriera";
 import { PanelLook } from "./panel-look";
@@ -386,10 +386,7 @@ function GaleriaEditor({
   fotos: string[];
   onChange: (fotos: string[]) => void;
 }) {
-  const [nueva, setNueva] = useState("");
-
-  function agregar() {
-    const url = nueva.trim();
+  function agregar(url: string) {
     if (!url) return;
     if (fotos.length >= MAX_FOTOS) {
       toast.error(`Máximo ${MAX_FOTOS} fotos`);
@@ -400,7 +397,6 @@ function GaleriaEditor({
       return;
     }
     onChange([...fotos, url]);
-    setNueva("");
   }
   function quitar(i: number) {
     onChange(fotos.filter((_, j) => j !== i));
@@ -409,26 +405,19 @@ function GaleriaEditor({
   return (
     <Seccion
       titulo="Galería de fotos"
-      descripcion={`Fotos de tus trabajos o del local (hasta ${MAX_FOTOS}). Pegá la URL de cada imagen; se guardan con el botón "Guardar cambios".`}
+      descripcion={`Fotos de tus trabajos o del local (hasta ${MAX_FOTOS}). Estas van completas, sin recortar: se ven grandes en tu página.`}
       className="lg:col-span-2"
     >
       <div className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            placeholder="https://…/foto.jpg"
-            value={nueva}
-            onChange={(e) => setNueva(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                agregar();
-              }
-            }}
+        <div className="flex flex-wrap items-center gap-2">
+          <SubirImagen
+            proposito="galeria"
+            etiqueta="Agregar foto"
+            onSubida={agregar}
           />
-          <Button type="button" variant="outline" onClick={agregar}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Agregar
-          </Button>
+          <span className="text-xs text-muted-foreground">
+            {fotos.length} de {MAX_FOTOS}
+          </span>
         </div>
 
         {fotos.length === 0 ? (
@@ -467,7 +456,21 @@ function GaleriaEditor({
   );
 }
 
-/** Fotos del equipo: una fila por profesional, guardado por fila (PATCH). */
+/**
+ * Fotos del equipo: una fila por profesional.
+ *
+ * ANTES ERA UN CAMPO PARA PEGAR UNA URL
+ * ─────────────────────────────────────
+ * Y eso no es una función incompleta: es una que no existe. Leandro lo dijo
+ * probando el alta —«no me deja cargar la foto de los peluqueros»— y tenía
+ * razón. Un dueño de barbería no tiene las fotos de su equipo publicadas en
+ * ningún lado con una URL a mano; las tiene en el celular. Pedirle una URL es
+ * pedirle que primero resuelva un problema que no sabe que tiene.
+ *
+ * Además la fila se rompía: con el nombre a la izquierda, el campo al medio y
+ * el botón a la derecha, dentro de una grilla de dos columnas no entraba nada
+ * y «Guardar» terminaba encima del nombre.
+ */
 function EquipoEditor({
   recursos,
   onGuardado,
@@ -475,24 +478,12 @@ function EquipoEditor({
   recursos: Recurso[];
   onGuardado: (r: Recurso) => void;
 }) {
-  const [borradores, setBorradores] = useState<Record<number, string>>({});
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
 
-  const valorDe = (r: Recurso) => borradores[r.id] ?? r.foto_url ?? "";
-  const cambiado = (r: Recurso) => valorDe(r).trim() !== (r.foto_url ?? "");
-
-  async function guardarFoto(r: Recurso) {
-    const url = valorDe(r).trim();
+  async function fijarFoto(r: Recurso, url: string | null) {
     setGuardandoId(r.id);
     try {
-      const actualizado = await editarRecurso(r.id, { foto_url: url === "" ? null : url });
-      onGuardado(actualizado);
-      setBorradores((b) => {
-        const copia = { ...b };
-        delete copia[r.id];
-        return copia;
-      });
-      toast.success(`Foto de ${r.nombre} guardada`);
+      onGuardado(await editarRecurso(r.id, { foto_url: url }));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo guardar");
     } finally {
@@ -515,41 +506,47 @@ function EquipoEditor({
           {recursos.map((r) => (
             <div
               key={r.id}
-              className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center"
+              className="flex items-center gap-3 rounded-xl border p-3"
             >
-              <div className="flex min-w-0 items-center gap-3 sm:w-44 sm:shrink-0">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border bg-muted">
-                  {valorDe(r).trim() ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={valorDe(r).trim()}
-                      alt={r.nombre}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground">
-                      {r.nombre.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <span className="truncate text-sm font-medium">{r.nombre}</span>
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
+                {r.foto_url ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={r.foto_url}
+                    alt={r.nombre}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground">
+                    {r.nombre.charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
-              <div className="flex flex-1 gap-2">
-                <Input
-                  placeholder="https://…/foto.jpg"
-                  value={valorDe(r)}
-                  onChange={(e) =>
-                    setBorradores((b) => ({ ...b, [r.id]: e.target.value }))
-                  }
+
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {r.nombre}
+              </span>
+
+              {/* Los botones no crecen: son lo último que puede robar espacio
+                  al nombre, que es lo que identifica la fila. */}
+              <div className="flex shrink-0 items-center gap-1.5">
+                <SubirImagen
+                  proposito="avatar"
+                  size="sm"
+                  etiqueta={r.foto_url ? "Cambiar" : "Subir foto"}
+                  onSubida={(url) => fijarFoto(r, url)}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!cambiado(r) || guardandoId === r.id}
-                  onClick={() => guardarFoto(r)}
-                >
-                  {guardandoId === r.id ? "Guardando…" : "Guardar"}
-                </Button>
+                {r.foto_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={guardandoId === r.id}
+                    onClick={() => fijarFoto(r, null)}
+                  >
+                    Quitar
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -832,14 +829,41 @@ function ContenidoMiPagina() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="logo">URL del logo</Label>
-          <Input
-            id="logo"
-            placeholder="https://…/logo.png"
-            value={form.logo_url ?? ""}
-            onChange={(e) => set("logo_url", e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">Por ahora, pegá la URL.</p>
+          <Label>Logo</Label>
+          <div className="flex items-center gap-3">
+            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border bg-muted">
+              {form.logo_url ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={form.logo_url} alt="Logo" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                  sin logo
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <SubirImagen
+                proposito="logo"
+                size="sm"
+                etiqueta={form.logo_url ? "Cambiar" : "Subir logo"}
+                onSubida={(url) => set("logo_url", url)}
+              />
+              {form.logo_url && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => set("logo_url", "")}
+                >
+                  Quitar
+                </Button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Se ve en un círculo arriba de tu página. Al subirlo elegís qué parte
+            se ve.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="color">Color de marca</Label>
@@ -862,13 +886,35 @@ function ContenidoMiPagina() {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="portada">Foto de portada</Label>
-        <Input
-          id="portada"
-          placeholder="https://…/local.jpg"
-          value={form.portada_url ?? ""}
-          onChange={(e) => set("portada_url", e.target.value)}
-        />
+        <Label>Foto de portada</Label>
+        <div className="flex flex-wrap items-center gap-3">
+          {form.portada_url && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={form.portada_url}
+              alt="Portada"
+              className="h-16 w-28 shrink-0 rounded-lg border object-cover"
+            />
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            <SubirImagen
+              proposito="portada"
+              size="sm"
+              etiqueta={form.portada_url ? "Cambiar portada" : "Subir portada"}
+              onSubida={(url) => set("portada_url", url)}
+            />
+            {form.portada_url && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => set("portada_url", "")}
+              >
+                Quitar
+              </Button>
+            )}
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground">
           Se muestra de fondo en la cabecera de tu página, con el nombre y
           los botones encima. Va bien una foto del local en horizontal

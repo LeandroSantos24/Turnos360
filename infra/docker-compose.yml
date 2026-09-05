@@ -83,6 +83,10 @@ services:
       # el archivo DE VERDAD. Sin esto, adentro del contenedor no existe
       # ninguna carpeta docs/ y el chequeo no puede controlar nada.
       - ../docs:/docs
+      # Las imágenes que sube el negocio. Volumen y no carpeta del código:
+      # `../backend:/app` monta el repo encima, así que sin esto los archivos
+      # subidos irían a parar al árbol de fuentes.
+      - uploads:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:
@@ -194,4 +198,5 @@ services:
   #   depends_on: [redis]
 
 volumes:
+  uploads:
   pgdata:
