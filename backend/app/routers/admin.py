@@ -23,6 +23,7 @@ from app.schemas.admin import (
     EmpresaCobranzaOut,
     ResumenCobranzaOut,
     PagoSuscripcionIn,
+    RechazoAvisoIn,
     PagoSuscripcionOut,
     ProrrogaIn,
     FichaComercialIn,
@@ -363,9 +364,24 @@ def avisos_de_pago(admin: SuperAdminActual, db: DB, pendientes: bool = True) -> 
 
 
 @router.post("/cobranza/avisos/{aviso_id}/descartar")
-def descartar_aviso(aviso_id: int, admin: SuperAdminActual, db: DB) -> dict:
-    """Saca el aviso de la bandeja SIN registrar una cuota (no apareció el pago)."""
-    cobranza.resolver_aviso(db, aviso_id, pago_id=None, resuelto_por=admin.email)
+def descartar_aviso(
+    aviso_id: int, admin: SuperAdminActual, db: DB, datos: RechazoAvisoIn | None = None
+) -> dict:
+    """Rechaza el aviso: sale de la bandeja SIN registrar cuota, y con motivo.
+
+    El motivo no es burocracia. Un aviso descartado desaparecía sin dejar nada,
+    así que cuando el negocio preguntaba a la semana siguiente por qué no le
+    acreditaron el mes, no había con qué contestarle: ni quién lo descartó, ni
+    cuándo, ni por qué. Ahora queda en el historial y se le puede contestar.
+    """
+    cobranza.resolver_aviso(
+        db,
+        aviso_id,
+        pago_id=None,
+        resuelto_por=admin.email,
+        motivo=(datos.motivo if datos else None),
+    )
+    db.commit()
     return {"ok": True}
 
 

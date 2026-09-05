@@ -324,6 +324,10 @@ export interface AvisoPago {
   /** Quién avisó, desde el panel del negocio. */
   avisado_por: string | null;
   creado_en: string | null;
+  /** pendiente | confirmada | rechazada. */
+  estado: "pendiente" | "confirmada" | "rechazada";
+  /** Por qué se rechazó. Solo viene en las rechazadas. */
+  motivo: string | null;
   resuelto: boolean;
   /** Lo que le corresponde pagar: su precio pactado, o el de su plan. */
   monto_esperado: number | null;
@@ -338,9 +342,20 @@ export function listarAvisosPago(): Promise<AvisoPago[]> {
   return adminRequest<AvisoPago[]>("/admin/cobranza/avisos");
 }
 
-export function descartarAvisoPago(avisoId: number): Promise<{ ok: boolean }> {
+/**
+ * Rechaza el aviso: sale de la bandeja SIN registrar cuota.
+ *
+ * El motivo viaja porque es lo que se le contesta al negocio cuando pregunta
+ * por qué no le acreditaron el mes. Sin él, el aviso desaparecía y no quedaba
+ * nada: ni quién lo rechazó, ni cuándo, ni por qué.
+ */
+export function descartarAvisoPago(
+  avisoId: number,
+  motivo?: string,
+): Promise<{ ok: boolean }> {
   return adminRequest(`/admin/cobranza/avisos/${avisoId}/descartar`, {
     method: "POST",
+    body: JSON.stringify({ motivo: motivo || null }),
   });
 }
 

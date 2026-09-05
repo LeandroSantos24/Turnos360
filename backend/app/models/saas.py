@@ -156,7 +156,11 @@ class AvisoPago(Base):
 
     __tablename__ = "aviso_pago"
     __table_args__ = (
-        Index("ix_aviso_pago_pendiente", "creado_en", postgresql_where=text("resuelto = false")),
+        Index(
+            "ix_aviso_pago_pendiente",
+            "creado_en",
+            postgresql_where=text("estado = 'pendiente'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -171,12 +175,33 @@ class AvisoPago(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    resuelto: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("false")
+    # EN QUÉ QUEDÓ, en una sola columna.
+    #
+    # Antes había un `resuelto` booleano y el resto se deducía: resuelto con
+    # pago = confirmada, resuelto sin pago = descartada. Deducir el estado de
+    # la AUSENCIA de otro dato es frágil —cualquier camino que resuelva sin
+    # registrar la cuota queda indistinguible de un rechazo— y sobre todo no
+    # dejaba lugar para el POR QUÉ. Un aviso descartado desaparecía de la
+    # bandeja sin explicación, así que si el negocio reclamaba a la semana no
+    # había nada que mirar.
+    #
+    #   pendiente  → hay que ir a buscarla al banco
+    #   confirmada → la plata está y se registró la cuota (pago_id la señala)
+    #   rechazada  → no apareció, o no era lo que decía (motivo lo explica)
+    estado: Mapped[str] = mapped_column(
+        String(20), default="pendiente", server_default=text("'pendiente'")
     )
+    # Por qué se rechazó, en las palabras de quien lo rechazó. Es lo que se le
+    # contesta al negocio cuando pregunta.
+    motivo: Mapped[str | None] = mapped_column(String(200))
     resuelto_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resuelto_por: Mapped[str | None] = mapped_column(String(160))
     # Si se confirmó, la cuota que se registró a partir de este aviso.
     pago_id: Mapped[int | None] = mapped_column(ForeignKey("pago_suscripcion.id"))
+
+    @property
+    def resuelto(self) -> bool:
+        """Ya no está esperando. Se deriva: no es una columna."""
+        return self.estado != "pendiente"
 
     empresa: Mapped["Empresa"] = relationship()  # noqa: F821

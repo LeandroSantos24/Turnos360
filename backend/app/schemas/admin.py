@@ -274,3 +274,13 @@ class FichaComercialIn(BaseModel):
     limite_recursos: int | None = Field(default=None, ge=0, le=999)
     # Igual que limite_recursos: pisa el tope del plan. Vacío = manda la grilla.
     limite_sucursales: int | None = Field(default=None, ge=1, le=99)
+
+
+class RechazoAvisoIn(BaseModel):
+    """Por qué no se le acredita la transferencia que dijo haber hecho.
+
+    Opcional para no frenar al que solo quiere sacarlo de la bandeja, pero la
+    pantalla lo pide: es lo que se le contesta al negocio cuando reclama.
+    """
+
+    motivo: str | None = Field(default=None, max_length=200)

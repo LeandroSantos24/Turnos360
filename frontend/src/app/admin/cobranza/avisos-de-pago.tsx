@@ -25,8 +25,15 @@ import { AlertTriangle, Check, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AvisoPago, descartarAvisoPago, listarAvisosPago } from "@/lib/admin-api";
-import { useConfirmar } from "@/components/confirmar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function cuando(iso: string | null): string {
   if (!iso) return "";
@@ -47,8 +54,9 @@ export function AvisosDePago({
   onCobrar?: (empresaId: number, aviso: AvisoPago) => void;
   recargar?: number;
 }) {
-  const confirmar = useConfirmar();
   const [avisos, setAvisos] = useState<AvisoPago[]>([]);
+  /** El aviso que se está por rechazar. Null = no hay diálogo abierto. */
+  const [rechazando, setRechazando] = useState<AvisoPago | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -62,24 +70,14 @@ export function AvisosDePago({
     cargar();
   }, [cargar, recargar]);
 
-  async function descartar(a: AvisoPago) {
-    if (
-      !(await confirmar({
-        titulo: `¿Descartar el aviso de ${a.empresa_nombre}?`,
-        descripcion:
-          "Sale de la bandeja SIN registrar ninguna cuota. Usalo cuando el " +
-          "pago no aparece en el banco.",
-        textoAccion: "Sí, descartar",
-        destructivo: true,
-      }))
-    )
-      return;
+  async function rechazar(a: AvisoPago, motivo: string) {
     try {
-      await descartarAvisoPago(a.id);
-      toast.success("Aviso descartado");
+      await descartarAvisoPago(a.id, motivo);
+      toast.success("Aviso rechazado");
+      setRechazando(null);
       cargar();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo descartar");
+      toast.error(e instanceof Error ? e.message : "No se pudo rechazar");
     }
   }
 
@@ -170,8 +168,8 @@ export function AvisosDePago({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => descartar(a)}
-                title="Descartar sin cobrar"
+                onClick={() => setRechazando(a)}
+                title="Rechazar: no apareció el pago"
               >
                 <X className="h-3.5 w-3.5" />
               </Button>
@@ -179,6 +177,96 @@ export function AvisosDePago({
           </div>
         ))}
       </div>
+
+      {rechazando && (
+        <DialogRechazo
+          aviso={rechazando}
+          onCerrar={() => setRechazando(null)}
+          onRechazar={(motivo) => rechazar(rechazando, motivo)}
+        />
+      )}
     </div>
+  );
+}
+
+
+/** Los motivos que se repiten. Escribirlos a mano cada vez termina en «no»,
+ *  «nada» o el campo vacío — y entonces el historial no sirve para nada. */
+const MOTIVOS = [
+  "No apareció en el banco",
+  "Vino por otro importe",
+  "Ya estaba cobrado (duplicado)",
+  "No pude identificar quién la mandó",
+];
+
+/**
+ * Por qué NO se le acredita la transferencia.
+ *
+ * Antes esto era un «¿seguro?» y listo: el aviso desaparecía sin dejar nada.
+ * Cuando el negocio preguntaba a la semana siguiente por qué no le acreditaron
+ * el mes, no había con qué contestarle — ni quién lo rechazó, ni cuándo, ni
+ * por qué. El motivo queda en el historial y es exactamente la respuesta.
+ *
+ * El campo NO es obligatorio: frenar a quien solo quiere limpiar la bandeja
+ * convertiría el motivo en un obstáculo, y se llenaría de puntos y de «x».
+ * Los botones de arriba cubren los cuatro casos que se repiten.
+ */
+function DialogRechazo({
+  aviso,
+  onCerrar,
+  onRechazar,
+}: {
+  aviso: AvisoPago;
+  onCerrar: () => void;
+  onRechazar: (motivo: string) => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rechazar el aviso de {aviso.empresa_nombre}</DialogTitle>
+          <DialogDescription>
+            Sale de la bandeja <b>sin registrar ninguna cuota</b>. El motivo
+            queda guardado: es lo que le vas a contestar si pregunta.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {MOTIVOS.map((m) => (
+              <button
+                key={m}
+                onClick={() => setMotivo(m)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  motivo === m
+                    ? "border-primary bg-primary/10 font-medium"
+                    : "hover:bg-muted/50"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <Input
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="O escribí el motivo…"
+            maxLength={200}
+          />
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onCerrar}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={() => onRechazar(motivo)}>
+              Rechazar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

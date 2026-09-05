@@ -31,6 +31,14 @@ from app.models import (
 )
 from app.services.suscripcion import DIAS_PRORROGA
 
+# Los tres estados de un aviso de transferencia. Son strings y no un Enum de
+# base porque los estados de cobranza cambian con el negocio y no vale una
+# migración por cada uno — el mismo criterio que ya usa `metodo`.
+PENDIENTE = "pendiente"
+CONFIRMADA = "confirmada"
+RECHAZADA = "rechazada"
+ESTADOS_AVISO = (PENDIENTE, CONFIRMADA, RECHAZADA)
+
 # Días de anticipación con los que una empresa entra en amarillo.
 DIAS_AVISO = 7
 # Duración del ciclo: registrar un pago empuja el vencimiento esta cantidad.
@@ -586,7 +594,7 @@ def registrar_aviso(
     abierto = db.scalar(
         select(AvisoPago).where(
             AvisoPago.empresa_id == empresa.id,
-            AvisoPago.resuelto.is_(False),
+            AvisoPago.estado == PENDIENTE,
         )
     )
     if abierto is not None:
@@ -608,7 +616,7 @@ def registrar_aviso(
 def aviso_pendiente(db: Session, empresa_id: int) -> AvisoPago | None:
     return db.scalar(
         select(AvisoPago).where(
-            AvisoPago.empresa_id == empresa_id, AvisoPago.resuelto.is_(False)
+            AvisoPago.empresa_id == empresa_id, AvisoPago.estado == PENDIENTE
         )
     )
 
@@ -632,7 +640,7 @@ def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
     """
     q = select(AvisoPago, Empresa).join(Empresa, AvisoPago.empresa_id == Empresa.id)
     if solo_pendientes:
-        q = q.where(AvisoPago.resuelto.is_(False))
+        q = q.where(AvisoPago.estado == PENDIENTE)
     filas = db.execute(q.order_by(AvisoPago.creado_en.desc()).limit(100)).all()
 
     salida = []
@@ -655,7 +663,9 @@ def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
                 "referencia": a.referencia,
                 "avisado_por": a.avisado_por,
                 "creado_en": a.creado_en.isoformat() if a.creado_en else None,
-                "resuelto": bool(a.resuelto),
+                "estado": a.estado,
+                "motivo": a.motivo,
+                "resuelto": a.resuelto,
                 # Con qué comparar el monto avisado, sin salir de la bandeja.
                 "monto_esperado": esperado or None,
                 "plan_codigo": planes.plan_de(empresa.plan).value,
@@ -680,15 +690,30 @@ def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
 
 
 def resolver_aviso(
-    db: Session, aviso_id: int, *, pago_id: int | None, resuelto_por: str | None
+    db: Session,
+    aviso_id: int,
+    *,
+    pago_id: int | None,
+    resuelto_por: str | None,
+    motivo: str | None = None,
 ) -> None:
-    """Marca el aviso como atendido (se confirmó el pago, o se descartó)."""
+    """Cierra el aviso: confirmado si vino con cuota, rechazado si no.
+
+    El ESTADO no se deduce de si hay pago_id o no: se escribe. Antes se
+    deducía, y eso hacía indistinguible un rechazo de un camino que resolvió
+    sin registrar la cuota — dos cosas muy distintas cuando el negocio
+    pregunta por qué no le acreditaron el mes.
+
+    `motivo` solo tiene sentido al rechazar, y es lo que se le contesta al que
+    reclama: «no apareció en el banco», «vino por otro importe».
+    """
     aviso = db.get(AvisoPago, aviso_id)
     if aviso is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese aviso no existe.")
-    if aviso.resuelto:
+    if aviso.estado != PENDIENTE:
         return
-    aviso.resuelto = True
+    aviso.estado = CONFIRMADA if pago_id is not None else RECHAZADA
+    aviso.motivo = (motivo or "").strip()[:200] or None
     aviso.resuelto_en = dt.datetime.now(dt.timezone.utc)
     aviso.resuelto_por = (resuelto_por or "")[:160] or None
     aviso.pago_id = pago_id

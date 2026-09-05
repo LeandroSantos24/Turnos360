@@ -146,7 +146,8 @@ Table aviso_pago {
   referencia text
   avisado_por varchar(160)
   creado_en timestamp with time zone [not null]
-  resuelto boolean [not null]
+  estado varchar(20) [not null]
+  motivo varchar(200)
   resuelto_en timestamp with time zone
   resuelto_por varchar(160)
   pago_id integer [ref: > pago_suscripcion.id]

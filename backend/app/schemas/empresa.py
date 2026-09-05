@@ -412,6 +412,8 @@ class AvisoPagoOut(BaseModel):
     monto: float | None = None
     referencia: str | None = None
     creado_en: str | None = None
+    estado: str = "pendiente"
+    motivo: str | None = None
     resuelto: bool = False
     empresa_id: int | None = None
     empresa_nombre: str | None = None
