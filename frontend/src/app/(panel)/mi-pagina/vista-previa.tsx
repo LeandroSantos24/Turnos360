@@ -26,6 +26,7 @@
  */
 
 import { Calendar, MapPin } from "lucide-react";
+import { urlDeImagen } from "@/lib/imagenes";
 
 import { estilosDe, conAlfa, type TemaVidriera } from "@/lib/tema-vidriera";
 
@@ -110,7 +111,7 @@ export function VistaPrevia({
                 {datos.logo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={datos.logo_url}
+                    src={urlDeImagen(datos.logo_url)}
                     alt=""
                     className="h-full w-full object-contain"
                   />

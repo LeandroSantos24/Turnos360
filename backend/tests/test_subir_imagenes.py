@@ -256,3 +256,68 @@ def test_un_profesional_no_sube_imagenes(client, db, armar_empresa, tmp_path, mo
     assert r.status_code == 403, (
         "Un profesional pudo subir una imagen: falta el gate de dueño."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Que lo subido se pueda GUARDAR
+# ══════════════════════════════════════════════════════════════════════
+
+def test_una_ruta_subida_pasa_la_validacion_del_logo():
+    """El bug que hacía inútil toda la subida.
+
+    El validador de logo/portada exigía una URL http(s) ABSOLUTA. O sea que
+    guardar un logo recién subido fallaba con «tiene que empezar con http://»
+    — sobre una imagen que el propio sistema acababa de crear y devolver.
+    """
+    from app.schemas.empresa import LandingConfig
+
+    cfg = LandingConfig(logo_url="/uploads/12/abc.webp")
+    assert cfg.logo_url == "/uploads/12/abc.webp", "Se guarda relativa: mudar el servidor no rompe las fotos."
+
+
+def test_una_url_pegada_a_mano_sigue_funcionando():
+    """Lo de antes no se rompe: hay negocios con el logo puesto por URL."""
+    from app.schemas.empresa import LandingConfig
+
+    cfg = LandingConfig(logo_url="https://ejemplo.com/logo.png")
+    assert cfg.logo_url == "https://ejemplo.com/logo.png"
+
+
+def test_una_ruta_rara_sigue_rechazandose():
+    """Aceptar `/uploads/` no puede significar aceptar cualquier cosa."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from app.schemas.empresa import LandingConfig
+
+    for malo in ("javascript:alert(1)", "/etc/passwd", "/uploads/../../etc/passwd\"x"):
+        with _pytest.raises(ValidationError):
+            LandingConfig(logo_url=malo)
+
+
+def test_el_tope_de_la_galeria_es_el_mismo_en_los_dos_lados():
+    """El número vive en dos lugares —Python y TypeScript— y tiene que decir
+    lo mismo. Si se separan, el panel deja cargar ocho, el servidor guarda
+    seis, y el dueño ve desaparecer dos sin ningún aviso.
+
+    Se lee el archivo del frontend como texto a propósito: no hay forma de
+    importarlo, y un test que compara contra una copia del número no protege
+    de nada.
+    """
+    import pathlib
+    import re
+
+    from app.schemas.empresa import MAX_GALERIA
+
+    ruta = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "frontend/src/app/(panel)/mi-pagina/page.tsx"
+    )
+    if not ruta.exists():
+        return  # en la imagen del backend el frontend no está montado
+
+    m = re.search(r"const MAX_FOTOS = (\d+);", ruta.read_text(encoding="utf-8"))
+    assert m, "No encontré MAX_FOTOS en el editor de Mi página."
+    assert int(m.group(1)) == MAX_GALERIA, (
+        f"El frontend deja {m.group(1)} fotos y el backend guarda {MAX_GALERIA}."
+    )

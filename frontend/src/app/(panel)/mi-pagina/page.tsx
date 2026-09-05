@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { urlDeImagen } from "@/lib/imagenes";
 import { toast } from "sonner";
 import {
   Save,
@@ -67,7 +68,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
-const MAX_FOTOS = 12;
+// Seis y no más: es una vidriera, no un álbum. El mismo número vive en el
+// backend (MAX_GALERIA); si se separan, el panel deja cargar ocho y el
+// servidor guarda seis, y el dueño ve desaparecer dos sin ningún aviso.
+const MAX_FOTOS = 6;
 
 type SeccionId =
   | "look"
@@ -434,7 +438,7 @@ function GaleriaEditor({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={url}
+                  src={urlDeImagen(url)}
                   alt={`Foto ${i + 1}`}
                   className="h-full w-full object-cover"
                   loading="lazy"
@@ -506,13 +510,18 @@ function EquipoEditor({
           {recursos.map((r) => (
             <div
               key={r.id}
-              className="flex items-center gap-3 rounded-xl border p-3"
+              className="flex flex-col gap-2 rounded-xl border p-3"
             >
+              {/* El nombre arriba, los botones abajo. En una fila sola —con la
+                  foto, el nombre y dos botones— el nombre es lo único que puede
+                  encogerse, y en la grilla de dos columnas se aplastaba hasta
+                  quedar en «L.»: la fila dejaba de decir de quién era. */}
+              <div className="flex items-center gap-3">
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
                 {r.foto_url ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={r.foto_url}
+                    src={urlDeImagen(r.foto_url)}
                     alt={r.nombre}
                     className="h-full w-full object-cover"
                   />
@@ -526,10 +535,9 @@ function EquipoEditor({
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {r.nombre}
               </span>
+              </div>
 
-              {/* Los botones no crecen: son lo último que puede robar espacio
-                  al nombre, que es lo que identifica la fila. */}
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <SubirImagen
                   proposito="avatar"
                   size="sm"
@@ -834,7 +842,7 @@ function ContenidoMiPagina() {
             <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border bg-muted">
               {form.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={form.logo_url} alt="Logo" className="h-full w-full object-cover" />
+                <img src={urlDeImagen(form.logo_url)} alt="Logo" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
                   sin logo
@@ -891,7 +899,7 @@ function ContenidoMiPagina() {
           {form.portada_url && (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
-              src={form.portada_url}
+              src={urlDeImagen(form.portada_url)}
               alt="Portada"
               className="h-16 w-28 shrink-0 rounded-lg border object-cover"
             />

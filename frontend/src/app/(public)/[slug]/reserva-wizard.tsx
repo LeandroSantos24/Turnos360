@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { urlDeImagen } from "@/lib/imagenes";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -552,7 +553,7 @@ export function ReservaWizard({
                       {r.foto_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={r.foto_url}
+                          src={urlDeImagen(r.foto_url)}
                           alt=""
                           className="h-11 w-11 shrink-0 rounded-full object-cover"
                         />

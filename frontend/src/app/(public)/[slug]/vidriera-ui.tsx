@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { urlDeImagen } from "@/lib/imagenes";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   MapPin,
@@ -86,13 +87,22 @@ export function hexA(hex: string | null | undefined, alpha: number): string {
 }
 
 /**
- * Deja pasar SOLO URLs http(s) absolutas y sin comillas ni paréntesis.
- * La portada termina dentro de un url(...) de CSS: una URL con comillas
- * podría romper la declaración. Además evita que un dato mal pegado
- * (una ruta de Windows, un javascript:) llegue al navegador.
+ * Deja pasar SOLO imágenes que podemos poner en un `url(...)` de CSS.
+ *
+ * La portada termina dentro de una declaración CSS: una URL con comillas o
+ * paréntesis puede romperla. Y filtra lo que no es una imagen navegable —una
+ * ruta de Windows mal pegada, un `javascript:`— antes de que llegue al DOM.
+ *
+ * ACEPTA DOS FORMAS
+ * Las http(s) absolutas de siempre, y las rutas `/uploads/...` que devuelve
+ * nuestro propio servidor al subir un archivo. Cuando esto solo aceptaba
+ * absolutas, TODA imagen subida quedaba descartada en silencio: la foto se
+ * guardaba bien, se veía bien en el panel, y no aparecía nunca en la página
+ * pública. Un `return null` no deja rastro en ningún log.
  */
 export function urlImagenSegura(u: string | null | undefined): string | null {
   const s = (u ?? "").trim();
+  if (/^\/uploads\/[^\s"'()<>]+$/.test(s)) return urlDeImagen(s);
   if (!/^https?:\/\/[^\s"'()<>]+$/i.test(s)) return null;
   return s;
 }
@@ -285,7 +295,7 @@ function Monograma({ v, acento, tam }: { v: Vidriera; acento: string; tam: strin
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={v.logo_url}
+        src={urlDeImagen(v.logo_url)}
         alt={v.nombre}
         className={`${tam} rounded-2xl border object-cover`}
         style={{ borderColor: BORDE }}
@@ -652,7 +662,7 @@ export function Equipo({ v, acento }: { v: Vidriera; acento: string }) {
                   {r.foto_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={r.foto_url}
+                      src={urlDeImagen(r.foto_url)}
                       alt={r.nombre}
                       loading="lazy"
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
@@ -721,7 +731,7 @@ export function Galeria({ v, acento }: { v: Vidriera; acento: string }) {
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={url}
+                src={urlDeImagen(url)}
                 alt=""
                 loading="lazy"
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
@@ -781,7 +791,7 @@ export function Galeria({ v, acento }: { v: Vidriera; acento: string }) {
               key={abierta}
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              src={fotos[abierta]}
+              src={urlDeImagen(fotos[abierta])}
               alt={`Foto ${abierta + 1} de ${fotos.length}`}
               className="max-h-[86vh] max-w-full rounded-xl object-contain"
               onClick={(e) => e.stopPropagation()}

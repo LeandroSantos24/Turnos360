@@ -18,13 +18,34 @@ from pydantic import BaseModel, Field, field_validator
 _URL_IMAGEN = re.compile(r"^https?://[^\s\"'()<>]+$", re.IGNORECASE)
 
 
+# Las rutas que devuelve nuestro propio endpoint de subida. Se guardan
+# RELATIVAS a propósito: sin el dominio adentro, mudar el servidor o cambiar de
+# dominio no rompe las imágenes de todos los clientes.
+_RUTA_SUBIDA = re.compile(r"^/uploads/[^\s\"'()<>]+$")
+
+
+# Cuántas fotos entran en la galería. El mismo número está en el frontend
+# (MAX_FOTOS): si se separan, el panel deja cargar ocho y el servidor guarda
+# seis, y el dueño ve desaparecer dos sin ningún aviso.
+MAX_GALERIA = 6
+
+
 def _url_imagen_o_none(v: str | None) -> str | None:
-    """Devuelve la URL limpia, o None si no es una URL de imagen usable."""
+    """Devuelve la URL limpia, o None si no es una URL de imagen usable.
+
+    ACEPTA DOS FORMAS, y la segunda hace falta desde que se pueden subir
+    archivos: una URL http(s) pegada a mano, o una ruta `/uploads/...` nuestra.
+    Cuando esto solo aceptaba absolutas, guardar un logo recién subido fallaba
+    con «tiene que empezar con http://» — sobre una imagen que el propio
+    sistema acababa de crear.
+    """
     if v is None:
         return None
     limpia = v.strip()
     if not limpia:
         return None
+    if _RUTA_SUBIDA.match(limpia):
+        return limpia
     if not _URL_IMAGEN.match(limpia):
         raise ValueError(
             "Tiene que ser un link que empiece con http:// o https:// "
@@ -142,7 +163,8 @@ class LandingConfig(BaseModel):
     color_marca: str | None = None
     horarios_atencion: dict | None = None
     redes: dict = {}
-    # Galería de la landing: lista de URLs de fotos (máx. razonable: 12).
+    # Galería de la landing. Seis y no más: es una vidriera, no un álbum —
+    # doce fotos hacen scrollear tanto que nadie llega al botón de reservar.
     galeria: list[str] = []
     # El look de la página. Ausente = el de siempre (claro, botón medio).
     tema: TemaVidriera = TemaVidriera()
@@ -166,7 +188,7 @@ class LandingConfig(BaseModel):
                 continue
             if url:
                 limpias.append(url)
-        return limpias[:12]
+        return limpias[:MAX_GALERIA]
 
 class SenasConfigOut(BaseModel):
     """Estado de la config de señas (el token JAMÁS se devuelve)."""
