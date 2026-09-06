@@ -2,16 +2,93 @@
 
 Regla de negocio (definida por Leandro):
 - La suscripción vence en una fecha (suscripcion_vence).
-- Tras el vencimiento hay 10 días de PRÓRROGA (gracia) antes de considerarla
-  vencida de verdad. Durante la prórroga el negocio sigue operando, pero se le
-  avisa que regularice.
+- Tras el vencimiento hay una PRÓRROGA (gracia) antes de considerarla vencida
+  de verdad. Durante la prórroga el negocio sigue operando con normalidad,
+  pero se le avisa que regularice.
+
+POR QUÉ TRES DÍAS Y NO DIEZ
+───────────────────────────
+Eran diez. Leandro los bajó a tres al rehacer el cobro: «nosotros damos 3 días
+de período de gracia». Con el débito automático la prórroga deja de ser el
+tiempo que tarda alguien en acordarse de transferir y pasa a ser el colchón
+para un problema puntual —una tarjeta vencida, un límite—, que es una ventana
+mucho más corta.
+
+EL NÚMERO NO SE ESCRIBE EN NINGÚN OTRO LADO
+───────────────────────────────────────────
+Todo lo que dependa de la prórroga —los correos de aviso, los textos del
+panel, el semáforo de cobranza, desde dónde se cuentan los 30 días del ciclo
+siguiente, cuándo se cortan las reservas— se calcula a partir de esta
+constante. Estuvo escrito a mano en los asuntos de los mails («te quedan 7
+días»), y bajarlo de diez a tres los habría dejado mintiendo sin que nada
+fallara.
 """
 
 import datetime as dt
 
 from app.models.organizacion import Empresa
 
-DIAS_PRORROGA = 10
+DIAS_PRORROGA = 3
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Cuánto paga esta empresa por mes
+# ══════════════════════════════════════════════════════════════════════════
+#
+# EL BUG QUE ORIGINÓ ESTA FUNCIÓN
+# ───────────────────────────────
+# Leandro abrió el panel de uno de sus negocios de prueba y vio «$14.990»
+# donde la grilla decía $13.900: «esto es muy mal, no sale 14990, habíamos
+# quedado en 13900».
+#
+# El número no estaba mal escrito en ningún lado. Al registrarse, la empresa
+# copiaba el precio de lista del momento a `empresa.precio_mensual` — una foto
+# del precio, tomada el día del alta, de un negocio que todavía no había
+# comprado nada. Esa empresa se había creado cuando el default del compose era
+# 14990. Meses después la grilla decía otra cosa y la foto seguía ahí,
+# contradiciendo a la grilla en la misma pantalla.
+#
+# La foto no se podía arreglar cambiándole el valor: el problema no es el
+# número, es que exista. Un precio congelado el día del alta empieza a mentir
+# el día que la lista se mueve, y nadie se entera hasta que un cliente lo lee.
+#
+# QUÉ SIGNIFICA AHORA CADA COSA
+# ─────────────────────────────
+#   · `empresa.precio_mensual` = PRECIO PACTADO. NULL salvo que el super-admin
+#     le haya puesto uno distinto del de lista (un piloto bonificado, un
+#     descuento por referido, un Enterprise a medida). Es lo que la columna
+#     siempre quiso decir.
+#   · el precio del plan (grilla) = lo que paga todo el mundo.
+#
+# Con eso, el precio de una empresa sin trato especial sigue a la grilla solo,
+# y cambiar la grilla no deja pantallas viejas atrás.
+
+
+def cuota_de(empresa: Empresa) -> tuple[float | None, str]:
+    """Cuánto paga por mes, y de dónde sale ese número.
+
+    Devuelve `(monto, origen)` con origen en:
+      · "pactada"     → precio especial cargado en la ficha comercial
+      · "plan"        → el de lista del plan que tiene
+      · "sin_precio"  → no le corresponde pagar (prueba, Enterprise sin pactar)
+
+    El origen viaja junto al monto porque la pantalla dice cosas distintas
+    según cuál sea: un precio pactado no se puede presentar como "el precio de
+    tu plan", y un Enterprise sin precio cargado necesita decir «hablemos» en
+    lugar de "$0".
+    """
+    from app.core import planes
+
+    if empresa.precio_mensual is not None:
+        return float(empresa.precio_mensual), "pactada"
+
+    lim = planes.limites_de(empresa.plan)
+    # precio 0 en la grilla = a convenir (Enterprise) o no se vende (la
+    # prueba). En los dos casos NO hay una cuota que mostrar, y devolver 0.0
+    # haría que el panel dijera "$0 por mes" a alguien que va a pagar.
+    if lim.precio > 0:
+        return float(lim.precio), "plan"
+    return None, "sin_precio"
 
 
 def estado_suscripcion(empresa: Empresa) -> dict:
@@ -111,6 +188,7 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
     from app.core.config import settings
     from app.models.saas import PagoSuscripcion
     from app.core import planes
+    from app.services import mp_debito
     from app.services import mp_suscripcion as mp_sus
 
     empresa = db.get(Empresa, empresa_id)
@@ -142,20 +220,38 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
         )
     )
 
+    cuota, cuota_origen = cuota_de(empresa)
+
     return {
         **estado,
-        "precio_mensual": (
-            float(empresa.precio_mensual) if empresa.precio_mensual is not None else None
-        ),
+        # LA CUOTA, UNA SOLA VEZ Y CON SU ORIGEN.
+        #
+        # `precio_mensual` es el precio PACTADO y hoy está en NULL para casi
+        # todo el mundo; el precio normal sale de la grilla del plan. La
+        # pantalla no tiene que resolver esa regla: recibe el número resuelto
+        # y, si necesita matizarlo, mira `cuota_origen`.
+        #
+        # Antes la pantalla mezclaba `precio_mensual` (una foto del precio de
+        # lista del día del alta) con la grilla que dibujaba abajo, y mostraba
+        # los dos números a la vez. Así fue como Leandro vio «$14.990» arriba
+        # de una grilla que decía $13.900.
+        "cuota": cuota,
+        "cuota_origen": cuota_origen,
+        # Se mantiene por compatibilidad con lo que ya lee la pantalla, pero
+        # ahora dice lo mismo que `cuota`.
+        "precio_mensual": cuota,
+        "precio_pactado": empresa.precio_mensual is not None,
         # Si todavía no se cargó la cuota pactada, el último pago sirve de
         # referencia: mostrarle un guion a alguien que ya pagó la cuota es raro.
         "ultimo_monto": float(pagos[0].monto) if pagos else None,
         # Precio de lista vigente. Se usa SOLO en el mensaje de la prueba
         # ("cuando termine seguís por $X"): a un negocio en prueba todavía no
         # se le pactó nada, y el número es justo lo que necesita para decidir.
-        # NO reemplaza a precio_mensual en la tarjeta de la cuota: a un piloto
-        # bonificado mostrarle el precio de lista como "su" cuota sería mentira.
         "precio_lista": float(settings.precio_vigente),
+        # El precio del plan de ENTRADA, que es a lo que cae quien termina la
+        # prueba sin elegir nada. Es el número honesto para "cuando termine,
+        # seguís por $X": el de lista puede tener una promo encima.
+        "precio_entrada": float(planes.GRILLA[planes.PLAN_DE_ENTRADA].precio),
         # Qué incluye el plan actual y cuánto se está usando. Es lo que hace
         # que el tope deje de ser una sorpresa cuando el dueño intenta cargar
         # un profesional más y le rebota.
@@ -180,6 +276,11 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
         # transferencia. Mostrar un botón que devuelve 503 es peor que no
         # mostrarlo.
         "mp_disponible": mp_sus.esta_activo(),
+        # EL DÉBITO AUTOMÁTICO: el "pagás y listo" de Netflix/Spotify.
+        # None = no tiene uno, y la pantalla ofrece activarlo. Ver
+        # services/mp_debito.py.
+        "debito": mp_debito.para_mostrar(db, empresa_id),
+        "debito_disponible": mp_debito.esta_activo(),
         "dias_prorroga": DIAS_PRORROGA,
         "pagos": [
             {

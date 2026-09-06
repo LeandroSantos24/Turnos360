@@ -55,6 +55,52 @@ def resolver_empresa(db: Session, slug: str) -> Empresa:
     return empresa
 
 
+def exigir_al_dia(empresa: Empresa) -> None:
+    """Frena la RESERVA cuando la suscripción venció y se pasó la prórroga.
+
+    POR QUÉ ESTO TIENE QUE EXISTIR
+    ──────────────────────────────
+    Sin esto, la prórroga no significa nada. El panel prometía «después de esa
+    fecha, la agenda y tu página dejan de estar disponibles» y no pasaba
+    absolutamente nada: una empresa podía dejar de pagar y seguir usando todo
+    para siempre. El aviso era una amenaza vacía, y las amenazas vacías se
+    descubren rápido — basta con que un cliente no pague un mes.
+
+    QUÉ SE CORTA Y QUÉ NO, que es la parte que importa
+    ─────────────────────────────────────────────────
+    Se corta UNA sola cosa: que ENTREN TURNOS NUEVOS por la página pública.
+    Eso es lo que le da valor al producto todos los días, así que es lo que
+    duele, y es lo único que hace falta cortar.
+
+    NO se toca nada de esto, y es a propósito:
+      · El panel sigue abriendo. El dueño tiene que poder entrar SIEMPRE —
+        entre otras cosas, a pagar. Un sistema que te deja afuera cuando le
+        debés plata te impide pagarle.
+      · La agenda que ya tiene sigue funcionando. Los turnos tomados son
+        compromisos con clientes reales que no tienen nada que ver con esto:
+        borrarlos o esconderlos sería hacerle daño a un tercero.
+      · Los datos no se tocan. Ni un cliente, ni un turno, ni una foto.
+
+    Los turnos ya reservados tampoco se cancelan. El que sacó turno para
+    mañana lo tiene: la deuda es del negocio con nosotros, no del cliente con
+    nadie.
+
+    LA PRÓRROGA ES LA QUE MANDA. Mientras esté dentro de los días de gracia
+    esto no frena nada; el corte es recién cuando `estado_suscripcion` dice
+    "vencida", que ya contempla la prórroga.
+    """
+    from app.services.suscripcion import estado_suscripcion
+
+    if estado_suscripcion(empresa)["estado"] != "vencida":
+        return
+
+    raise HTTPException(
+        status.HTTP_402_PAYMENT_REQUIRED,
+        "Este negocio no está tomando reservas por la web en este momento. "
+        "Escribile directamente para sacar tu turno.",
+    )
+
+
 def _sucursales_abiertas(db: Session, empresa_id: int) -> list[Sucursal]:
     return list(
         db.scalars(
@@ -162,7 +208,19 @@ def vidriera(db: Session, slug: str, sucursal_id: int | None = None) -> dict:
         select(Recurso).where(*cond_recursos).order_by(Recurso.nombre)
     ).all()
 
+    from app.services.suscripcion import estado_suscripcion
+
     return {
+        # ¿Se puede reservar por acá ahora mismo?
+        #
+        # False cuando la suscripción venció y se pasó la prórroga. La página
+        # se sigue viendo —el cliente final igual necesita el teléfono y la
+        # dirección— pero el botón de reservar no se dibuja.
+        #
+        # El servidor lo frena igual en `reservar()`: esto es para no hacerle
+        # completar todo el formulario a alguien que va a chocar contra un
+        # error al final, no para reemplazar el candado.
+        "reservas_abiertas": estado_suscripcion(empresa)["estado"] != "vencida",
         "nombre": empresa.nombre,
         "slug": empresa.slug,
         "descripcion": empresa.descripcion,
@@ -394,6 +452,14 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     'cualquiera'), busca-o-crea el cliente por teléfono (canal 'web') y delega la
     creación al motor de turnos (que revalida el hueco y crea en PENDIENTE)."""
     empresa = resolver_empresa(db, slug)
+    # ANTES DE TOCAR NADA: si la suscripción venció y se pasó la prórroga, acá
+    # no entra un turno más. Va en `reservar` y no en `vidriera` a propósito:
+    # la página se sigue viendo —con el teléfono y la dirección del negocio,
+    # que a su cliente le sirven igual— y lo único que deja de funcionar es el
+    # botón de reservar. Apagar la página entera castigaría al cliente final
+    # por una deuda que no es suya.
+    exigir_al_dia(empresa)
+
     servicio = _servicio_publico(db, empresa.id, servicio_id=datos.servicio_id)
 
     _validar_ventana(datos.inicio, empresa)

@@ -53,6 +53,7 @@ import { esDueno, type Rol } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ConfirmarProvider } from "@/components/confirmar";
 import { AvisoVerificacion } from "./aviso-verificacion";
+import { AvisoVencimiento } from "./aviso-vencimiento";
 
 type NavItem = {
   href: string;
@@ -462,6 +463,12 @@ export default function PanelLayout({
         {dueno && usuario.email_verificado === false && (
           <AvisoVerificacion email={usuario.email} />
         )}
+        {/* «Se está por vencer», en TODAS las pantallas y no solo en «Mi
+            suscripción» — que es la que se visita el día que se quiere pagar,
+            no la que avisa que hay que pagar. Solo al dueño: la cuota no es
+            asunto de quien atiende. El componente decide solo si corresponde
+            mostrar algo (ver aviso-vencimiento.tsx). */}
+        {dueno && <AvisoVencimiento />}
         {bloquearContenido ? (
           <div className="p-8 text-sm text-muted-foreground">Redirigiendo…</div>
         ) : (

@@ -1,14 +1,15 @@
 """Cobranza del SaaS: el semáforo de vencimientos y la caja de Turnos360.
 
 Reglas de negocio (definidas por Leandro):
-- El ciclo dura 30 días y después hay 10 días de PRÓRROGA antes de considerar
-  la cuenta vencida de verdad (DIAS_PRORROGA en services/suscripcion.py).
+- El ciclo dura 30 días y después hay unos días de PRÓRROGA antes de
+  considerar la cuenta vencida de verdad (DIAS_PRORROGA en
+  services/suscripcion.py; hoy son 3).
 - El semáforo del listado es para saber A QUIÉN COBRARLE de un vistazo:
     verde    = al día
     amarillo = vence dentro de los próximos DIAS_AVISO días (hay que ir a cobrar)
     rojo     = pasó el vencimiento (dentro o fuera de la prórroga)
     gris     = sin vencimiento (plan gratuito / piloto bonificado)
-  El rojo incluye la prórroga a propósito: durante esos 10 días el negocio
+  El rojo incluye la prórroga a propósito: durante esos días el negocio
   sigue operando, pero para vos ya es "me tiene que pagar".
 """
 
@@ -24,12 +25,19 @@ from app.core import planes
 from app.models import (
     AjusteSuscripcion,
     AvisoPago,
+    DebitoAutomatico,
     Empresa,
     PagoSuscripcion,
     Recurso,
     Usuario,
 )
-from app.services.suscripcion import DIAS_PRORROGA
+from app.services.suscripcion import DIAS_PRORROGA, cuota_de
+
+
+def _cuota(empresa: Empresa) -> float | None:
+    """La cuota mensual de esta empresa. None = no le corresponde pagar."""
+    monto, _origen = cuota_de(empresa)
+    return monto
 
 # Los tres estados de un aviso de transferencia. Son strings y no un Enum de
 # base porque los estados de cobranza cambian con el negocio y no vale una
@@ -165,6 +173,27 @@ def listar_empresas(
         ).all()
     )
 
+    # QUIÉN PAGA SOLO Y QUIÉN HAY QUE IR A BUSCAR.
+    #
+    # Es la distinción que ordena todo el trabajo de cobranza: un negocio con
+    # débito automático andando no necesita que nadie lo llame ni le revise el
+    # banco, y mezclarlo con los demás hace que la lista de "pendientes" sea
+    # más larga de lo que realmente es. El que tiene un cobro rebotado sí
+    # necesita atención —y URGENTE, porque él todavía no lo sabe—, así que se
+    # trae también la cuenta de fallos.
+    #
+    # Una consulta para todos, no una por fila: con cien clientes serían cien
+    # viajes a la base para dibujar una etiqueta.
+    debitos = {
+        fila.empresa_id: fila
+        for fila in db.scalars(
+            select(DebitoAutomatico).where(
+                DebitoAutomatico.empresa_id.in_(ids),
+                DebitoAutomatico.estado.in_(("pending", "authorized", "paused")),
+            )
+        )
+    }
+
     filas = []
     for e in empresas:
         sem = semaforo_de(e)
@@ -179,7 +208,20 @@ def listar_empresas(
                 "activa": e.activa,
                 "plan": e.plan or "gratuito",
                 "suscripcion_vence": str(e.suscripcion_vence) if e.suscripcion_vence else None,
-                "precio_mensual": float(e.precio_mensual) if e.precio_mensual else None,
+                # La cuota que se le cobra, venga de un precio pactado o de
+                # la grilla. La columna cruda diría NULL para casi todos.
+                "precio_mensual": _cuota(e),
+                "precio_pactado": e.precio_mensual is not None,
+                # El estado del débito automático, o None si no tiene.
+                "debito": (
+                    {
+                        "estado": debitos[e.id].estado,
+                        "cobros_fallidos": debitos[e.id].cobros_fallidos or 0,
+                        "ultimo_error": debitos[e.id].ultimo_error,
+                    }
+                    if e.id in debitos
+                    else None
+                ),
                 "razon_social": e.razon_social,
                 "cuit": e.cuit,
                 "contacto_nombre": e.contacto_nombre,
@@ -244,8 +286,15 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
             )
         ).all()
     )
-    pendiente = sum(float(e.precio_mensual) for e in por_vencer if e.precio_mensual)
-    sin_precio = sum(1 for e in por_vencer if not e.precio_mensual)
+    # LOS TRES NÚMEROS PASAN POR `cuota_de` Y NO POR LA COLUMNA.
+    #
+    # `precio_mensual` es el precio PACTADO y hoy está en NULL para casi todo
+    # el mundo: el precio normal de una empresa sale de la grilla de su plan.
+    # Sumando la columna a secas, un negocio en Pro sin trato especial aporta
+    # cero al MRR y cero a la deuda — el panel de cobranza mostraría una caja
+    # vacía con todos los clientes pagando.
+    pendiente = sum(_cuota(e) or 0 for e in por_vencer)
+    sin_precio = sum(1 for e in por_vencer if _cuota(e) is None)
 
     # Vencidas: ya pasaron la fecha (incluye las que están en prórroga).
     vencidas = list(
@@ -258,17 +307,22 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
             )
         ).all()
     )
-    deuda_vencida = sum(float(e.precio_mensual) for e in vencidas if e.precio_mensual)
+    deuda_vencida = sum(_cuota(e) or 0 for e in vencidas)
 
-    # MRR: suma de los precios pactados de las cuentas activas y al día o en
-    # prórroga. No incluye las bonificadas (precio None) ni las pausadas.
-    mrr = db.scalar(
-        select(func.coalesce(func.sum(Empresa.precio_mensual), 0)).where(
-            Empresa.activa.is_(True),
-            Empresa.precio_mensual.is_not(None),
-            no_en_prueba,
-        )
-    ) or Decimal(0)
+    # MRR: lo que factura por mes el parque de cuentas activas que ya no están
+    # en prueba. Deja afuera las que no tienen cuota (Enterprise sin precio
+    # cargado) — no las cuenta como cero, que es distinto: cero es un dato y
+    # "todavía no sabemos" es otro.
+    #
+    # SE SUMA EN PYTHON Y NO EN SQL a propósito: el precio de cada empresa ya
+    # no está en una columna, depende de su plan. Traer las filas está bien
+    # para un parque de clientes de esta escala; el día que sean decenas de
+    # miles, esto se resuelve con un CASE sobre el plan, no volviendo a
+    # congelar el precio en la fila.
+    activas = db.scalars(
+        select(Empresa).where(Empresa.activa.is_(True), no_en_prueba)
+    ).all()
+    mrr = Decimal(str(sum(_cuota(e) or 0 for e in activas)))
 
     en_prueba = db.scalar(
         select(func.count(Empresa.id)).where(
@@ -289,6 +343,9 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
         "empresas_vencidas": len(vencidas),
         "mrr": float(mrr),
         "dias_aviso": DIAS_AVISO,
+        # La prórroga viaja al panel para que los textos no la repitan
+        # escrita a mano. Decían «10 días de gracia» y la regla bajó a 3.
+        "dias_prorroga": DIAS_PRORROGA,
     }
 
 
@@ -307,7 +364,7 @@ def registrar_pago(
 
     DE DÓNDE SE CUENTAN LOS 30 DÍAS
     ───────────────────────────────
-    - Si paga DENTRO de la prórroga (hasta 10 días tarde), se cuenta desde el
+    - Si paga DENTRO de la prórroga, se cuenta desde el
       vencimiento viejo: el negocio nunca dejó de estar cubierto y no pierde
       los días de atraso.
     - Si paga DESPUÉS de la prórroga, se cuenta desde hoy. Estuvo cortado, así
@@ -648,11 +705,7 @@ def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
         avisado = float(a.monto) if a.monto is not None else None
         # Lo que le corresponde pagar: su precio pactado, o el del plan que
         # tiene. El pactado manda — para eso existe la columna.
-        esperado = (
-            float(empresa.precio_mensual)
-            if empresa.precio_mensual is not None
-            else float(planes.limites_de(empresa.plan).precio)
-        )
+        esperado = _cuota(empresa)
         salida.append(
             {
                 "id": a.id,
@@ -679,8 +732,14 @@ def listar_avisos(db: Session, solo_pendientes: bool = True) -> list[dict]:
                 # marca en verde: esos se confirman de un vistazo, y el ojo
                 # queda libre para los que NO coinciden, que son los únicos
                 # que hay que pensar.
+                # `esperado` es None cuando a la empresa no le corresponde
+                # una cuota (está en prueba, o es un Enterprise sin precio
+                # cargado). Ahí NUNCA coincide: no hay contra qué comparar, y
+                # pintar de verde una fila que nadie verificó es exactamente
+                # lo que esta columna vino a evitar.
                 "coincide": (
                     avisado is not None
+                    and esperado is not None
                     and esperado > 0
                     and abs(avisado - esperado) < 1
                 ),

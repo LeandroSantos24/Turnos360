@@ -24,10 +24,12 @@ import {
   leerMiSuscripcion,
   cambiarPlan,
   pagarSuscripcionMP,
+  sincronizarDebitoAutomatico,
   type MiSuscripcion,
 } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
 import { WA_LINK_ENTERPRISE } from "@/lib/contacto";
+import { DebitoAutomatico } from "./debito-automatico";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
@@ -227,6 +229,44 @@ export default function SuscripcionPage() {
     cargar();
   }, [cargar]);
 
+  /**
+   * La vuelta del checkout de Mercado Pago.
+   *
+   * EL PROBLEMA QUE RESUELVE, que es de confianza y no técnico: el dueño pone
+   * la tarjeta, Mercado Pago lo devuelve acá, y nuestra fila todavía dice
+   * `pending` porque el webhook no llegó. La pantalla le diría «te falta poner
+   * la tarjeta» justo después de que la puso. La persona hizo exactamente lo
+   * que le pedimos y le contestamos que no lo hizo.
+   *
+   * Al volver con `?debito=listo` se le pregunta a Mercado Pago en el acto y
+   * se limpia el parámetro de la URL, para que un F5 más tarde no vuelva a
+   * disparar la consulta.
+   */
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("debito") !== "listo") return;
+
+    url.searchParams.delete("debito");
+    window.history.replaceState(null, "", url.pathname + url.search);
+
+    let vivo = true;
+    (async () => {
+      try {
+        await sincronizarDebitoAutomatico();
+      } catch {
+        // Que Mercado Pago no conteste no puede romper la vuelta: se recarga
+        // igual y, si todavía dice "pending", el webhook lo va a resolver.
+      }
+      if (vivo) {
+        await cargar();
+        toast.success("Listo. Tu suscripción quedó activada.");
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [cargar]);
+
   if (cargando) {
     return <p className="p-6 text-sm text-muted-foreground">Cargando…</p>;
   }
@@ -235,7 +275,12 @@ export default function SuscripcionPage() {
   }
 
   const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
-  const precioAPagar = datos.precio_mensual ?? datos.precio_lista;
+  // LA CUOTA VIENE RESUELTA DEL SERVIDOR, y esta pantalla no la vuelve a
+  // calcular. Antes acá se mezclaba `precio_mensual` —una foto del precio de
+  // lista tomada el día del alta— con la grilla que se dibuja más abajo, y
+  // los dos números se contradecían en la misma pantalla: así fue como
+  // apareció «$14.990» arriba de una grilla que decía $13.900.
+  const precioAPagar = datos.cuota;
   // Lo que hay que transferir AHORA: el precio del plan que se está
   // comprando si vino de la grilla, y si no el de la cuota de siempre.
   const planComprando = planAComprar
@@ -292,33 +337,46 @@ export default function SuscripcionPage() {
               Cuota mensual
             </p>
             <p className="text-3xl font-extrabold tabular-nums" style={SYNE}>
-              {pesos(datos.precio_mensual ?? datos.ultimo_monto)}
+              {pesos(datos.cuota ?? datos.ultimo_monto)}
             </p>
-            {datos.precio_mensual === null && datos.ultimo_monto !== null && (
+            {datos.cuota === null && datos.ultimo_monto !== null && (
               <p className="text-xs text-muted-foreground">según tu último pago</p>
+            )}
+            {datos.precio_pactado && (
+              <p className="text-xs text-muted-foreground">tu precio acordado</p>
             )}
           </div>
         </div>
 
         {datos.estado === "prueba" && (
           <p className="mt-4 text-sm">
+            {/* Antes esto decía «escribinos para seguir». Era el techo del
+                producto: la prueba terminaba en un WhatsApp que había que
+                mandar y contestar, y el que no lo mandaba se perdía sin que
+                nadie se enterara. Ahora la prueba termina en un botón.
+
+                El precio que se promete es el del PLAN DE ENTRADA, que es a
+                lo que cae quien no elige nada. El de lista puede tener una
+                promo encima y prometería un número que después no es. */}
             Estás usando Turnos360 gratis, con todas las funciones. Cuando
-            termine la prueba, escribinos para seguir
-            {/* Cuota pactada si ya la hay; si no, el precio de lista. Antes,
-                sin cuota cargada la frase terminaba en "para seguir." y el
-                que estaba probando no sabía cuánto le iba a salir. */}
-            {datos.precio_mensual || datos.precio_lista
-              ? ` por ${pesos(datos.precio_mensual ?? datos.precio_lista)} por mes`
-              : ""}
-            . No te cobramos nada automáticamente ni te pedimos tarjeta.
+            termine la prueba podés seguir desde acá
+            {datos.precio_entrada ? ` desde ${pesos(datos.precio_entrada)} por mes` : ""}
+            , sin que nadie tenga que hacer nada. Durante la prueba no te
+            cobramos ni te pedimos tarjeta.
           </p>
         )}
 
-        {datos.estado === "activa" && datos.corte && (
+        {datos.estado === "activa" && datos.corte && !datos.debito && (
           <p className="mt-4 text-sm">
+            {/* Solo si NO tiene débito automático. A quien paga solo, contarle
+                el plazo de gracia es información que no necesita y que
+                además suena a advertencia. */}
             Después del vencimiento tenés{" "}
-            <strong>{datos.dias_prorroga} días de gracia</strong> para pagar sin
-            que se corte nada. En la práctica, tu servicio sigue andando hasta el{" "}
+            <strong>
+              {datos.dias_prorroga} día{datos.dias_prorroga === 1 ? "" : "s"} de
+              gracia
+            </strong>{" "}
+            para pagar sin que se corte nada: tu servicio sigue andando hasta el{" "}
             <strong>{fechaLarga(datos.corte)}</strong>.
           </p>
         )}
@@ -327,9 +385,10 @@ export default function SuscripcionPage() {
           <p className="mt-4 flex items-start gap-2 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Tu cuenta sigue funcionando con normalidad. Tenés tiempo de pagar
-              hasta el <strong>{fechaLarga(datos.corte)}</strong>; pasada esa
-              fecha, la agenda y tu página dejan de estar disponibles.
+              Tu cuenta sigue funcionando con normalidad. Tenés tiempo de
+              pagar hasta el <strong>{fechaLarga(datos.corte)}</strong>; pasada
+              esa fecha, tu página deja de tomar reservas nuevas. Tu agenda,
+              tus clientes y los turnos ya tomados no se tocan.
             </span>
           </p>
         )}
@@ -351,7 +410,10 @@ export default function SuscripcionPage() {
                   ?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
-              {datos.estado === "prueba" ? "Activar mi plan Pro" : "Renovar mi plan"}
+              {/* Decía «Activar mi plan Pro», con Pro escrito a mano: el
+                  botón nombraba un plan que el dueño no había elegido y que
+                  no es el que la pantalla iba a cobrarle. */}
+              {datos.estado === "prueba" ? "Elegir mi plan" : "Pagar este mes"}
             </Button>
             {precioAPagar !== null && (
               <span className="text-sm text-muted-foreground">
@@ -361,6 +423,12 @@ export default function SuscripcionPage() {
           </div>
         )}
       </section>
+
+      {/* EL DÉBITO AUTOMÁTICO VA ACÁ, pegado al estado y arriba de todo el
+          resto. Es la opción que le saca trabajo a los dos lados y la que
+          queremos que elija; «Cómo pagar» queda abajo como alternativa para
+          el que prefiere no dar una tarjeta. */}
+      <DebitoAutomatico datos={datos} onCambio={cargar} />
 
       {/* Qué incluye tu plan, y cuánto estás usando.
           Va ANTES de "Cómo pagar" a propósito: el dueño tiene que ver que se

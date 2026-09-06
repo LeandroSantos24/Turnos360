@@ -95,7 +95,14 @@ def registrar(db: Session, datos) -> tuple[Empresa, Usuario, str]:
         rubro_id=rubro.id,
         config_pack={},
         prueba_hasta=hoy + dt.timedelta(days=settings.dias_prueba_registro),
-        precio_mensual=settings.precio_vigente,
+        # `precio_mensual` queda en NULL A PROPÓSITO. Es el PRECIO PACTADO
+        # (un trato especial), no el precio de esta empresa: el de una empresa
+        # sin trato especial sale de la grilla, con `suscripcion.cuota_de`.
+        #
+        # Antes acá se copiaba `settings.precio_vigente`, y esa foto del
+        # precio del día del alta es exactamente lo que le mostró «$14.990» a
+        # Leandro meses después de que la grilla dijera otra cosa. Ver el
+        # comentario largo en services/suscripcion.py.
         de_registro_publico=True,
     )
     db.add(empresa)

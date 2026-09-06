@@ -170,6 +170,20 @@ export interface EmpresaCobranza {
   plan: string;
   suscripcion_vence: string | null;
   precio_mensual: number | null;
+  /** ¿Tiene un precio especial cargado, o paga simplemente el de su plan? */
+  precio_pactado: boolean;
+  /**
+   * El débito automático de Mercado Pago, o null si no tiene.
+   *
+   * Es la distinción que ordena el trabajo de cobranza: a quien paga solo no
+   * hay que llamarlo ni revisarle el banco. Al que tiene un cobro rebotado
+   * sí, y urgente — él todavía no lo sabe.
+   */
+  debito: {
+    estado: string;
+    cobros_fallidos: number;
+    ultimo_error: string | null;
+  } | null;
   razon_social: string | null;
   cuit: string | null;
   contacto_nombre: string | null;
@@ -199,6 +213,8 @@ export interface ResumenCobranza {
   empresas_vencidas: number;
   mrr: number;
   dias_aviso: number;
+  /** Días de gracia después del vencimiento. Lo define el backend. */
+  dias_prorroga: number;
 }
 
 export interface PagoSuscripcion {
@@ -399,4 +415,75 @@ export function guardarFicha(
     method: "PUT",
     body: JSON.stringify(datos),
   });
+}
+
+/**
+ * La ficha completa de un negocio: identidad, cobranza, uso y actividad.
+ *
+ * Viene todo junto y no en cuatro llamadas porque la pregunta es UNA —«¿cómo
+ * está este cliente?»— y las respuestas parciales invitan a concluir con la
+ * mitad de los datos: un negocio al día que hace tres meses no carga un turno
+ * no es un buen cliente, es uno que se va a ir.
+ */
+export interface FichaEmpresa {
+  id: number;
+  nombre: string;
+  slug: string;
+  rubro: string | null;
+  activa: boolean;
+  creada_en: string | null;
+  antiguedad_dias: number | null;
+  plan: {
+    codigo: string;
+    etiqueta: string;
+    resumen: string;
+    precio: number;
+    /** El precio salió de la ficha comercial y no de la grilla. */
+    precio_pactado: boolean;
+  };
+  suscripcion: {
+    estado: string;
+    vence: string | null;
+    prueba_hasta: string | null;
+    color: "verde" | "amarillo" | "rojo" | "gris" | "azul";
+    detalle: string;
+    dias_restantes: number | null;
+    en_prorroga: boolean;
+  };
+  cobranza: {
+    pagos: number;
+    total_cobrado: number;
+    ultimo_pago: { fecha: string; monto: number; metodo: string } | null;
+    aviso_pendiente: {
+      id: number;
+      monto: number | null;
+      referencia: string | null;
+      creado_en: string | null;
+    } | null;
+  };
+  uso: {
+    profesionales: { usados: number; tope: number | null };
+    usuarios: { usados: number; tope: number | null };
+    sucursales: { usados: number; tope: number | null };
+    clientes: number;
+    servicios: number;
+  };
+  actividad: {
+    turnos_30d: number;
+    ultimo_turno: string | null;
+    visitas_30d: number;
+    visitas_por_dia: { dia: string; visitas: number }[];
+  };
+  contacto: {
+    nombre: string | null;
+    email: string | null;
+    telefono: string | null;
+    razon_social: string | null;
+    cuit: string | null;
+  };
+  notas_admin: string | null;
+}
+
+export function fichaEmpresa(empresaId: number): Promise<FichaEmpresa> {
+  return adminRequest<FichaEmpresa>(`/admin/empresas/${empresaId}/ficha`);
 }

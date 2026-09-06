@@ -88,16 +88,27 @@ def precio_de(empresa: Empresa, plan: str | None = None) -> float:
     de un Enterprise. Si existe, gana sobre la grilla — es exactamente para eso
     que existe la columna.
 
-    Si no hay pactado y se está comprando un plan concreto, se cobra el de ese
-    plan. El fallback a `settings.precio_vigente` queda para el botón viejo de
-    «renovar» sin elegir plan, que cobra el de entrada.
+    `plan` es el que se está COMPRANDO, que puede no ser el que tiene: quien
+    está en Inicial y toca «Pasar a Pro» tiene que pagar Pro. Por eso el plan
+    comprado se mira antes que el plan actual, y solo si no vino ninguno se
+    cae en la cuota que le corresponde hoy (`cuota_de`).
+
+    El último recurso es el precio de lista, para el botón viejo de «renovar»
+    de una empresa sin plan ni pactado. Nunca devuelve 0: cobrar cero por
+    Mercado Pago es un error que MP rechaza y que acá se ve como un botón que
+    no hace nada.
     """
+    from app.services.suscripcion import cuota_de
+
     if empresa.precio_mensual is not None:
         return float(empresa.precio_mensual)
     if plan:
         limites = limites_de(plan)
         if limites.precio > 0:
             return float(limites.precio)
+    monto, _origen = cuota_de(empresa)
+    if monto:
+        return float(monto)
     return float(settings.precio_vigente)
 
 

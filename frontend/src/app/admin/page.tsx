@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Users, ExternalLink, Copy, Check, Crown } from "lucide-react";
+import { Plus, Users, ExternalLink, Copy, Check, Crown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirmar } from "@/components/confirmar";
 
@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Ficha } from "./ficha-empresa";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,10 @@ export default function AdminEmpresasPage() {
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
   const [copiadoId, setCopiadoId] = useState<number | null>(null);
+  // Qué ficha está desplegada. UNA sola a la vez: con varias abiertas la
+  // pantalla se vuelve un muro y se pierde justamente lo que la ficha vino a
+  // dar, que es poder mirar UN negocio y entenderlo entero.
+  const [fichaAbierta, setFichaAbierta] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   // formulario
@@ -375,12 +380,25 @@ export default function AdminEmpresasPage() {
       ) : (
         <div className="space-y-3">
           {empresas.map((e) => (
-            <div
-              key={e.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4"
-            >
-              <div className="min-w-0">
+            <div key={e.id} className="rounded-2xl border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+              {/* Tocar el nombre despliega la ficha. Es un <button> y no un
+                  div con onClick para que se llegue con el teclado y el lector
+                  de pantalla anuncie que se abre y se cierra. */}
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                aria-expanded={fichaAbierta === e.id}
+                onClick={() =>
+                  setFichaAbierta((actual) => (actual === e.id ? null : e.id))
+                }
+              >
                 <p className="flex items-center gap-2 font-medium">
+                  <ChevronRight
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                      fichaAbierta === e.id ? "rotate-90" : ""
+                    }`}
+                  />
                   {e.nombre}
                   {!e.activa && (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -396,7 +414,7 @@ export default function AdminEmpresasPage() {
                     <> · vence {new Date(`${e.suscripcion_vence}T12:00:00`).toLocaleDateString("es-AR")}</>
                   )}
                 </p>
-              </div>
+              </button>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <label className="mr-1 flex items-center gap-2 text-sm text-muted-foreground">
                   <Switch
@@ -438,6 +456,16 @@ export default function AdminEmpresasPage() {
                   </Button>
                 </Link>
               </div>
+            </div>
+
+            {/* La ficha se monta recién al abrirla: el listado puede tener
+                cien empresas y pedir cien fichas al cargar la pantalla sería
+                cien consultas para mirar una. */}
+            {fichaAbierta === e.id && (
+              <div className="border-t p-4">
+                <Ficha empresaId={e.id} />
+              </div>
+            )}
             </div>
           ))}
         </div>

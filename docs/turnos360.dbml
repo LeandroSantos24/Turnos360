@@ -261,6 +261,27 @@ Table cupon_descuento {
   }
 }
 
+Table debito_automatico {
+  id integer [pk]
+  empresa_id integer [ref: > empresa.id, not null]
+  preapproval_id varchar(64) [not null]
+  estado varchar(20) [not null]
+  plan varchar(20)
+  monto numeric(12, 2)
+  proximo_cobro date
+  cobros_fallidos integer [not null]
+  ultimo_error varchar(200)
+  creada_en timestamp with time zone [not null]
+  actualizada_en timestamp with time zone
+  cancelada_en timestamp with time zone
+  cancelada_por varchar(160)
+
+  Indexes {
+    empresa_id [name: 'ix_debito_automatico_empresa_id']
+    empresa_id [name: 'uq_debito_vivo_por_empresa', unique]
+  }
+}
+
 Table deuda_cliente {
   id integer [pk]
   cliente_id integer [ref: > cliente.id, not null]
@@ -888,6 +909,18 @@ Table usuario {
 
   Indexes {
     empresa_id [name: 'ix_usuario_empresa_id']
+  }
+}
+
+Table visita_vidriera {
+  id integer [pk]
+  empresa_id integer [ref: > empresa.id, not null]
+  dia date [not null]
+  visitas integer [not null]
+
+  Indexes {
+    dia [name: 'ix_visita_vidriera_dia']
+    empresa_id [name: 'ix_visita_vidriera_empresa_id']
   }
 }
 

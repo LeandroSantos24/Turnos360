@@ -35,11 +35,15 @@ from app.models.cupon import CuponDescuento
 from app.models.saas import (  # cobranza del SaaS
     AjusteSuscripcion,
     AvisoPago,
+    DebitoAutomatico,
     PagoSuscripcion,
+    VisitaVidriera,
 )
 from app.models.whatsapp import MovimientoWhatsapp, SaldoWhatsapp
 
 __all__ = [
+    "VisitaVidriera",
+    "DebitoAutomatico",
     "CuponDescuento",
     "Base",
     "Rubro", "Empresa", "Sucursal", "Usuario", "SuperAdmin",

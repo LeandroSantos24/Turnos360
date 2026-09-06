@@ -255,6 +255,22 @@ def historial_pagos(empresa_id: int, admin: SuperAdminActual, db: DB):
     return cobranza.historial_pagos(db, empresa_id)
 
 
+@router.get("/empresas/{empresa_id}/ficha")
+def ficha_empresa(empresa_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    """Todo lo que hace falta para saber cómo está un cliente, en una llamada.
+
+    Identidad, cobranza, uso y actividad juntos. Van juntos porque la pregunta
+    es una sola —«¿cómo está este negocio?»— y las respuestas parciales invitan
+    a concluir con la mitad de los datos: uno al día que hace tres meses no
+    carga un turno no es un buen cliente, es uno que se va a ir, y eso solo se
+    ve mirando la cobranza y el uso al mismo tiempo.
+    """
+    from app.services import ficha_admin
+
+    empresa = _empresa_o_404(db, empresa_id)
+    return ficha_admin.ficha(db, empresa)
+
+
 @router.get("/pagos/{pago_id}/verificar-mp")
 def verificar_pago_mp(pago_id: int, admin: SuperAdminActual, db: DB) -> dict:
     """¿Mercado Pago sigue diciendo que esta cuota está cobrada?

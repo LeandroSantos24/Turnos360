@@ -158,11 +158,25 @@ export interface MiSuscripcion {
   /** Hasta cuándo puede pagar sin que se corte (vencimiento + gracia). */
   corte: string | null;
   dias_hasta_corte: number | null;
+  /**
+   * LA CUOTA, resuelta por el servidor: el precio pactado si lo hay, y si no
+   * el del plan. La pantalla NO tiene que volver a resolver esa regla — lo
+   * hacía, y por eso mostraba «$14.990» arriba de una grilla que decía otra
+   * cosa. null = no le corresponde pagar (prueba, o Enterprise sin pactar).
+   */
+  cuota: number | null;
+  /** De dónde salió `cuota`: "pactada" | "plan" | "sin_precio". */
+  cuota_origen: string;
+  /** Alias histórico de `cuota`. Dice lo mismo. */
   precio_mensual: number | null;
+  /** ¿Tiene un precio especial cargado? Si no, paga simplemente el de su plan. */
+  precio_pactado: boolean;
   dias_prorroga: number;
   ultimo_monto: number | null;
   /** Precio de lista vigente (config del servidor). Solo para el aviso de la prueba. */
   precio_lista: number | null;
+  /** El precio del plan de entrada: a lo que cae quien termina la prueba. */
+  precio_entrada: number | null;
   pagos: PagoSuscripcion[];
   cobro: DatosCobro;
   /** Qué incluye el plan actual y cuánto se está usando. */
@@ -179,6 +193,33 @@ export interface MiSuscripcion {
   plan_programado_etiqueta: string | null;
   /** Sin token del SaaS no hay botón de pago: solo transferencia. */
   mp_disponible: boolean;
+  /** null = no tiene débito automático, y la pantalla ofrece activarlo. */
+  debito: DebitoAutomatico | null;
+  /** ¿Se puede activar el débito automático en este entorno? */
+  debito_disponible: boolean;
+}
+
+/**
+ * El débito automático: la cuota se cobra sola todos los meses.
+ *
+ * Nunca trae datos de la tarjeta —ni los últimos cuatro dígitos—: la tarjeta
+ * vive en Mercado Pago y ahí se queda.
+ */
+export interface DebitoAutomatico {
+  /** pending | authorized | paused | cancelled, tal cual lo dice Mercado Pago. */
+  estado: string;
+  etiqueta: string;
+  color: string;
+  detalle: string;
+  plan: string | null;
+  plan_etiqueta: string | null;
+  monto: number | null;
+  proximo_cobro: string | null;
+  desde: string | null;
+  /** Cobros seguidos que salieron rechazados. > 0 = hay que avisar YA. */
+  cobros_fallidos: number;
+  /** El motivo del último rechazo, en las palabras de Mercado Pago. */
+  ultimo_error: string | null;
 }
 
 export interface PlanDeLaGrilla {
@@ -240,6 +281,34 @@ export function leerMiSuscripcion(): Promise<MiSuscripcion> {
 export function pagarSuscripcionMP(plan?: string): Promise<{ url: string }> {
   const q = plan ? `?plan=${encodeURIComponent(plan)}` : "";
   return api.post<{ url: string }>(`/empresa/suscripcion/pagar-mp${q}`, {});
+}
+
+/**
+ * Activa el débito automático. Devuelve la URL del checkout de Mercado Pago
+ * donde el dueño carga la tarjeta — que nunca pasa por acá.
+ */
+export function activarDebitoAutomatico(plan: string): Promise<{ url: string }> {
+  return api.post<{ url: string }>(
+    `/empresa/suscripcion/debito-automatico?plan=${encodeURIComponent(plan)}`,
+    {},
+  );
+}
+
+/**
+ * Le pregunta a Mercado Pago cómo quedó la suscripción, ahora. Se llama al
+ * volver del checkout: sin esto, el que acaba de poner la tarjeta vuelve y la
+ * pantalla le dice que le falta ponerla.
+ */
+export function sincronizarDebitoAutomatico(): Promise<{ estado: string | null }> {
+  return api.post<{ estado: string | null }>(
+    "/empresa/suscripcion/debito-automatico/sincronizar",
+    {},
+  );
+}
+
+/** Corta el débito. El servicio sigue hasta el final del mes ya cobrado. */
+export function cancelarDebitoAutomatico(): Promise<{ ok: boolean }> {
+  return api.delete<{ ok: boolean }>("/empresa/suscripcion/debito-automatico");
 }
 
 /** "Ya te transferí". Queda pendiente de que lo confirmemos contra el banco. */

@@ -926,15 +926,53 @@ def enviar_prueba_campana(empresa_id: int, tipo: str, destino: str) -> None:
 # Cobranza del SaaS: avisos de vencimiento al negocio
 # ============================================================
 
-# Hitos del ciclo, en días respecto de suscripcion_vence.
-# Negativo = después del vencimiento (dentro de la prórroga).
-_HITOS_VENCIMIENTO = {
-    10: ("aviso", "Tu suscripción vence en 10 días"),
-    3: ("aviso", "Tu suscripción vence en 3 días"),
-    0: ("vence", "Tu suscripción vence hoy"),
-    -3: ("gracia", "Tu suscripción venció · te quedan 7 días"),
-    -8: ("ultimo", "Últimos 2 días antes de que se corte el servicio"),
-}
+def _hitos_de_vencimiento() -> dict[int, tuple[str, str]]:
+    """Cuándo se avisa, en días respecto de `suscripcion_vence`.
+
+    Negativo = después del vencimiento, es decir dentro de la prórroga.
+
+    SE CALCULA, NO SE ESCRIBE
+    ─────────────────────────
+    Esta tabla estaba escrita a mano con la prórroga de diez días metida en
+    los asuntos: «te quedan 7 días», «últimos 2 días». El día que Leandro la
+    bajó a tres, los dos avisos posteriores al vencimiento habrían caído fuera
+    de la prórroga —el de -8 nunca se habría mandado, porque a los 8 días de
+    vencido el servicio ya está cortado— y el de -3 habría prometido siete
+    días que ya no existían. Nada habría fallado: los mails habrían salido
+    mintiendo.
+
+    Ahora los dos avisos de la prórroga se derivan de DIAS_PRORROGA:
+      · uno al día siguiente del vencimiento, cuando todavía hay margen;
+      · otro el ÚLTIMO día, que es el que de verdad mueve a alguien.
+    Con una prórroga de 1 o 2 días los dos hitos coinciden y queda uno solo,
+    que es lo correcto: dos mails el mismo día son spam.
+    """
+    from app.services.suscripcion import DIAS_PRORROGA
+
+    hitos: dict[int, tuple[str, str]] = {
+        10: ("aviso", "Tu suscripción vence en 10 días"),
+        3: ("aviso", "Tu suscripción vence en 3 días"),
+        0: ("vence", "Tu suscripción vence hoy"),
+    }
+
+    def plural(n: int) -> str:
+        return f"{n} día" if n == 1 else f"{n} días"
+
+    if DIAS_PRORROGA >= 1:
+        # El último día de gracia. Se pisa con el de abajo si la prórroga es
+        # de un solo día, y está bien: queda este, que es el más urgente.
+        hitos[-DIAS_PRORROGA] = (
+            "ultimo",
+            "Último día antes de que se corte el servicio",
+        )
+    if DIAS_PRORROGA >= 2:
+        restantes = DIAS_PRORROGA - 1
+        hitos[-1] = (
+            "gracia",
+            f"Tu suscripción venció · te {'queda' if restantes == 1 else 'quedan'} "
+            f"{plural(restantes)}",
+        )
+    return hitos
 
 
 def _email_del_dueno(db, empresa) -> str | None:
@@ -993,7 +1031,8 @@ def avisar_vencimientos() -> None:
     """
     from app.core.config import settings
     from app.services import cobranza
-    from app.services.suscripcion import DIAS_PRORROGA
+    from app.services import mp_debito
+    from app.services.suscripcion import DIAS_PRORROGA, cuota_de
 
     # Las bajas de plan anotadas cuyo ciclo ya venció se aplican ACÁ, en el
     # mismo barrido diario. Va primero, antes de mandar ningún aviso: si se
@@ -1011,6 +1050,7 @@ def avisar_vencimientos() -> None:
         log.exception("Falló aplicar las bajas de plan programadas")
 
     hoy = dt.date.today()
+    hitos = _hitos_de_vencimiento()
     with SessionLocal() as db:
         empresas = db.scalars(select(Empresa).where(Empresa.activa.is_(True))).all()
         for empresa in empresas:
@@ -1022,8 +1062,26 @@ def avisar_vencimientos() -> None:
             if empresa.prueba_hasta is not None and hoy <= empresa.prueba_hasta:
                 continue
 
+            # EL DÉBITO AUTOMÁTICO ANDANDO SILENCIA ESTOS AVISOS.
+            #
+            # Es lo que hace que el «pagás y listo» sea cierto. Mandarle a
+            # alguien «tu suscripción vence en 10 días» cuando la tarjeta se
+            # va a cobrar sola es pedirle que se preocupe por algo que ya
+            # resolvió — y es exactamente lo contrario de lo que le
+            # prometimos al activarlo. Netflix no te avisa que vence.
+            #
+            # Los que tienen un cobro REBOTADO sí reciben el aviso: ahí el
+            # débito no va a resolver nada solo y el dueño todavía no lo sabe.
+            debito = mp_debito.vigente(db, empresa.id)
+            if (
+                debito is not None
+                and debito.estado == mp_debito.ACTIVO
+                and not (debito.cobros_fallidos or 0)
+            ):
+                continue
+
             dias = (vence - hoy).days
-            hito = _HITOS_VENCIMIENTO.get(dias)
+            hito = hitos.get(dias)
             if hito is None:
                 continue
             clave, asunto = hito
@@ -1052,10 +1110,12 @@ def avisar_vencimientos() -> None:
                 continue
 
             corte = vence + dt.timedelta(days=DIAS_PRORROGA)
+            # La cuota sale de `cuota_de` y no de la columna: `precio_mensual`
+            # es el precio PACTADO y está en NULL para casi todos, así que
+            # leyéndola cruda el mail de cobranza no diría ningún importe.
+            cuota, _origen = cuota_de(empresa)
             monto = (
-                f"${float(empresa.precio_mensual):,.0f}".replace(",", ".")
-                if empresa.precio_mensual is not None
-                else None
+                f"${float(cuota):,.0f}".replace(",", ".") if cuota else None
             )
 
             if dias > 0:
@@ -1076,24 +1136,39 @@ def avisar_vencimientos() -> None:
             if monto:
                 lineas.append(f"El importe es de <b>{monto}</b>.")
 
+            # QUÉ PASA DESPUÉS DE LA FECHA, dicho con exactitud.
+            #
+            # Este texto prometía que «la agenda y tu página dejan de estar
+            # disponibles». No es lo que pasa: lo único que se corta son las
+            # reservas nuevas por la web (services/publico.py::exigir_al_dia).
+            # Un mail de cobranza que exagera se descubre el primer mes que
+            # alguien no paga, y a partir de ahí no se le cree tampoco cuando
+            # dice la verdad.
             lineas.append(
                 f"Tu cuenta sigue funcionando con normalidad hasta el "
-                f"<b>{corte.strftime('%d/%m/%Y')}</b>. Después de esa fecha, la "
-                "agenda y tu página dejan de estar disponibles."
-            )
-            lineas += _datos_de_pago_html()
-            lineas.append(
-                "Cuando transfieras, mandanos el comprobante y registramos el "
-                "pago: tu vencimiento se corre 30 días."
+                f"<b>{corte.strftime('%d/%m/%Y')}</b>. Después de esa fecha tu "
+                "página deja de tomar reservas nuevas; tu agenda, tus clientes "
+                "y los turnos ya tomados no se tocan."
             )
 
-            boton = None
-            if settings.cobro_whatsapp:
-                url = (
-                    f"https://wa.me/{settings.cobro_whatsapp}"
-                    "?text=Hola!%20Te%20paso%20el%20comprobante%20de%20Turnos360."
+            # EL CAMINO CORTO VA PRIMERO, y en un mail de cobranza esa es toda
+            # la diferencia. Con el débito automático el problema se resuelve
+            # en un click y no vuelve el mes que viene; el CBU obliga a salir
+            # del mail, entrar al banco y volver a avisarnos.
+            panel = f"{settings.public_base_url}/suscripcion"
+            boton = ("Pagar y activar el débito automático", panel)
+            lineas.append(
+                f'Lo más rápido es entrar a <a href="{panel}">Mi suscripción</a> '
+                "y activar el débito automático: ponés la tarjeta una vez y no "
+                "te tenés que acordar nunca más."
+            )
+
+            lineas += _datos_de_pago_html()
+            if settings.cobro_alias or settings.cobro_cbu:
+                lineas.append(
+                    "Si preferís transferir, mandanos el comprobante y "
+                    "registramos el pago: tu vencimiento se corre 30 días."
                 )
-                boton = ("Mandar el comprobante", url)
 
             html = _plantilla(
                 titulo=asunto,

@@ -33,13 +33,60 @@ from app.models.enums import EstadoTurno
 from app.services import finanzas as svc_fin
 from app.core import firma_mp
 from app.services import mercadopago as mp
+from app.services import mp_debito
 from app.services import mp_suscripcion as mp_sus
 from app.services import publico as svc
+from app.services import visitas
 from app.services import registro as svc_registro
 
 log = logging.getLogger("turnos360.mp")
 
 router = APIRouter(prefix="/publico", tags=["publico"])
+
+
+def _es_id_numerico(ident: str) -> bool:
+    """Los ids de pagos y de cobros mensuales son números."""
+    return ident.isdigit() and len(ident) <= 24
+
+
+def _es_id_de_suscripcion(ident: str) -> bool:
+    """Los ids de preapproval NO son números: son hexadecimal.
+
+    Se ven así: `2c938084726fca480172750000000000`. La primera versión de
+    este despacho les aplicaba el mismo `.isdigit()` que a los pagos, y eso
+    habría descartado en silencio TODAS las notificaciones de suscripciones:
+    el débito automático se habría activado en Mercado Pago y el panel nunca
+    se habría enterado.
+    """
+    return ident.isalnum() and 8 <= len(ident) <= 64
+
+
+# Qué hacer con cada tipo de aviso de la cuenta de Turnos360, y cómo se ve un
+# id válido para ese tipo.
+#
+# Es un dict y no una cadena de `if` a propósito: el tipo se compara por
+# IGUALDAD contra las claves. Con `in`/`startswith`, `subscription_authorized_
+# payment` cae en la rama de "payment" —ya pasó— y el cobro del mes se busca
+# en el endpoint equivocado.
+#
+# El validador va acá y no adentro del handler porque es lo que frena el
+# tráfico saliente: un id inventado distinto en cada request se saltearía la
+# idempotencia y dispararía una llamada a la API de MP por cada uno.
+#
+# `subscription_preapproval_plan` no está: son avisos sobre PLANES guardados
+# en la cuenta de Mercado Pago, y acá las suscripciones se crean sin plan
+# asociado (ver services/mp_debito.py). Si algún día llega uno, se ignora.
+_TIPOS_DE_AVISO = {
+    "payment": (_es_id_numerico, lambda db, ident: mp_sus.acreditar(db, ident)),
+    "subscription_authorized_payment": (
+        _es_id_numerico,
+        lambda db, ident: mp_debito.acreditar_cobro(db, ident),
+    ),
+    "subscription_preapproval": (
+        _es_id_de_suscripcion,
+        lambda db, ident: mp_debito.sincronizar(db, ident),
+    ),
+}
 
 
 @router.post("/mp/webhook-suscripcion")
@@ -52,6 +99,26 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
     corresponde el pago sale del external_reference ("sus:<empresa_id>"), que
     puso la propia preferencia al crearse.
 
+    POR ESTA MISMA PUERTA ENTRAN TRES COSAS DISTINTAS
+    ─────────────────────────────────────────────────
+    Mercado Pago avisa el tipo en `type` (o `topic`), y hay que despacharlo
+    por el valor EXACTO:
+
+      · `payment`                        → un pago suelto (link o checkout).
+      · `subscription_authorized_payment`→ el cobro mensual de un débito
+                                           automático. El id NO es un pago:
+                                           es la "factura" del mes.
+      · `subscription_preapproval`       → cambió el estado de una suscripción
+                                           (el dueño puso la tarjeta, la
+                                           canceló, o MP la dio de baja).
+
+    El filtro era `if "payment" not in tipo`, y eso es una trampa que se
+    activó sola al agregar el débito automático: `subscription_authorized_
+    payment` CONTIENE la palabra "payment", así que pasaba el filtro y se lo
+    trataba como un pago suelto. El id de una factura mensual buscado en
+    /v1/payments no existe: la consulta volvía 404, la función devolvía None
+    sin quejarse, y el cobro del mes no se acreditaba nunca. Todo en silencio.
+
     Igual que el de las señas: a Mercado Pago SIEMPRE se le contesta 200, o
     reintenta la misma notificación para siempre.
     """
@@ -63,30 +130,33 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
 
     params = request.query_params
     tipo = params.get("type") or params.get("topic") or ""
-    payment_id = params.get("data.id") or params.get("id")
-    if not payment_id:
+    recurso_id = params.get("data.id") or params.get("id")
+    if not recurso_id:
         try:
             body = await request.json()
-            tipo = body.get("type", tipo)
-            payment_id = (body.get("data") or {}).get("id")
+            tipo = body.get("type", tipo) or body.get("topic", tipo)
+            recurso_id = (body.get("data") or {}).get("id")
         except Exception:
-            payment_id = None
-    if "payment" not in tipo or not payment_id:
+            recurso_id = None
+
+    tipo = str(tipo or "").strip()
+    if not recurso_id or tipo not in _TIPOS_DE_AVISO:
         return {"ok": True}
 
-    # Mismo blindaje que el webhook de señas: un id que no sea numérico muere
-    # acá, sin tocar la red ni la base. Si no, cada id inventado distinto se
-    # saltea la idempotencia y dispara una llamada saliente a la API de MP.
-    payment_id = str(payment_id)
-    if not payment_id.isdigit() or len(payment_id) > 24:
+    # Mismo blindaje que el webhook de señas: un id con forma rara muere acá,
+    # sin tocar la red ni la base. La forma válida depende del tipo: los pagos
+    # y los cobros mensuales son números, los preapproval son hexadecimal.
+    valida, manejar = _TIPOS_DE_AVISO[tipo]
+    recurso_id = str(recurso_id)
+    if not valida(recurso_id):
         return {"ok": True}
 
     # Ojo: el secreto es el de LA CUENTA DE TURNOS360, distinto del de las
     # señas. El modo de rollout (off/log/enforce) sí se comparte.
-    if not firma_mp.acepta(request, payment_id, settings.mp_saas_webhook_secret):
+    if not firma_mp.acepta(request, recurso_id, settings.mp_saas_webhook_secret):
         return {"ok": True}
 
-    await to_thread.run_sync(mp_sus.acreditar, db, payment_id)
+    await to_thread.run_sync(manejar, db, recurso_id)
     return {"ok": True}
 
 
@@ -317,7 +387,19 @@ def vidriera(
     tres consultas por llamada. 60/min por IP no molesta a nadie navegando la
     vidriera (se pide una vez al abrir) y corta el polleo automatizado.
     """
-    return svc.vidriera(db, slug, sucursal_id)
+    datos = svc.vidriera(db, slug, sucursal_id)
+
+    # Contar la visita va DESPUÉS de armar la respuesta y nunca puede tumbarla:
+    # `registrar` se traga cualquier error. Romper la página que ve el cliente
+    # del negocio —la que usa para reservar— por una estadística sería el peor
+    # intercambio posible.
+    #
+    # Solo cuenta la apertura de la página, no los pedidos de horarios ni el
+    # resto del wizard: si contara todo, un cliente indeciso que mira cinco
+    # días valdría lo mismo que cinco personas distintas.
+    visitas.registrar_por_slug(db, slug)
+
+    return datos
 
 
 @router.get("/{slug}/horarios", response_model=list[HuecosDia])

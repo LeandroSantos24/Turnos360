@@ -11,6 +11,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+# La prórroga se importa para que el default del schema no la repita.
+from app.services.suscripcion import DIAS_PRORROGA
+
 # Las URLs de imagen del negocio terminan dentro de un url(...) de CSS y de un
 # <img src>. Aceptamos SOLO http(s) absoluto y sin comillas ni paréntesis: sin
 # esto, un PUT directo a /empresa/landing (salteando el formulario, que sí
@@ -306,13 +309,28 @@ class DatosCobro(BaseModel):
 class MiSuscripcionOut(SuscripcionOut):
     """Todo lo que ve el dueño en "Mi suscripción"."""
 
+    # LA CUOTA. `cuota` es el número que se muestra: el precio pactado si lo
+    # hay, y si no el del plan. `cuota_origen` dice de cuál de los dos salió
+    # ("pactada" | "plan" | "sin_precio"), que es lo que permite matizar el
+    # texto sin volver a resolver la regla en el frontend.
+    cuota: float | None = None
+    cuota_origen: str = "sin_precio"
+    # Alias histórico de `cuota`, para lo que ya lo lee. Dice lo mismo.
     precio_mensual: float | None = None
-    dias_prorroga: int = 10
+    # ¿Tiene un precio especial cargado en la ficha comercial? Si es False, la
+    # cuota es simplemente la de su plan.
+    precio_pactado: bool = False
+    # El default sale de la constante y no escrito a mano: estaba en 10, la
+    # prórroga bajó a 3, y un default viejo acá le habría prometido siete días
+    # de más a cualquier respuesta que no trajera el campo.
+    dias_prorroga: int = DIAS_PRORROGA
     # Último monto pagado: sirve de referencia cuando todavía no se cargó la
     # cuota pactada, para no mostrarle un guion a alguien que ya pagó.
     ultimo_monto: float | None = None
     # Precio de lista vigente (config del servidor), para el aviso de la prueba.
     precio_lista: float | None = None
+    # El precio del plan de entrada: a lo que cae quien termina la prueba.
+    precio_entrada: float | None = None
     pagos: list[PagoSuscripcionOut] = []
     cobro: DatosCobro = DatosCobro()
     # Qué incluye el plan y cuánto se usa. El tope deja de aparecer recién
@@ -331,6 +349,13 @@ class MiSuscripcionOut(SuscripcionOut):
     # ¿El cobro por Mercado Pago está habilitado? Sin token del SaaS no hay
     # botón de pago y la pantalla ofrece solo transferencia.
     mp_disponible: bool = False
+    # El débito automático: la cuota se cobra sola todos los meses.
+    # None = no tiene uno y la pantalla ofrece activarlo. Es un dict libre
+    # porque su forma la define services/mp_debito.py::para_mostrar, que es
+    # donde vive la lógica; duplicar el schema acá sería un segundo lugar
+    # donde acordarse de agregar un campo.
+    debito: dict | None = None
+    debito_disponible: bool = False
 
 
 class CambioPlanIn(BaseModel):

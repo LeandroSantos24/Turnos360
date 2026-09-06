@@ -9,6 +9,7 @@ from app.core.rate_limit import limiter
 from app.schemas.empresa import AvisoPagoIn, CambioPlanIn, MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
 from app.services import empresa as svc
 from app.services import mercadopago as mp
+from app.services import mp_debito
 from app.services import mp_suscripcion as mp_sus
 
 log = logging.getLogger("turnos360.empresa")
@@ -239,6 +240,126 @@ def pagar_suscripcion_mp(
             "pagá por transferencia.",
         )
     return {"url": url}
+
+
+@router.post("/suscripcion/debito-automatico", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/minute")
+def activar_debito_automatico(
+    request: Request,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+    plan: str,
+) -> dict:
+    """Activa el débito automático: la cuota se cobra sola todos los meses.
+
+    Devuelve la URL del checkout de Mercado Pago donde el dueño carga la
+    tarjeta. La tarjeta no pasa por acá en ningún momento — ver el docstring
+    de services/mp_debito.py.
+
+    ACÁ NO SE ACTIVA NINGÚN PLAN. La empresa queda igual que antes hasta que
+    Mercado Pago cobre el primer mes y avise por el webhook. Un checkout
+    abandonado no puede dejar a nadie con un plan que nadie pagó, y es el
+    mismo criterio que ya usa el pago suelto.
+    """
+    from app.core import planes
+    from app.models.organizacion import Empresa
+
+    if not mp_debito.esta_activo():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "El débito automático todavía no está habilitado. Podés pagar "
+            "por transferencia o con el link de Mercado Pago.",
+        )
+
+    elegido = planes.plan_de(plan)
+    if not planes.se_vende_solo(elegido):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ese plan no se contrata online. Escribinos y lo armamos con vos.",
+        )
+
+    if mp_debito.vigente(db, empresa_id) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya tenés un débito automático. Si querés cambiar de plan o de "
+            "tarjeta, cancelalo primero desde esta misma pantalla.",
+        )
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+
+    # A qué mail le cobra Mercado Pago. Es el del dueño que está pidiendo el
+    # débito: es su tarjeta y son sus avisos de cada cobro. El email público
+    # del negocio no sirve —suele atenderlo recepción— y esto es plata.
+    email = (usuario.email or "").strip()
+    if not email:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Necesitamos tu email para activar el débito automático. "
+            "Cargalo en tu perfil y volvé a intentar.",
+        )
+
+    url = mp_debito.crear(db, empresa, elegido.value, email)
+    if not url:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "No se pudo activar el débito automático. Probá de nuevo en un "
+            "rato, o pagá por transferencia mientras tanto.",
+        )
+    return {"url": url}
+
+
+@router.post(
+    "/suscripcion/debito-automatico/sincronizar", dependencies=[Depends(gate_dueno)]
+)
+@limiter.limit("20/minute")
+def sincronizar_debito_automatico(
+    request: Request, empresa_id: EmpresaActual, db: DB
+) -> dict:
+    """Le pregunta a Mercado Pago cómo quedó la suscripción, ahora.
+
+    LO LLAMA LA PANTALLA CUANDO EL DUEÑO VUELVE DEL CHECKOUT.
+
+    Sin esto, el que acaba de poner la tarjeta vuelve al panel y ve «te falta
+    poner la tarjeta»: nuestra fila sigue en `pending` hasta que llegue el
+    webhook, que puede tardar. La persona acaba de hacer exactamente lo que le
+    pedimos y la pantalla le dice que no lo hizo — es el peor momento posible
+    para no creerle.
+
+    No reemplaza al webhook: es el atajo para el único instante en que sabemos
+    que algo cambió y todavía no nos avisaron. Si Mercado Pago no responde, la
+    fila queda como estaba y la pantalla muestra lo de antes.
+    """
+    fila = mp_debito.vigente(db, empresa_id)
+    if fila is None:
+        return {"estado": None}
+    actualizada = mp_debito.sincronizar(db, fila.preapproval_id)
+    return {"estado": actualizada.estado if actualizada else fila.estado}
+
+
+@router.delete("/suscripcion/debito-automatico", dependencies=[Depends(gate_dueno)])
+@limiter.limit("10/minute")
+def cancelar_debito_automatico(
+    request: Request,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> dict:
+    """Corta el débito automático. El servicio sigue hasta el fin del mes pago.
+
+    No toca `suscripcion_vence`: lo que ya se cobró, se usa. Cortar en el acto
+    algo que está pagado se siente como un robo, aunque el botón diga
+    «cancelar».
+    """
+    if not mp_debito.cancelar(db, empresa_id, quien=usuario.email or "dueño"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No pudimos cancelar el débito automático. Probá de nuevo en un "
+            "rato; si sigue igual, escribinos y lo cortamos nosotros.",
+        )
+    return {"ok": True}
 
 
 @router.post("/suscripcion/cambiar-plan", dependencies=[Depends(gate_dueno)])

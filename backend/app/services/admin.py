@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Rubro, SuperAdmin, Usuario
 from app.models.enums import RolUsuario
@@ -169,18 +168,20 @@ def crear_empresa(db: Session, datos) -> Empresa:
     dias = int(getattr(datos, "dias_prueba", 0) or 0)
     prueba_hasta = dt.date.today() + dt.timedelta(days=dias) if dias > 0 else None
 
-    # La cuota arranca en el precio de lista. Antes nacía en NULL y había que
-    # acordarse de cargarla a mano: mientras estuviera vacía, el MRR y la deuda
-    # del panel de cobranza contaban esa empresa como cero. Si el precio es
-    # otro (piloto bonificado, descuento por referido), se edita en la ficha
-    # comercial, que es donde corresponde decidirlo.
+    # `precio_mensual` nace en NULL y eso YA NO significa "cuenta bonificada":
+    # significa "sin trato especial", y el precio sale de la grilla del plan
+    # (`suscripcion.cuota_de`). Solo se carga acá si se pactó otro.
+    #
+    # Antes se copiaba el precio de lista para que el MRR y la deuda del panel
+    # no contaran la empresa como cero. Eso ya no hace falta: los dos cálculos
+    # pasan por `cuota_de`, que cae en la grilla cuando no hay pactado. Y de
+    # paso desaparece la foto del precio del día del alta, que envejecía sola.
     empresa = Empresa(
         rubro_id=datos.rubro_id,
         nombre=datos.nombre,
         slug=datos.slug,
         config_pack={},
         prueba_hasta=prueba_hasta,
-        precio_mensual=settings.precio_vigente,
     )
     db.add(empresa)
     db.flush()

@@ -7,7 +7,7 @@
  * Excel. Arriba, las tarjetas de balance; abajo, el listado con semáforo:
  *   verde    = al día
  *   amarillo = vence dentro de 7 días (hay que ir a cobrar)
- *   rojo     = venció (incluye los 10 días de prórroga)
+ *   rojo     = venció (incluye los días de prórroga)
  *   gris     = sin vencimiento (piloto bonificado)
  *
  * Acciones por empresa: registrar el pago (renueva 30 días), dar días de
@@ -290,6 +290,33 @@ export default function CobranzaPage() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {PESOS(e.precio_mensual)}
+                      {/* Quién paga solo. Sin esta marca, un negocio con
+                          débito automático se ve igual que uno al que hay que
+                          ir a buscar, y la lista de "pendientes" parece más
+                          larga de lo que es. El rebotado va en rojo porque es
+                          el único que necesita una llamada HOY: el dueño
+                          todavía no sabe que su tarjeta falló. */}
+                      {e.debito && (
+                        <p
+                          className={`text-xs font-medium ${
+                            e.debito.cobros_fallidos > 0
+                              ? "text-red-600 dark:text-red-400"
+                              : e.debito.estado === "authorized"
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-muted-foreground"
+                          }`}
+                          title={e.debito.ultimo_error ?? undefined}
+                        >
+                          {e.debito.cobros_fallidos > 0
+                            ? `débito rebotado (${e.debito.cobros_fallidos})`
+                            : e.debito.estado === "authorized"
+                              ? "débito automático"
+                              : "débito sin tarjeta"}
+                        </p>
+                      )}
+                      {!e.debito && e.precio_pactado && (
+                        <p className="text-xs text-muted-foreground">precio pactado</p>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -851,9 +878,9 @@ function DialogCobro({
             <span>
               Renovar 30 días
               <span className="block text-xs text-muted-foreground">
-                Si pagó dentro de los 10 días de gracia, se cuenta desde el vencimiento
-                anterior. Si pagó más tarde, desde hoy. Destildá para anotar un pago
-                parcial sin mover la fecha.
+                Si pagó dentro de los días de gracia, se cuenta desde el
+                vencimiento anterior. Si pagó más tarde, desde hoy. Destildá
+                para anotar un pago parcial sin mover la fecha.
               </span>
             </span>
           </label>

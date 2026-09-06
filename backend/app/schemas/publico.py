@@ -36,6 +36,12 @@ class SucursalPublica(BaseModel):
 class VidrieraOut(BaseModel):
     """Datos para pintar la página del negocio."""
 
+    # ¿Se puede reservar por acá ahora mismo? False cuando la suscripción del
+    # negocio venció y se pasó la prórroga: la página se sigue viendo, pero el
+    # botón de reservar no se dibuja. Default True para que un negocio al día
+    # nunca dependa de que este campo llegue.
+    reservas_abiertas: bool = True
+
     nombre: str
     slug: str
     descripcion: str | None = None
