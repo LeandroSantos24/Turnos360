@@ -87,22 +87,26 @@ def test_la_grilla_es_la_acordada():
     El salto a Pro se paga por el equipo más grande y por lo que hace ganar
     plata; el de Multi, por varios locales de verdad.
 
-    Multi da TRES locales y no cinco: con cinco por $33.900, Enterprise se
-    queda sin razón de ser salvo para cadenas muy grandes, y el salto de
-    precio entre uno y otro deja de tener sentido comercial.
+    Multi da TRES locales y no cinco: con cinco al precio que tiene,
+    Enterprise se queda sin razón de ser salvo para cadenas muy grandes, y el
+    salto de precio entre uno y otro deja de tener sentido comercial.
+
+    EL DUEÑO CUENTA COMO PROFESIONAL. Los cupos de acá son personas en la
+    agenda, dueño incluido: «1 dueño + 3 que atienden» son 4, no 3. Los
+    números y las frases del `resumen` se verifican juntos más abajo.
     """
     g = planes.GRILLA
     assert g[planes.Plan.INICIAL].precio == 13900
-    assert g[planes.Plan.INICIAL].profesionales == 3
-    assert g[planes.Plan.INICIAL].usuarios == 3
+    assert g[planes.Plan.INICIAL].profesionales == 4
+    assert g[planes.Plan.INICIAL].usuarios == 4
     assert g[planes.Plan.INICIAL].sucursales == 1
 
-    assert g[planes.Plan.PRO].precio == 19900
-    assert g[planes.Plan.PRO].profesionales == 10
-    assert g[planes.Plan.PRO].usuarios == 10
+    assert g[planes.Plan.PRO].precio == 19990
+    assert g[planes.Plan.PRO].profesionales == 11
+    assert g[planes.Plan.PRO].usuarios == 11
     assert g[planes.Plan.PRO].sucursales == 1
 
-    assert g[planes.Plan.MULTI].precio == 33900
+    assert g[planes.Plan.MULTI].precio == 34990
     assert g[planes.Plan.MULTI].profesionales is None, "Multi = ilimitados"
     assert g[planes.Plan.MULTI].usuarios is None
     assert g[planes.Plan.MULTI].sucursales == 3
@@ -112,6 +116,57 @@ def test_la_grilla_es_la_acordada():
     escalones = [planes.Plan.INICIAL, planes.Plan.PRO, planes.Plan.MULTI]
     precios = [g[p].precio for p in escalones]
     assert precios == sorted(precios)
+
+
+def test_la_prueba_da_exactamente_los_cupos_del_plan_de_entrada():
+    """Ni más ni menos que Inicial.
+
+    MÁS es el problema que hizo Leandro visible probando el alta: quien carga
+    ocho profesionales en la prueba y después paga el plan de cuatro queda con
+    cuatro personas sobrantes, y las dos salidas son malas —borrárselas o
+    dejar que el tope no exista—.
+
+    MENOS es el problema simétrico y más silencioso: la prueba mostraría menos
+    de lo que el cliente va a comprar, y decide sobre un producto más chico
+    que el real. Los dos se evitan con la misma igualdad.
+    """
+    prueba = planes.GRILLA[planes.Plan.GRATUITO]
+    entrada = planes.GRILLA[planes.PLAN_DE_ENTRADA]
+
+    assert prueba.profesionales == entrada.profesionales
+    assert prueba.usuarios == entrada.usuarios
+    assert prueba.sucursales == entrada.sucursales
+
+
+def test_el_resumen_de_cada_plan_dice_el_mismo_numero_que_el_cupo():
+    """La frase que lee el cliente y el tope que aplica el backend.
+
+    «1 dueño + 3 que atienden» tiene que ser exactamente `profesionales=4`.
+    Es el error más caro de la grilla porque no rompe nada: el cliente lee la
+    landing, contrata, carga el equipo que le prometieron y el último le
+    rebota con un error de límite. Se entera él, no nosotros.
+
+    Se cuenta sumando los números de la frase: si dice «1 dueño + 3», son 4.
+    """
+    import re
+
+    for plan, lim in planes.GRILLA.items():
+        if lim.profesionales is None:
+            # Ilimitado: la frase no debería prometer un número.
+            assert not re.search(r"\d+\s+que atienden", lim.resumen), (
+                f"{plan.value}: el cupo es ilimitado pero el resumen promete "
+                f"un número — {lim.resumen!r}"
+            )
+            continue
+
+        numeros = [int(n) for n in re.findall(r"(\d+)\s*(?:dueño|que atienden)", lim.resumen)]
+        if not numeros:
+            continue  # la prueba describe el plazo, no el equipo
+        assert sum(numeros) == lim.profesionales, (
+            f"{plan.value}: el resumen dice {lim.resumen!r} (suma {sum(numeros)}) "
+            f"pero el cupo es {lim.profesionales}. El cliente contrata leyendo "
+            "la frase y el backend aplica el número."
+        )
 
 
 def test_el_plan_viejo_basico_sigue_entrando_como_inicial():
@@ -277,6 +332,22 @@ def _llenar_cupo(client, db, ctx, plan="inicial"):
     while _profesionales(db, ctx.empresa.id) < tope:
         assert _crear_prof(client, ctx, f"P{uuid.uuid4().hex[:5]}").status_code == 201
         db.expire_all()
+
+
+def _llenar_cupo_de_cuentas(client, db, ctx, plan="inicial"):
+    """Lo mismo que `_llenar_cupo`, pero con las cuentas con clave.
+
+    Estos tests tenían el número escrito a mano (`while _usuarios(...) < 3`) y
+    volvieron a romperse exactamente igual el día que Inicial pasó de 3 a 4
+    cuentas. Tres tests en rojo que no hablan de cupos es ruido: se lee el
+    fallo, se descubre que el producto cambió a propósito, y se pierde la
+    confianza en que un rojo significa algo.
+    """
+    tope = planes.GRILLA[planes.plan_de(plan)].usuarios
+    while _usuarios(db, ctx.empresa.id) < tope:
+        assert _crear_usuario(client, ctx).status_code in (200, 201)
+        db.expire_all()
+    return tope
     return tope
 
 
@@ -545,17 +616,14 @@ def _usuarios(db, empresa_id) -> int:
     return db.query(Usuario).filter_by(empresa_id=empresa_id, activo=True).count()
 
 
-def test_el_plan_inicial_frena_en_la_cuarta_cuenta(client, db, armar_empresa):
-    """Antes no había tope de usuarios: el plan de dos profesionales podía
-    tener cuarenta cuentas con clave."""
+def test_el_plan_inicial_frena_al_pasarse_del_cupo_de_cuentas(client, db, armar_empresa):
+    """Antes no había tope de usuarios: el plan más chico podía tener
+    cuarenta cuentas con clave."""
     ctx = armar_empresa()
     _plan(db, ctx, "inicial")
+    _llenar_cupo_de_cuentas(client, db, ctx)
 
-    while _usuarios(db, ctx.empresa.id) < 3:
-        assert _crear_usuario(client, ctx).status_code in (200, 201)
-        db.expire_all()
-
-    r = _crear_usuario(client, ctx, "La cuarta")
+    r = _crear_usuario(client, ctx, "La que sobra")
     assert r.status_code == 409
     assert "Inicial" in r.json()["detail"]
     assert "Mi suscripción" in r.json()["detail"], (
@@ -567,9 +635,7 @@ def test_desactivar_una_cuenta_libera_su_asiento(client, db, armar_empresa):
     """El empleado que se fue no sigue ocupando lugar."""
     ctx = armar_empresa()
     _plan(db, ctx, "inicial")
-    while _usuarios(db, ctx.empresa.id) < 3:
-        _crear_usuario(client, ctx)
-        db.expire_all()
+    _llenar_cupo_de_cuentas(client, db, ctx)
     assert _crear_usuario(client, ctx, "Sobra").status_code == 409
 
     client.patch(
@@ -585,9 +651,7 @@ def test_no_se_esquiva_el_cupo_de_cuentas_reactivando(client, db, armar_empresa)
     """Desactivo a uno, creo al que faltaba, y reactivo al primero."""
     ctx = armar_empresa()
     _plan(db, ctx, "inicial")
-    while _usuarios(db, ctx.empresa.id) < 3:
-        _crear_usuario(client, ctx)
-        db.expire_all()
+    _llenar_cupo_de_cuentas(client, db, ctx)
 
     client.patch(
         f"/equipo/usuarios/{ctx.profesional.id}",
@@ -739,3 +803,72 @@ def test_los_defaults_de_docker_compose_coinciden_con_la_grilla():
         "No se encontró ningún default de precio en los compose. Si se "
         "cambiaron de forma, este test dejó de proteger nada."
     )
+
+
+def test_la_grilla_del_frontend_dice_lo_mismo_que_la_del_backend():
+    """El cuarto lugar donde vive el precio, y el que ve el cliente primero.
+
+    EL CASO REAL, EL QUE ORIGINÓ ESTE TEST
+    ──────────────────────────────────────
+    Leandro entró a su panel y vio «$14.990» donde la grilla decía otra cosa:
+    «esto es muy mal, no sale 14990, habíamos quedado en 13900». El número
+    estaba escrito a mano en cuatro lugares —planes.py, config.py,
+    precios.ts y la landing— y arreglar tres de cuatro se ve exactamente
+    igual que arreglar los cuatro, hasta que un cliente mira la pantalla que
+    quedó vieja.
+
+    Los dos archivos del frontend se leen como TEXTO. No hay forma de
+    importar TypeScript desde pytest, y un test que compare contra una copia
+    del número acá adentro sería un quinto lugar donde escribirlo — es decir,
+    parte del problema.
+    """
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parents[2]
+    esperado = {
+        p.value: float(planes.GRILLA[p].precio) for p in planes.PLANES_A_LA_VENTA
+    }
+
+    # (archivo, cómo se llama el código del plan en ese archivo)
+    fuentes = [
+        ("frontend/src/lib/precios.ts", "codigo"),
+        ("frontend/src/app/page.tsx", "codigo"),
+    ]
+
+    revisados = 0
+    for nombre, clave in fuentes:
+        ruta = raiz / nombre
+        if not ruta.exists():
+            continue  # en la imagen del backend el frontend no está montado
+        texto = ruta.read_text(encoding="utf-8")
+
+        # Cada entrada de la grilla: `codigo: "pro",` … `precio: 19990,`
+        # El `.*?` no cruza a la entrada siguiente porque `precio` aparece
+        # una sola vez por objeto y siempre después del código.
+        encontrados = {
+            m.group(1): float(m.group(2))
+            for m in re.finditer(
+                rf'{clave}:\s*"([a-z]+)",.*?precio:\s*([0-9.]+),', texto, re.S
+            )
+        }
+
+        for codigo, precio in esperado.items():
+            assert codigo in encontrados, (
+                f"{nombre} no tiene el plan «{codigo}» de la grilla del backend."
+            )
+            assert encontrados[codigo] == precio, (
+                f"{nombre}: el plan «{codigo}» sale ${encontrados[codigo]:,.0f} "
+                f"y la grilla del backend dice ${precio:,.0f}. El cliente lee "
+                "el del frontend y le cobramos el del backend."
+            )
+        revisados += 1
+
+    # Si los dos archivos se renombran, este test pasaría sin comparar nada.
+    # Que la ausencia sea visible: o están los dos, o no está el frontend.
+    if (raiz / "frontend/src").exists():
+        assert revisados == len(fuentes), (
+            "Falta alguno de los archivos de precios del frontend: "
+            f"revisé {revisados} de {len(fuentes)}. Si se movieron, actualizá "
+            "las rutas acá — si no, este test deja de proteger nada."
+        )

@@ -112,12 +112,12 @@ const planes = [
     codigo: "inicial",
     nombre: "Inicial",
     precio: 13900,
-    paraQuien: "El que atiende solo o con una persona más.",
+    paraQuien: "El que atiende solo o con un equipo chico.",
     // Los cupos, dichos como los cuenta el dueño. «3 cuentas con clave» era
     // el mismo equipo contado por segunda vez y obligaba a cruzar dos
     // números para entender un solo límite: quien mira la grilla quiere
     // saber cuánta gente entra, no cuántos asientos de software compra.
-    cupos: ["1 dueño + 2 que atienden", "1 local"],
+    cupos: ["1 dueño + 3 que atienden", "1 local"],
     tituloLista: "Todo lo que hace falta para atender:",
     incluye: BASE_INCLUIDA,
     destacado: false,
@@ -125,9 +125,9 @@ const planes = [
   {
     codigo: "pro",
     nombre: "Pro",
-    precio: 19900,
+    precio: 19990,
     paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
-    cupos: ["1 dueño + 9 que atienden", "1 local"],
+    cupos: ["1 dueño + 10 que atienden", "1 local"],
     tituloLista: "Todo lo de Inicial, más:",
     incluye: [
       "Membresías y abonos mensuales",
@@ -141,7 +141,7 @@ const planes = [
   {
     codigo: "multi",
     nombre: "Multi",
-    precio: 33900,
+    precio: 34990,
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
     cupos: ["Equipo ilimitado", "Hasta 3 locales"],
     tituloLista: "Todo lo de Pro, más:",

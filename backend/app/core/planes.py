@@ -176,8 +176,12 @@ GRILLA: dict[Plan, Limites] = {
         # El otro techo es el segundo local, que es lo que justifica pagar
         # Multi: si multisucursal se probara gratis, el plan más caro
         # perdería su único argumento.
-        profesionales=3,
-        usuarios=3,
+        # Estos DOS números son los de Inicial y tienen que seguir siéndolo:
+        # hay un test que los compara. Si Inicial sube y esto queda atrás, la
+        # prueba pasa a ser más chica que el plan más barato y el que prueba
+        # ve menos de lo que va a comprar.
+        profesionales=4,
+        usuarios=4,
         sucursales=1,
         resumen="Todo desbloqueado por 14 días, con los cupos de Inicial",
         para_quien="Para probarlo con tus turnos de verdad, sin tarjeta.",
@@ -186,29 +190,39 @@ GRILLA: dict[Plan, Limites] = {
     Plan.INICIAL: Limites(
         etiqueta="Inicial",
         precio=13900,
-        profesionales=3,
-        usuarios=3,
+        # CÓMO SE CUENTAN LOS CUPOS, QUE ES LA PARTE QUE SE MALENTIENDE
+        # ────────────────────────────────────────────────────────────
+        # El dueño CUENTA como profesional: en casi todos los rubros donde
+        # esto se usa —peluquería, barbería, estética— el dueño atiende, y
+        # ocupa su columna en la agenda igual que cualquiera.
+        #
+        # Leandro lo dijo así: «13900 con 1 dueño y 3 trabajadores». Eso son
+        # CUATRO personas en la agenda, no tres. El número de acá y la frase
+        # del `resumen` tienen que decir siempre lo mismo: si se separan,
+        # el dueño lee «3 trabajadores» en la landing, carga tres además de
+        # él, y el cuarto le rebota.
+        profesionales=4,
+        usuarios=4,
         sucursales=1,
-        # Los cupos se cuentan como los cuenta el dueño: él y dos personas
-        # más. «3 profesionales» y «3 cuentas» son el mismo equipo visto de
-        # dos maneras, no dos límites que haya que cruzar mentalmente.
-        resumen="1 dueño + 2 que atienden · 1 local",
-        para_quien="El que atiende solo o con una persona más.",
+        resumen="1 dueño + 3 que atienden · 1 local",
+        para_quien="El que atiende solo o con un equipo chico.",
         funciones=DE_INICIAL,
     ),
     Plan.PRO: Limites(
         etiqueta="Pro",
-        precio=19900,
-        profesionales=10,
-        usuarios=10,
+        precio=19990,
+        # «Hasta 10 profesionales y 1 dueño» = once columnas en la agenda,
+        # con el mismo criterio que Inicial.
+        profesionales=11,
+        usuarios=11,
         sucursales=1,
-        resumen="1 dueño + 9 que atienden · 1 local",
+        resumen="1 dueño + 10 que atienden · 1 local",
         para_quien="El local con equipo, que ya quiere vender más a los que tiene.",
         funciones=DE_PRO,
     ),
     Plan.MULTI: Limites(
         etiqueta="Multi",
-        precio=33900,
+        precio=34990,
         profesionales=None,
         usuarios=None,
         # Tres y no cinco: con cinco locales por $33.900, Enterprise se queda

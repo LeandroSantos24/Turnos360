@@ -74,25 +74,26 @@ export const PLANES = [
   },
   {
     // Los cupos se cuentan como los cuenta el dueño: él y los que atienden
-    // con él. «3 profesionales · 3 cuentas» son el mismo equipo dicho dos
-    // veces, y obligaba a cruzar dos números para entender un solo límite.
+    // con él. El dueño ENTRA en el cupo —en estos rubros atiende— así que
+    // «1 dueño + 3» son cuatro columnas en la agenda. Es el mismo número que
+    // aplica el backend (planes.py), y hay un test que compara los dos.
     codigo: "inicial",
     etiqueta: "Inicial",
     precio: 13900,
-    resumen: "1 dueño + 2 que atienden · 1 local",
-    paraQuien: "El que atiende solo o con una persona más.",
+    resumen: "1 dueño + 3 que atienden · 1 local",
+    paraQuien: "El que atiende solo o con un equipo chico.",
   },
   {
     codigo: "pro",
     etiqueta: "Pro",
-    precio: 19900,
-    resumen: "1 dueño + 9 que atienden · 1 local",
+    precio: 19990,
+    resumen: "1 dueño + 10 que atienden · 1 local",
     paraQuien: "El local con equipo, que ya quiere vender más a los que tiene.",
   },
   {
     codigo: "multi",
     etiqueta: "Multi",
-    precio: 33900,
+    precio: 34990,
     resumen: "Equipo ilimitado · hasta 3 locales",
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
   },

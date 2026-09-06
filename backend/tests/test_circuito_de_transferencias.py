@@ -84,11 +84,16 @@ def test_el_aviso_trae_lo_avisado_y_lo_esperado(client, db, armar_empresa, admin
     ctx = armar_empresa("Peluquería Norte")
     ctx.empresa.plan = "pro"
     db.commit()
-    _avisar(db, ctx, 19900)
+    # El monto sale de la grilla y no escrito a mano: este test dice «avisó lo
+    # que corresponde y la bandeja lo marca en verde», no «avisó $19.900».
+    # Con el número a mano, cambiar el precio de Pro lo ponía en rojo por un
+    # motivo que no tiene nada que ver con lo que el test verifica.
+    esperado = planes.GRILLA[planes.Plan.PRO].precio
+    _avisar(db, ctx, esperado)
 
     fila = _bandeja(client, admin)[0]
-    assert fila["monto"] == 19900
-    assert fila["monto_esperado"] == planes.GRILLA[planes.Plan.PRO].precio
+    assert fila["monto"] == esperado
+    assert fila["monto_esperado"] == esperado
     assert fila["plan_codigo"] == "pro"
     assert fila["coincide"] is True
 
