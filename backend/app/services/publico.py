@@ -10,6 +10,7 @@ salen de disponibilidad.calcular_huecos().
 """
 
 import datetime as dt
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -23,6 +24,8 @@ from app.schemas.turno import TurnoCrear
 from app.services import disponibilidad as disp
 from app.services import mercadopago as mp
 from app.services import turno as turno_svc
+
+log = logging.getLogger("turnos360.publico")
 
 
 def resolver_empresa(db: Session, slug: str) -> Empresa:
@@ -620,6 +623,34 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         turno.sena_monto = monto_a_cobrar
         db.commit()
         pago_url = mp.crear_preferencia(empresa, turno, concepto)
+
+        # SI NO HAY LINK DE PAGO, NO PUEDE HABER SEÑA PENDIENTE.
+        #
+        # EL AGUJERO QUE ESTO TAPA, que es el más caro del circuito:
+        # `crear_preferencia` devuelve None sin levantar en tres casos reales
+        # —el negocio activó las señas pero todavía no conectó su Mercado Pago,
+        # la API de MP tuvo un hipo, o el token se venció—. El turno quedaba
+        # marcado «seña pendiente» y SIN NINGUNA FORMA DE PAGARLA. Al cliente
+        # se le decía «tu turno quedó solicitado, el negocio te lo confirma», y
+        # media hora después el barrido de señas vencidas lo cancelaba.
+        #
+        # El caso probable no es MP caído: es el dueño que prende las señas
+        # antes de pegar su Access Token. Ese negocio perdía el 100 % de las
+        # reservas web, una por una, sin un solo error en ningún lado.
+        #
+        # Sin link, la reserva vuelve a ser lo que era antes de que existieran
+        # las señas: un turno normal que el negocio cobra en persona. Es
+        # exactamente lo que el dueño esperaría, y no se pierde nada.
+        if not pago_url:
+            log.warning(
+                "Reserva con cobro configurado pero sin link de pago: "
+                "queda como turno sin seña",
+                extra={"empresa_id": empresa.id, "turno_id": turno.id},
+            )
+            turno.sena_estado = None
+            turno.sena_monto = None
+            monto_a_cobrar = None
+            db.commit()
 
     # --- Emails por cola (Regla 6). La reserva jamás depende del email. ---
     try:

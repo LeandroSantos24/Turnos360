@@ -117,6 +117,13 @@ Table adjunto {
   }
 }
 
+Table ajuste_global {
+  clave varchar(60) [pk]
+  valor text [not null]
+  actualizado_en timestamp with time zone
+  actualizado_por varchar(160)
+}
+
 Table ajuste_suscripcion {
   id integer [pk]
   empresa_id integer [ref: > empresa.id, not null]

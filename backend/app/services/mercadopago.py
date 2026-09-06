@@ -10,6 +10,7 @@ falla, devolvemos None y el turno queda creado con la seña pendiente — el
 negocio la cobra en persona.
 """
 
+import datetime as dt
 import logging
 
 import httpx
@@ -134,6 +135,28 @@ def crear_preferencia(empresa: Empresa, turno: Turno, titulo: str) -> str | None
         return None
 
     vidriera = f"{settings.public_base_url}/{empresa.slug}"
+
+    # EL LINK TIENE QUE VENCER CUANDO VENCE EL TURNO.
+    #
+    # No vencía nunca, y el turno sí: a los `sena_minutos_para_pagar` (30 por
+    # defecto) el barrido lo cancela y libera el horario. Con el link vivo, la
+    # secuencia que se cobra sola es esta:
+    #
+    #   1. El cliente reserva, abre Mercado Pago y se distrae.
+    #   2. A los 30 minutos el turno se cancela y el hueco queda libre.
+    #   3. Otro cliente compra ese horario.
+    #   4. El primero vuelve al link viejo AL DÍA SIGUIENTE y paga.
+    #
+    # Resultado: el negocio tiene la plata de alguien que no tiene turno, y el
+    # horario ocupado por otro. El webhook está bien hecho y no revive el turno
+    # cancelado —eso sería peor—, pero la plata ya entró y hay que devolverla.
+    #
+    # Un par de minutos de margen sobre el barrido: entre que Mercado Pago
+    # acredita y nos avisa pasa un rato, y no queremos rechazar un pago que
+    # llegó a horario por diez segundos.
+    ahora = dt.datetime.now(dt.timezone.utc)
+    vence = ahora + dt.timedelta(minutes=int(settings.sena_minutos_para_pagar) + 3)
+
     payload = {
         "items": [
             {
@@ -152,6 +175,21 @@ def crear_preferencia(empresa: Empresa, turno: Turno, titulo: str) -> str | None
         "auto_return": "approved",
         "notification_url": f"{settings.api_base_url}/publico/mp/webhook/{empresa.slug}",
         "statement_descriptor": empresa.nombre[:22],
+        "expires": True,
+        "expiration_date_from": ahora.isoformat(),
+        "expiration_date_to": vence.isoformat(),
+        # FUERA LOS MEDIOS DE PAGO OFFLINE (Rapipago, Pago Fácil, cajero).
+        #
+        # Tardan de uno a tres días en acreditar y el turno se cancela en
+        # treinta minutos. El cliente iba, pagaba en el kiosco, y cuando la
+        # plata acreditaba su turno hacía dos días que no existía. Es el mismo
+        # problema del link sin vencimiento, con la diferencia de que acá el
+        # cliente hizo TODO bien.
+        #
+        # Con una seña, el pago tiene que ser instantáneo o no sirve.
+        "payment_methods": {
+            "excluded_payment_types": [{"id": "ticket"}, {"id": "atm"}],
+        },
     }
     try:
         r = httpx.post(

@@ -89,6 +89,23 @@ _TIPOS_DE_AVISO = {
 }
 
 
+@router.get("/marca")
+@limiter.limit("120/minute")
+def marca_publica(request: Request, db: DB) -> dict:
+    """El logo de Turnos360, para la landing y el panel.
+
+    Público y sin login a propósito: es el logo de la marca, lo ve cualquiera
+    que abra la página. No expone nada más que eso.
+
+    Devuelve `{"logo_url": null}` cuando no hay override, que es el caso
+    normal — y el frontend ya está mostrando el archivo del repo, así que un
+    null no cambia nada en pantalla.
+    """
+    from app.services import marca
+
+    return {"logo_url": marca.logo_url(db)}
+
+
 @router.post("/mp/webhook-suscripcion")
 @limiter.limit("120/minute")
 async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:

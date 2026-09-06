@@ -27,6 +27,7 @@ from app.schemas.admin import (
     PagoSuscripcionOut,
     ProrrogaIn,
     FichaComercialIn,
+    MarcaIn,
 )
 from app.models import Empresa
 from app.services import admin as svc
@@ -253,6 +254,31 @@ def cobranza_resumen(admin: SuperAdminActual, db: DB):
 def historial_pagos(empresa_id: int, admin: SuperAdminActual, db: DB):
     _empresa_o_404(db, empresa_id)
     return cobranza.historial_pagos(db, empresa_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  La marca de Turnos360
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/marca")
+def leer_marca(admin: SuperAdminActual, db: DB) -> dict:
+    """La URL del logo cargada, o null si se usa el archivo del repo."""
+    from app.services import marca
+
+    return {"logo_url": marca.logo_url(db)}
+
+
+@router.put("/marca")
+def guardar_marca(datos: MarcaIn, admin: SuperAdminActual, db: DB) -> dict:
+    """Cambia el logo de Turnos360 sin desplegar nada.
+
+    Para el gorrito de Navidad y los huevos de Pascua. Mandar vacío borra el
+    override y vuelve al archivo del repo — deshacerlo tiene que ser tan fácil
+    como ponerlo, o el gorrito se queda hasta marzo.
+    """
+    from app.services import marca
+
+    return {"logo_url": marca.guardar_logo(db, datos.logo_url, quien=admin.email)}
 
 
 @router.get("/empresas/{empresa_id}/ficha")

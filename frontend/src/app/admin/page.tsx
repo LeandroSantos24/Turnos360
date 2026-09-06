@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Ficha } from "./ficha-empresa";
+import { MarcaTurnos360 } from "./marca-turnos360";
 import {
   Dialog,
   DialogContent,
@@ -217,6 +218,10 @@ export default function AdminEmpresasPage() {
 
   return (
     <div>
+      {/* El logo de la marca, arriba de todo: es lo único de esta pantalla
+          que no es "un negocio", y enterrado más abajo no se encuentra. */}
+      <MarcaTurnos360 />
+
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold" style={SYNE}>

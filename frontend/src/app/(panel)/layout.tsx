@@ -54,6 +54,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ConfirmarProvider } from "@/components/confirmar";
 import { AvisoVerificacion } from "./aviso-verificacion";
 import { AvisoVencimiento } from "./aviso-vencimiento";
+import { useLogoMarca } from "@/lib/marca";
 
 type NavItem = {
   href: string;
@@ -137,6 +138,8 @@ export default function PanelLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // El logo de la marca, con el archivo del repo de respaldo. Ver lib/marca.ts.
+  const logo = useLogoMarca();
   const router = useRouter();
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<UsuarioMe | null>(null);
@@ -251,7 +254,8 @@ export default function PanelLayout({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/marca/logo-turnos360.webp"
+                src={logo.src}
+                onError={logo.alFallar}
                 alt="Turnos360"
                 className="h-full w-full object-contain"
               />

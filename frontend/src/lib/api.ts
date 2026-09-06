@@ -21,7 +21,7 @@
 import { clearToken, getRefreshToken, getToken, saveTokens } from "./auth";
 
 // La URL del backend viene de la variable de entorno (definida en docker-compose).
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 /** Error con el código HTTP, para que las pantallas sepan qué pasó. */
 export class ApiError extends Error {

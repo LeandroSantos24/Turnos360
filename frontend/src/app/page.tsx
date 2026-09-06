@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { WA_LINK_DEMO as WA_LINK, INSTAGRAM, EMAIL_CONTACTO } from "@/lib/contacto";
+import { useLogoMarca } from "@/lib/marca";
 import {
   PRECIO_MENSUAL,
   PRECIO_MENSUAL_TEXTO,
@@ -154,25 +155,31 @@ const planes = [
     ],
     destacado: false,
   },
-  {
-    // Sin precio: los cupos se arman con cada cliente. `precio: null` es lo
-    // que hace que la tarjeta muestre "A convenir" y el botón vaya a
-    // WhatsApp en vez de al registro.
-    codigo: "enterprise",
-    nombre: "Enterprise",
-    precio: null,
-    paraQuien: "Cadenas y franquicias. Lo armamos con vos.",
-    cupos: ["Equipo ilimitado", "Los locales que necesites", "Precio pactado"],
-    tituloLista: "Todo lo de Multi, más:",
-    incluye: [
-      "Los locales que necesites",
-      "Acompañamiento en la puesta en marcha",
-      "Migración de tus datos actuales",
-      "Soporte prioritario",
-    ],
-    destacado: false,
-  },
 ];
+
+/**
+ * Enterprise, aparte de los tres.
+ *
+ * NO es un cuarto escalón: no tiene precio de lista, no se contrata online y
+ * su botón lleva a WhatsApp. Puesto en la fila obligaba a comparar lo que no
+ * se compara, y la columna sin número rompía la lectura justo donde el ojo
+ * busca el precio.
+ *
+ * De paso se le sacó «Los locales que necesites», que estaba DOS veces: como
+ * cupo arriba y como beneficio en la lista. Repetir la misma frase en la
+ * misma tarjeta hace que la segunda se lea como si dijera algo distinto, y
+ * el que la lee vuelve a leerla para ver qué se le escapó.
+ */
+const ENTERPRISE = {
+  nombre: "Enterprise",
+  paraQuien: "Cadenas y franquicias. Lo armamos con vos.",
+  cupos: ["Equipo ilimitado", "Los locales que necesites", "Precio pactado"],
+  incluye: [
+    "Acompañamiento en la puesta en marcha",
+    "Migración de tus datos actuales",
+    "Soporte prioritario",
+  ],
+};
 
 const enPesos = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
@@ -283,6 +290,9 @@ function Monogram({ size = 30, invert = false }: { size?: number; invert?: boole
 }
 
 export default function Page() {
+  // El logo de la marca. Sale del archivo del repo y se cambia solo si el
+  // super-admin cargó una URL. Ver lib/marca.ts.
+  const logo = useLogoMarca();
   const [tab, setTab] = useState(0);
   const [faq, setFaq] = useState(-1);
 
@@ -480,14 +490,6 @@ export default function Page() {
         }
         .cta-suave:hover { background: #f7f9fb; border-color: #cfd6e0; }
 
-        /* Los dos de la sección de cierre, que va sobre fondo oscuro. */
-        .cta-claro { background: #12b886; }
-        .cta-oscuro {
-          background: rgba(255,255,255,0.06); color: #fff;
-          border: 1px solid rgba(255,255,255,0.22);
-        }
-        .cta-oscuro:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.4); }
-
         /* Las tarjetas de funciones estaban absolutamente quietas: un borde
            de 1px y nada más. Un elemento que no reacciona al mouse se lee
            como una imagen, no como parte de una página. */
@@ -503,22 +505,51 @@ export default function Page() {
         }
 
         /* ── Grilla de planes ────────────────────────────────────────────
-           Tres columnas iguales en escritorio, una sola apilada en el
-           celular. El destacado se levanta 12px sobre los otros dos: es la
-           forma más barata de decir "este" sin escribirlo. */
+           TRES columnas, no cuatro. Enterprise sale de la fila y va debajo,
+           en una tarjeta ancha (.plan-enterprise).
+
+           Eran cuatro y se veía mal, y el motivo no es solo que apretaba: es
+           que Enterprise no es un cuarto escalón, es OTRA cosa. No tiene
+           precio, no se contrata online y su botón lleva a WhatsApp. Puesto
+           al lado de los tres, obliga a comparar lo que no se compara —y la
+           columna sin número rompe la lectura de izquierda a derecha justo
+           donde el ojo busca el precio—.
+
+           Los tres que SÍ se comparan quedan más anchos, que es lo que
+           necesitan: son los que se venden solos.
+
+           El destacado se levanta 12px sobre los otros dos: es la forma más
+           barata de decir "este" sin escribirlo. */
         .grilla-planes {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 16px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 18px;
           align-items: stretch;
         }
-        /* Cuatro columnas necesitan más ancho del que hay en una notebook
-           chica. A partir de ahí, dos y dos: mejor que apretarlas hasta que
-           el precio se corte en dos renglones. */
-        @media (max-width: 1180px) {
-          .grilla-planes { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        @media (max-width: 980px) {
+          .grilla-planes { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; gap: 22px; }
           .plan-destacado { transform: none; }
           .plan-destacado:hover { transform: translateY(-4px); }
+        }
+
+        /* ── Enterprise, abajo y a lo ancho ──────────────────────────────
+           Centrada y más angosta que la grilla: si ocupara los 1120px
+           enteros competiría en peso visual con los tres de arriba, que es
+           exactamente lo que se quiere evitar. */
+        .plan-enterprise {
+          max-width: 760px;
+          margin: 22px auto 0;
+          display: grid;
+          grid-template-columns: 1.1fr 1fr;
+          gap: 28px;
+          align-items: center;
+          background: #fff;
+          border: 1px solid #e4e8ee;
+          border-radius: 22px;
+          padding: 26px 30px;
+        }
+        @media (max-width: 720px) {
+          .plan-enterprise { grid-template-columns: 1fr; gap: 18px; padding: 24px; }
         }
         .plan {
           display: flex;
@@ -570,7 +601,6 @@ export default function Page() {
         }
 
         @media (max-width: 720px) {
-          .grilla-planes { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; gap: 26px; }
           /* Apilados, levantar el del medio deja un hueco raro arriba y otro
              abajo. La cinta sola alcanza para distinguirlo. */
           .plan-destacado, .plan-destacado:hover { transform: none; }
@@ -713,7 +743,7 @@ export default function Page() {
       <header style={{ borderBottom: "1px solid #eef1f5", position: "sticky", top: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", zIndex: 50 }}>
       <nav className="nav-barra" style={{ gap: 16, padding: "12px clamp(16px,5vw,64px)", maxWidth: 1120, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/marca/logo-turnos360.webp" alt="Turnos360" style={{ width: 44, height: 44, objectFit: "contain" }} />
+          <img src={logo.src} onError={logo.alFallar} alt="Turnos360" style={{ width: 44, height: 44, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 20 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div className="nav-links">
@@ -1202,6 +1232,51 @@ export default function Page() {
             ))}
           </div>
 
+          {/* ── Enterprise, abajo y a lo ancho ─────────────────────────
+              Fuera de la fila a propósito: ver el comentario de
+              .plan-enterprise en los estilos. Acá el layout es horizontal
+              —quién es a la izquierda, qué incluye a la derecha— porque sin
+              precio que mostrar, la tarjeta vertical quedaba con un hueco
+              enorme donde iba el número. */}
+          <div className="plan-enterprise revela">
+            <div>
+              <div style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: 21, marginBottom: 4 }}>
+                {ENTERPRISE.nombre}
+              </div>
+              <p style={{ color: "#5d6578", fontSize: 14.5, lineHeight: 1.5, margin: "0 0 14px" }}>
+                {ENTERPRISE.paraQuien}
+              </p>
+              <div className="plan-cupos" style={{ marginBottom: 18 }}>
+                {ENTERPRISE.cupos.map((c) => (
+                  <div key={c} className="plan-cupo">{c}</div>
+                ))}
+              </div>
+              <a
+                href={WA_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cta cta-suave"
+              >
+                Hablemos
+                <span aria-hidden className="cta-flecha">→</span>
+              </a>
+            </div>
+
+            <div>
+              <p style={{ color: "#8b93a7", fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 12px" }}>
+                Todo lo de Multi, más:
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {ENTERPRISE.incluye.map((it) => (
+                  <div key={it} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 14.5, lineHeight: 1.45, color: "#2a3140" }}>
+                    <span aria-hidden style={{ color: "#12b886", fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+                    {it}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <p style={{ color: "#8b93a7", fontSize: 14, textAlign: "center", margin: "28px auto 0", maxWidth: 620, lineHeight: 1.6 }}>
             {DIAS_PRUEBA} días gratis con <b style={{ color: "#5d6578" }}>todo desbloqueado</b>, sin
             tarjeta. Precios en pesos, cancelás cuando quieras. Cambiás de plan
@@ -1240,32 +1315,18 @@ export default function Page() {
         </div>
       </section>
 
-      {/* CIERRE */}
-      <section style={{ background: "#1c222c", padding: "clamp(56px,8vw,96px) clamp(16px,5vw,64px)" }}>
-        <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(28px,4vw,44px)", lineHeight: 1.12, color: "#fff", margin: "0 0 16px" }}>
-            Mañana a esta hora podés tener la agenda cobrando sola.
-          </h2>
-          <p style={{ color: "#b8bfcc", fontSize: "clamp(16px,2vw,18px)", lineHeight: 1.6, margin: "0 auto 32px", maxWidth: 560 }}>
-            El alta lleva dos minutos y son {DIAS_PRUEBA} días gratis. Si no te sirve, no pagás nada: nunca te pedimos la tarjeta.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12 }}>
-            <Link href="/registro" className="cta cta-fuerte cta-claro">
-              Crear mi cuenta gratis
-              <span aria-hidden className="cta-flecha">→</span>
-            </Link>
-            <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta cta-oscuro">
-              <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: "#8bc540", flexShrink: 0 }} />
-              Hablar por WhatsApp
-            </a>
-          </div>
-        </div>
-      </section>
+      {/* El CIERRE salió de acá: era una segunda tanda de «Crear mi cuenta
+          gratis» + «Hablar por WhatsApp», los mismos dos botones que ya están
+          arriba de todo y en cada tarjeta de precio. Lo pidió Leandro y tiene
+          razón: al que llegó hasta el final ya se le ofreció cuatro veces, y
+          la quinta no convence a nadie — solo estira la página entre las
+          preguntas frecuentes y el footer, que es donde el que busca el
+          teléfono o los términos tiene que llegar rápido. */}
 
       {/* FOOTER */}
       <footer style={{ borderTop: "1px solid #eef1f5", padding: "28px clamp(16px,5vw,64px)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/marca/logo-turnos360.webp" alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
+          <img src={logo.src} onError={logo.alFallar} alt="Turnos360" style={{ width: 28, height: 28, objectFit: "contain" }} />
           <span style={{ fontFamily: font.marca, fontWeight: 700, fontSize: 16 }}>Turnos<span style={{ color: "#12b886" }}>360</span></span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>

@@ -55,6 +55,8 @@ const adminApi = {
     adminRequest<T>(p, { method: "POST", body: JSON.stringify(b) }),
   patch: <T>(p: string, b: unknown) =>
     adminRequest<T>(p, { method: "PATCH", body: JSON.stringify(b) }),
+  put: <T>(p: string, b: unknown) =>
+    adminRequest<T>(p, { method: "PUT", body: JSON.stringify(b) }),
 };
 
 // ---------- Tipos ----------
@@ -486,4 +488,19 @@ export interface FichaEmpresa {
 
 export function fichaEmpresa(empresaId: number): Promise<FichaEmpresa> {
   return adminRequest<FichaEmpresa>(`/admin/empresas/${empresaId}/ficha`);
+}
+
+
+// ---------- La marca de Turnos360 ----------
+
+/** El logo cargado por el super-admin. null = se usa el archivo del repo. */
+export function leerMarca(): Promise<{ logo_url: string | null }> {
+  return adminApi.get<{ logo_url: string | null }>("/admin/marca");
+}
+
+/** Guarda el logo. `null` o vacío borra el override y vuelve al del repo. */
+export function guardarMarca(logoUrl: string | null): Promise<{ logo_url: string | null }> {
+  return adminApi.put<{ logo_url: string | null }>("/admin/marca", {
+    logo_url: logoUrl,
+  });
 }

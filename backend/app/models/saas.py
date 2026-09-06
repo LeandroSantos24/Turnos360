@@ -351,3 +351,41 @@ class DebitoAutomatico(Base):
     cancelada_por: Mapped[str | None] = mapped_column(String(160))
 
     empresa: Mapped["Empresa"] = relationship()  # noqa: F821
+
+
+class AjusteGlobal(Base):
+    """Ajustes de Turnos360 que se cambian SIN un deploy.
+
+    QUÉ ENTRA ACÁ Y QUÉ NO
+    ──────────────────────
+    Entra lo que es de Turnos360 (no de un negocio), que cambia solo, y de lo
+    que NO depende ninguna cuenta ni ninguna plata. El caso que la trajo: el
+    logo de la marca. Leandro quiere ponerle un gorrito en Navidad y huevos en
+    Pascua sin tocar el repo, y tiene razón — eso hoy es reemplazar un archivo
+    y desplegar.
+
+    NO entra la configuración del entorno (esa va en variables: los secretos
+    no se guardan en la base) NI los precios de los planes. Los precios
+    parecen el mismo pedido y no lo son: viven en cinco lugares —la grilla, el
+    backend, el compose, precios.ts y la landing—, dos de ellos se COMPILAN
+    adentro del bundle, y hay tests que obligan a que los cinco digan lo
+    mismo. Una fila en la base sería una sexta fuente que la landing no puede
+    leer sin un rebuild: exactamente el «$14.990» que costó esta auditoría
+    encontrar. El logo no tiene ese problema porque no hay ninguna lógica que
+    dependa de su valor: si está mal, se ve mal, y se arregla en diez segundos.
+
+    Es una tabla clave/valor y no una fila con columnas a propósito: agregar un
+    ajuste no puede costar una migración, o dejan de agregarse.
+    """
+
+    __tablename__ = "ajuste_global"
+
+    # La clave es la PK: no hace falta un id, y así la base garantiza sola que
+    # no haya dos filas peleando por el mismo ajuste.
+    clave: Mapped[str] = mapped_column(String(60), primary_key=True)
+    # Texto libre. Lo que significa cada valor lo define quien lo lee, y ahí
+    # es donde tiene que estar la validación (ver schemas/admin.py::MarcaIn).
+    valor: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+
+    actualizado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    actualizado_por: Mapped[str | None] = mapped_column(String(160))

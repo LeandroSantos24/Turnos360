@@ -284,3 +284,31 @@ class RechazoAvisoIn(BaseModel):
     """
 
     motivo: str | None = Field(default=None, max_length=200)
+
+
+class MarcaIn(BaseModel):
+    """El logo de Turnos360, cargado por URL desde el panel.
+
+    LA VALIDACIÓN NO ES UN TRÁMITE ACÁ. Este valor termina adentro del `src`
+    de un `<img>` de la landing y del panel: es lo primero que ve cualquiera
+    que entra, y lo carga el super-admin, o sea alguien con la sesión más
+    poderosa del sistema. Un valor con forma de URL pero que no lo sea —un
+    `javascript:`, un `data:` con HTML adentro— sería un script ejecutándose
+    en el origen de Turnos360.
+
+    Por eso se reusa `_url_imagen_o_none`, que es el mismo validador que
+    protege los logos de los negocios: solo http(s) sin espacios ni comillas,
+    o una ruta `/uploads/` nuestra. Un solo lugar donde está escrito qué es
+    una URL de imagen aceptable.
+
+    Vacío o null BORRA el override y vuelve al archivo del repo.
+    """
+
+    logo_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("logo_url", mode="after")
+    @classmethod
+    def _validar(cls, v: str | None) -> str | None:
+        from app.schemas.empresa import _url_imagen_o_none
+
+        return _url_imagen_o_none(v)

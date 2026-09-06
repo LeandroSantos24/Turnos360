@@ -33,6 +33,7 @@ from app.models.items import ItemTurno
 from app.models.cupon import CuponDescuento
 
 from app.models.saas import (  # cobranza del SaaS
+    AjusteGlobal,
     AjusteSuscripcion,
     AvisoPago,
     DebitoAutomatico,
@@ -43,6 +44,7 @@ from app.models.whatsapp import MovimientoWhatsapp, SaldoWhatsapp
 
 __all__ = [
     "VisitaVidriera",
+    "AjusteGlobal",
     "DebitoAutomatico",
     "CuponDescuento",
     "Base",
