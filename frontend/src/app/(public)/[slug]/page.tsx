@@ -37,6 +37,7 @@ import {
 import {
   conAlfa,
   estilosDe,
+  formaDelLogo,
   normalizarTema,
   type TemaVidriera,
 } from "@/lib/tema-vidriera";
@@ -177,6 +178,11 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
           "--vd-superficie": conAlfa(look.texto, 0.05),
           "--vd-tarjeta": look.tarjeta.background as string,
           "--vd-radio": look.radio,
+          // La forma del logo, por el mismo canal que los colores. Ver
+          // Monograma en vidriera-ui.tsx: antes estaba cableada ahí y no
+          // tenía forma de enterarse de lo que el dueño había elegido.
+          "--vd-logo-radio": formaDelLogo(tema.logo_forma).radio,
+          "--vd-logo-ajuste": formaDelLogo(tema.logo_forma).ajuste,
           color: look.texto,
           fontFamily: undefined,
           ...look.fondo,

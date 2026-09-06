@@ -25,6 +25,8 @@ docker, sin parsear YAML, y falla nombrando la variable que falta.
 import pathlib
 import re
 
+import pytest
+
 RAIZ = pathlib.Path(__file__).resolve().parents[2]
 
 # Las que no van al backend a propósito: son del motor de la base, del
@@ -61,10 +63,32 @@ def _claves_del_backend(ruta: pathlib.Path) -> set[str]:
     return set(re.findall(r"^      ([A-Z_][A-Z0-9_]*):", m.group(1), re.M))
 
 
+def _exigir(ruta: pathlib.Path) -> None:
+    """Saltea con motivo si el archivo no está, en vez de aprobar en silencio.
+
+    ESTE TEST NO COMPARABA NADA ADENTRO DEL CONTENEDOR. `RAIZ` se calcula como
+    `parents[2]` del archivo de test: en la máquina da la raíz del repo, pero
+    en el contenedor —donde el backend está montado en /app— da `/`, y ahí no
+    existía ni /infra ni /.env.example. El `if not existe: return` convertía
+    eso en un punto verde. Un test que no puede fallar ocupa el lugar del que
+    sí protegía, y este es justo el que cuida las catorce variables que no
+    llegaban.
+
+    Ahora los dos archivos van montados (ver infra/docker-compose.yml), así que
+    esto corre de verdad en los dos lados. Si igual faltan, se ve.
+    """
+    if not ruta.exists():
+        pytest.skip(
+            f"No encuentro {ruta}. Adentro del contenedor tiene que estar "
+            "montado (volúmenes ../infra:/infra y ../.env.example en "
+            "infra/docker-compose.yml). Este chequeo no corrió."
+        )
+
+
 def test_todo_lo_documentado_llega_al_backend_en_desarrollo():
     compose = RAIZ / "infra/docker-compose.yml"
-    if not compose.exists():
-        return
+    _exigir(RAIZ / ".env.example")
+    _exigir(compose)
 
     documentadas = _claves_del_env(RAIZ / ".env.example") - NO_VAN
     llegan = _claves_del_backend(compose)
@@ -80,6 +104,7 @@ def test_todo_lo_documentado_llega_al_backend_en_desarrollo():
 def test_ninguna_variable_esta_repetida():
     """Una clave repetida en el mismo `environment:` es YAML ambiguo: gana una
     de las dos y no hay forma de saber cuál sin probarlo."""
+    _exigir(RAIZ / "infra/docker-compose.yml")
     for nombre in ("infra/docker-compose.yml", "infra/docker-compose.prod.yml"):
         ruta = RAIZ / nombre
         if not ruta.exists():
@@ -96,8 +121,7 @@ def test_el_worker_recibe_lo_mismo_que_el_backend():
     el backend, una tarea puede fallar por una config que en la API está —y el
     síntoma aparece en otro lado, horas después."""
     compose = RAIZ / "infra/docker-compose.yml"
-    if not compose.exists():
-        return
+    _exigir(compose)
 
     texto = compose.read_text(encoding="utf-8")
     def claves(servicio: str) -> set[str]:

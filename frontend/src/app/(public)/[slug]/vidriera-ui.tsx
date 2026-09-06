@@ -290,6 +290,19 @@ export function BotonAcento({
   );
 }
 
+/**
+ * El logo del negocio, con LA FORMA QUE ELIGIÓ EL DUEÑO.
+ *
+ * Acá estaba cableado `rounded-2xl object-cover`: un cuadrado redondeado que
+ * recorta lo que sobra, dijera lo que dijera el panel. El dueño elegía
+ * «Círculo» y su cliente veía un cuadrado; elegía «Cuadrado», encuadraba
+ * adentro de un círculo (porque el recorte también estaba cableado, en otro
+ * archivo) y le aparecían las esquinas que había ignorado.
+ *
+ * Las dos variables las define la raíz de la página a partir del tema (ver
+ * page.tsx). Los respaldos son el look de siempre, así que una empresa sin
+ * tema guardado se ve exactamente igual que antes.
+ */
 function Monograma({ v, acento, tam }: { v: Vidriera; acento: string; tam: string }) {
   if (v.logo_url) {
     return (
@@ -297,8 +310,14 @@ function Monograma({ v, acento, tam }: { v: Vidriera; acento: string; tam: strin
       <img
         src={urlDeImagen(v.logo_url)}
         alt={v.nombre}
-        className={`${tam} rounded-2xl border object-cover`}
-        style={{ borderColor: BORDE }}
+        className={`${tam} border`}
+        style={{
+          borderColor: BORDE,
+          borderRadius: "var(--vd-logo-radio, 16px)",
+          // `contain` cuando no es círculo: un logo tiene márgenes por diseño
+          // y texto pegado al borde, y `cover` se los come.
+          objectFit: "var(--vd-logo-ajuste, cover)" as React.CSSProperties["objectFit"],
+        }}
       />
     );
   }

@@ -118,6 +118,22 @@ services:
       # el archivo DE VERDAD. Sin esto, adentro del contenedor no existe
       # ninguna carpeta docs/ y el chequeo no puede controlar nada.
       - ../docs:/docs
+      # infra/ y .env.example, por el mismo motivo y para arreglar un agujero
+      # que ya se había cobrado un test.
+      #
+      # Los tests que comparan la grilla contra los defaults del compose
+      # calculan la raíz del repo como `parents[2]` del archivo de test. En la
+      # máquina eso da la raíz de verdad; ADENTRO DEL CONTENEDOR, donde el
+      # backend está montado en /app, da `/` — y ahí no existía ni /infra ni
+      # /.env.example. Los tests hacían `if not existe: return` y pasaban en
+      # verde sin haber comparado nada. Un test que no puede fallar es peor que
+      # no tenerlo: ocupa el lugar del que sí protegía.
+      #
+      # Montándolos en la raíz, `parents[2]` apunta a los archivos DE VERDAD en
+      # los dos lados y los tests comparan lo mismo corran donde corran.
+      # Read-only: son de configuración, ningún test tiene por qué escribirlos.
+      - ../infra:/infra:ro
+      - ../.env.example:/.env.example:ro
       # Las imágenes que sube el negocio. Volumen y no carpeta del código:
       # `../backend:/app` monta el repo encima, así que sin esto los archivos
       # subidos irían a parar al árbol de fuentes.

@@ -17,18 +17,24 @@
 import { Check } from "lucide-react";
 
 import {
+  FORMAS_DE_LOGO,
   PLANTILLAS,
   estilosDe,
+  formaDelLogo,
   normalizarTema,
   type BotonEstilo,
   type BotonForma,
   type FondoTipo,
+  type LogoForma,
   type Plantilla,
   type TemaVidriera,
   type Titulos,
 } from "@/lib/tema-vidriera";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SubirImagen } from "@/components/subir-imagen";
+import { urlDeImagen } from "@/lib/imagenes";
 
 /** Una fila de opciones con forma de píldora. */
 function Elegir<T extends string>({
@@ -118,13 +124,41 @@ function Color({
   );
 }
 
+/**
+ * Las imágenes y el color de la marca.
+ *
+ * POR QUÉ VIVEN ACÁ Y NO EN «EL NEGOCIO»
+ * ──────────────────────────────────────
+ * Estaban en la pestaña de al lado, con los datos de contacto, y la FORMA del
+ * logo estaba acá. Elegir la forma en una pantalla y subir la imagen en otra
+ * es lo que hizo que el recorte no coincidiera nunca con el resultado: se
+ * encuadraba a ciegas.
+ *
+ * Ahora el que sube el logo tiene la forma al lado, el recorte se hace con
+ * ESA forma, y la previa del costado le muestra el resultado. Las tres cosas
+ * en el mismo lugar, que es donde estaba el error.
+ *
+ * «El negocio» se queda con lo que es texto: dirección, teléfono, email.
+ */
+export interface MarcaEditable {
+  logo_url: string | null;
+  portada_url: string | null;
+  color_marca: string | null;
+  onLogo: (url: string | null) => void;
+  onPortada: (url: string | null) => void;
+  onColor: (hex: string | null) => void;
+}
+
 export function PanelLook({
   tema,
   acentoNegocio,
+  marca,
   onCambio,
 }: {
   tema: TemaVidriera;
   acentoNegocio: string | null;
+  /** Logo, portada y color. Opcional: sin esto el panel es solo el look. */
+  marca?: MarcaEditable;
   onCambio: (t: TemaVidriera) => void;
 }) {
   const t = normalizarTema(tema);
@@ -218,6 +252,8 @@ export function PanelLook({
           </p>
         </div>
 
+        {marca && <BloqueMarca marca={marca} tema={t} onCambio={onCambio} />}
+
         <Elegir<FondoTipo>
           etiqueta="Fondo"
           valor={t.fondo_tipo}
@@ -280,27 +316,199 @@ export function PanelLook({
           onElegir={(v) => set("titulos", v)}
         />
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Elegir
-            etiqueta="Forma del logo"
-            valor={t.logo_forma}
-            opciones={[
-              { valor: "circulo" as const, label: "Círculo" },
-              { valor: "cuadrado" as const, label: "Cuadrado" },
-            ]}
-            onElegir={(v) => set("logo_forma", v)}
-          />
-          <Elegir
-            etiqueta="Tamaño del logo"
-            valor={t.logo_tamano}
-            opciones={[
-              { valor: "grande" as const, label: "Grande" },
-              { valor: "chico" as const, label: "Chico" },
-            ]}
-            onElegir={(v) => set("logo_tamano", v)}
-          />
-        </div>
+        {/* La forma y el tamaño del logo NO están acá abajo: se subieron al
+            bloque de la marca, pegados al botón de subirlo. Separados, el
+            dueño elegía la forma en un lado y encuadraba en otro. */}
+        {!marca && (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Elegir<LogoForma>
+              etiqueta="Forma del logo"
+              valor={t.logo_forma}
+              opciones={FORMAS}
+              onElegir={(v) => set("logo_forma", v)}
+            />
+            <Elegir
+              etiqueta="Tamaño del logo"
+              valor={t.logo_tamano}
+              opciones={[
+                { valor: "grande" as const, label: "Grande" },
+                { valor: "chico" as const, label: "Chico" },
+              ]}
+              onElegir={(v) => set("logo_tamano", v)}
+            />
+          </div>
+        )}
       </section>
+    </div>
+  );
+}
+
+/** Las formas del logo, sacadas del mismo lugar que las usa todo el resto. */
+const FORMAS = (Object.keys(FORMAS_DE_LOGO) as LogoForma[]).map((f) => ({
+  valor: f,
+  label: FORMAS_DE_LOGO[f].etiqueta,
+}));
+
+/**
+ * Logo, portada y color de marca, con la forma del logo al lado.
+ *
+ * La previa del logo se dibuja con la MISMA geometría que la página real
+ * (`formaDelLogo`), así que lo que se ve acá es lo que va a ver el cliente.
+ * Antes esta previa era un círculo cableado y la página un cuadrado: dos
+ * respuestas distintas a la misma pregunta, en la misma pantalla.
+ */
+function BloqueMarca({
+  marca,
+  tema,
+  onCambio,
+}: {
+  marca: MarcaEditable;
+  tema: TemaVidriera;
+  onCambio: (t: TemaVidriera) => void;
+}) {
+  const geo = formaDelLogo(tema.logo_forma);
+  const ancho = tema.logo_forma === "rectangular" ? 96 : 64;
+  const alto = Math.round(ancho / geo.aspecto);
+
+  return (
+    <div className="space-y-5 rounded-2xl border bg-muted/30 p-4">
+      <div>
+        <h4 className="text-sm font-semibold">Tu marca</h4>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          El logo, la portada y tu color. Elegí la forma ANTES de subir el
+          logo: el recorte se hace con esa forma.
+        </p>
+      </div>
+
+      {/* ── Logo ──────────────────────────────────────────────────── */}
+      <div className="space-y-2.5">
+        <Label className="text-xs text-muted-foreground">Foto de perfil (logo)</Label>
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            className="shrink-0 overflow-hidden border bg-card"
+            style={{ width: ancho, height: alto, borderRadius: geo.radio }}
+          >
+            {marca.logo_url ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={urlDeImagen(marca.logo_url)}
+                alt="Logo"
+                className="h-full w-full"
+                style={{ objectFit: geo.ajuste }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                sin logo
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <SubirImagen
+              proposito="logo"
+              size="sm"
+              etiqueta={marca.logo_url ? "Cambiar" : "Subir logo"}
+              // ACÁ está el arreglo: el recorte usa la forma elegida, no un
+              // círculo cableado. Sin esto, alguien con «Cuadrado» encuadraba
+              // adentro de un círculo y después le aparecían las esquinas.
+              forma={{
+                aspecto: geo.aspecto,
+                redondo: geo.redondo,
+                ayuda: geo.ayuda,
+              }}
+              onSubida={(url) => marca.onLogo(url)}
+            />
+            {marca.logo_url && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => marca.onLogo(null)}
+              >
+                Quitar
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <Elegir<LogoForma>
+          etiqueta="Forma"
+          ayuda={geo.ayuda}
+          valor={tema.logo_forma}
+          opciones={FORMAS}
+          onElegir={(v) => onCambio({ ...tema, logo_forma: v })}
+        />
+        <Elegir
+          etiqueta="Tamaño"
+          valor={tema.logo_tamano}
+          opciones={[
+            { valor: "grande" as const, label: "Grande" },
+            { valor: "chico" as const, label: "Chico" },
+          ]}
+          onElegir={(v) => onCambio({ ...tema, logo_tamano: v })}
+        />
+        {marca.logo_url && (
+          <p className="text-xs text-muted-foreground">
+            Si cambiás la forma, volvé a subir el logo para encuadrarlo de
+            nuevo — el que está guardado se recortó con la forma anterior.
+          </p>
+        )}
+      </div>
+
+      {/* ── Portada ───────────────────────────────────────────────── */}
+      <div className="space-y-2.5 border-t pt-4">
+        <Label className="text-xs text-muted-foreground">Foto de portada</Label>
+        <div className="flex flex-wrap items-center gap-3">
+          {marca.portada_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={urlDeImagen(marca.portada_url)}
+              alt="Portada"
+              className="h-14 w-24 shrink-0 rounded-lg border object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-lg border bg-card text-[10px] text-muted-foreground">
+              sin portada
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            <SubirImagen
+              proposito="portada"
+              size="sm"
+              etiqueta={marca.portada_url ? "Cambiar" : "Subir portada"}
+              onSubida={(url) => marca.onPortada(url)}
+            />
+            {marca.portada_url && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => marca.onPortada(null)}
+              >
+                Quitar
+              </Button>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Va de fondo en la cabecera, con el nombre y los botones encima. Una
+          foto del local en horizontal, de 1600&nbsp;px de ancho o más. Si la
+          dejás vacía, la cabecera queda lisa.
+        </p>
+      </div>
+
+      {/* ── Color de marca ────────────────────────────────────────── */}
+      <div className="border-t pt-4">
+        <Color
+          etiqueta="Color de marca"
+          valor={marca.color_marca}
+          porDefecto="#00d4aa"
+          onCambio={marca.onColor}
+        />
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Pinta los botones y los detalles de tu página. Es el único color que
+          la plantilla NO te pisa: es tuyo.
+        </p>
+      </div>
     </div>
   );
 }

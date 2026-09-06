@@ -28,7 +28,7 @@
 import { Calendar, MapPin } from "lucide-react";
 import { urlDeImagen } from "@/lib/imagenes";
 
-import { estilosDe, conAlfa, type TemaVidriera } from "@/lib/tema-vidriera";
+import { estilosDe, conAlfa, formaDelLogo, type TemaVidriera } from "@/lib/tema-vidriera";
 
 export interface DatosPrevia {
   nombre: string;
@@ -48,8 +48,13 @@ export function VistaPrevia({
   datos: DatosPrevia;
 }) {
   const e = estilosDe(tema, datos.color_marca);
-  const logoRedondo = tema.logo_forma === "circulo";
-  const logoLado = tema.logo_tamano === "grande" ? 76 : 52;
+  // La geometría del logo sale del MISMO lugar que la usa la página real
+  // (lib/tema-vidriera.ts). Acá estaba calculada a mano —círculo o 18 % de
+  // radio— y la página real usaba otra: dos previas de la misma cosa que no
+  // coincidían entre sí ni con lo que veía el cliente.
+  const geo = formaDelLogo(tema.logo_forma);
+  const logoAlto = tema.logo_tamano === "grande" ? 76 : 52;
+  const logoAncho = Math.round(logoAlto * geo.aspecto);
 
   return (
     <div className="sticky top-6">
@@ -102,9 +107,9 @@ export function VistaPrevia({
               <div
                 className="mb-3 flex shrink-0 items-center justify-center overflow-hidden bg-white"
                 style={{
-                  width: logoLado,
-                  height: logoLado,
-                  borderRadius: logoRedondo ? "999px" : "18%",
+                  width: logoAncho,
+                  height: logoAlto,
+                  borderRadius: geo.radio,
                   boxShadow: `0 6px 18px ${conAlfa(e.texto, 0.18)}`,
                 }}
               >
@@ -113,7 +118,8 @@ export function VistaPrevia({
                   <img
                     src={urlDeImagen(datos.logo_url)}
                     alt=""
-                    className="h-full w-full object-contain"
+                    className="h-full w-full"
+                    style={{ objectFit: geo.ajuste }}
                   />
                 ) : (
                   <span

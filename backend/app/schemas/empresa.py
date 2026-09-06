@@ -126,7 +126,12 @@ class TemaVidriera(BaseModel):
     titulos: Literal["sans", "serif", "display"] = "sans"
 
     # Redondeo del logo y qué tan grande se muestra en la cabecera.
-    logo_forma: Literal["circulo", "cuadrado"] = "circulo"
+    # Tiene que coincidir EXACTAMENTE con `LogoForma` de
+    # frontend/src/lib/tema-vidriera.ts. Si el frontend ofrece una forma que
+    # acá no está, pydantic rechaza el guardado entero de «Mi página» con un
+    # 422 que habla de un campo que el dueño ni tocó. Hay un test que compara
+    # las dos listas (tests/test_forma_del_logo.py).
+    logo_forma: Literal["circulo", "cuadrado", "rectangular"] = "circulo"
     logo_tamano: Literal["chico", "grande"] = "grande"
 
     @field_validator("fondo_color", "fondo_color_2", mode="after")

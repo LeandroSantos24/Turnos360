@@ -36,7 +36,7 @@ export type FondoTipo = "solido" | "gradiente" | "patron";
 export type BotonForma = "recto" | "suave" | "medio" | "pildora";
 export type BotonEstilo = "solido" | "contorno" | "sombra";
 export type Titulos = "sans" | "serif" | "display";
-export type LogoForma = "circulo" | "cuadrado";
+export type LogoForma = "circulo" | "cuadrado" | "rectangular";
 export type LogoTamano = "chico" | "grande";
 
 export interface TemaVidriera {
@@ -73,6 +73,87 @@ export const TEMA_POR_DEFECTO: TemaVidriera = {
  */
 export function normalizarTema(crudo: Partial<TemaVidriera> | null | undefined): TemaVidriera {
   return { ...TEMA_POR_DEFECTO, ...(crudo ?? {}) };
+}
+
+/* ------------------------------------------------------------------ */
+/* La forma del logo, en UN solo lugar                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cómo se recorta y cómo se dibuja el logo, según la forma elegida.
+ *
+ * EL BUG QUE ESTO CIERRA
+ * ──────────────────────
+ * Leandro subió su logo y le salió recortado en círculo aunque tenía elegido
+ * «Cuadrado». No era un bug: eran TRES lugares decidiendo la forma por su
+ * cuenta, y ninguno preguntándole a los otros.
+ *
+ *   · el recorte al subir      → siempre círculo, cableado en subir-imagen.tsx
+ *   · la vista previa del panel → miraba `logo_forma` (el único que acertaba)
+ *   · la página pública real    → siempre cuadrado redondeado, y `object-cover`
+ *
+ * O sea que el dueño encuadraba dentro de un círculo, la previa le mostraba
+ * un cuadrado y su cliente veía un tercer recorte. Ahora los tres leen de acá.
+ *
+ * POR QUÉ `contain` Y NO `cover` CUANDO NO ES CÍRCULO
+ * ───────────────────────────────────────────────────
+ * `cover` llena la caja recortando lo que sobra. Para una FOTO está bien —una
+ * cara centrada sobrevive—, pero un logo no es una foto: tiene márgenes por
+ * diseño y texto pegado al borde. El logo de Leandro es un faro con «EL FARO ·
+ * BARBERÍA» debajo; con `cover` en una caja cuadrada, esa segunda línea se va.
+ * `contain` muestra el logo entero y deja aire alrededor, que es exactamente
+ * lo que uno espera de un logo.
+ *
+ * El círculo es la excepción y se queda con `cover`: un avatar redondo con
+ * aire alrededor se ve como un error, no como una decisión.
+ */
+export const FORMAS_DE_LOGO: Record<
+  LogoForma,
+  {
+    etiqueta: string;
+    /** Proporción del recorte al subir. */
+    aspecto: number;
+    /** ¿La máscara del recorte se dibuja redonda? */
+    redondo: boolean;
+    /** El `border-radius` con el que se muestra. */
+    radio: string;
+    /** `object-fit`: cómo se acomoda la imagen adentro de su caja. */
+    ajuste: "cover" | "contain";
+    /** Qué le decimos al que está encuadrando. */
+    ayuda: string;
+  }
+> = {
+  circulo: {
+    etiqueta: "Círculo",
+    aspecto: 1,
+    redondo: true,
+    radio: "9999px",
+    ajuste: "cover",
+    ayuda: "Se ve en un círculo. Lo que quede afuera no se muestra.",
+  },
+  cuadrado: {
+    etiqueta: "Cuadrado",
+    aspecto: 1,
+    redondo: false,
+    radio: "16px",
+    ajuste: "contain",
+    ayuda: "Se ve en un cuadrado, entero y sin recortar los bordes.",
+  },
+  rectangular: {
+    etiqueta: "Rectangular",
+    // Apaisado, que es como viene la mayoría de los logos con el nombre al
+    // lado del símbolo. Un logo alto acá entra igual: con `contain` se ve
+    // completo, más chico y centrado.
+    aspecto: 16 / 9,
+    redondo: false,
+    radio: "12px",
+    ajuste: "contain",
+    ayuda: "Apaisado, para logos con el nombre al lado del símbolo.",
+  },
+};
+
+export function formaDelLogo(forma: LogoForma | null | undefined) {
+  return FORMAS_DE_LOGO[forma ?? "circulo"] ?? FORMAS_DE_LOGO.circulo;
 }
 
 /** Los colores base de cada plantilla. `propio` hereda de claro. */

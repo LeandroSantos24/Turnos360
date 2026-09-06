@@ -726,8 +726,14 @@ def test_el_precio_de_config_y_el_del_plan_de_entrada_son_el_mismo():
     assert float(settings.precio_lista_mensual) == float(
         planes.GRILLA[planes.PLAN_DE_ENTRADA].precio
     ), (
-        "PRECIO_LISTA_MENSUAL y el precio del plan de entrada se separaron. "
-        "La landing y la factura van a decir cosas distintas."
+        f"PRECIO_LISTA_MENSUAL vale {settings.precio_lista_mensual:.0f} y el "
+        f"plan de entrada cuesta "
+        f"{planes.GRILLA[planes.PLAN_DE_ENTRADA].precio:.0f}. La landing y la "
+        "factura van a decir cosas distintas.\n"
+        "\n"
+        "DÓNDE MIRAR, en este orden: el `.env` de tu máquina (gana sobre todo "
+        "lo demás y no está en el repo, así que es el que nadie revisa), "
+        "después el default del compose, y por último la grilla de planes.py."
     )
 
 
@@ -763,10 +769,12 @@ def test_los_defaults_de_docker_compose_coinciden_con_la_grilla():
     }
 
     revisados = 0
+    encontrados = 0
     for nombre in ("docker-compose.yml", "docker-compose.prod.yml"):
         ruta = raiz / "infra" / nombre
         if not ruta.exists():
             continue
+        encontrados += 1
         texto = ruta.read_text(encoding="utf-8")
         for var, valor in esperado.items():
             # `${VAR}` a secas, SIN `:-`: es la forma que sustituye una cadena
@@ -799,8 +807,26 @@ def test_los_defaults_de_docker_compose_coinciden_con_la_grilla():
                         "precio de lista. Eso es un typo con cara de descuento."
                     )
 
+    # LOS DOS MOTIVOS POR LOS QUE ACÁ NO SE REVISÓ NADA SON DISTINTOS, Y
+    # CONFUNDIRLOS ES LO QUE HIZO QUE ESTE TEST NO SIRVIERA ADENTRO DEL
+    # CONTENEDOR DURANTE SEMANAS.
+    #
+    #  · No están los archivos → no hay nada que comparar. Antes esto pasaba
+    #    en el contenedor (donde `parents[2]` da `/`) y el test terminaba en
+    #    verde sin haber mirado un solo número. Ahora infra/ va montada, así
+    #    que si igual faltan es que algo se movió: se SALTEA con el motivo a
+    #    la vista, que es distinto de aprobar.
+    #  · Están los archivos pero no tienen ningún default → los defaults se
+    #    borraron o cambiaron de forma. Eso SÍ es una falla.
+    if encontrados == 0:
+        pytest.skip(
+            f"No encuentro los compose desde {raiz}. En el contenedor tienen "
+            "que estar montados (ver el volumen ../infra:/infra en "
+            "infra/docker-compose.yml). Este chequeo no corrió."
+        )
+
     assert revisados > 0, (
-        "No se encontró ningún default de precio en los compose. Si se "
+        "Los compose están pero no tienen ningún default de precio. Si se "
         "cambiaron de forma, este test dejó de proteger nada."
     )
 
@@ -864,11 +890,17 @@ def test_la_grilla_del_frontend_dice_lo_mismo_que_la_del_backend():
             )
         revisados += 1
 
-    # Si los dos archivos se renombran, este test pasaría sin comparar nada.
-    # Que la ausencia sea visible: o están los dos, o no está el frontend.
-    if (raiz / "frontend/src").exists():
-        assert revisados == len(fuentes), (
-            "Falta alguno de los archivos de precios del frontend: "
-            f"revisé {revisados} de {len(fuentes)}. Si se movieron, actualizá "
-            "las rutas acá — si no, este test deja de proteger nada."
+    # Igual que arriba: no es lo mismo «el frontend no está montado» que «el
+    # frontend está y le falta un archivo».
+    if not (raiz / "frontend/src").exists():
+        pytest.skip(
+            f"El frontend no está montado en {raiz} (es lo normal adentro del "
+            "contenedor del backend). Este chequeo corre en tu máquina con "
+            "`pytest` desde la raíz del repo."
         )
+
+    assert revisados == len(fuentes), (
+        "Falta alguno de los archivos de precios del frontend: "
+        f"revisé {revisados} de {len(fuentes)}. Si se movieron, actualizá "
+        "las rutas acá — si no, este test deja de proteger nada."
+    )

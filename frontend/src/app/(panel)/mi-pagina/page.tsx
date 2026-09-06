@@ -781,6 +781,18 @@ function ContenidoMiPagina() {
               <PanelLook
                 tema={normalizarTema(form.tema)}
                 acentoNegocio={form.color_marca ?? null}
+                // El logo, la portada y el color se editan ACÁ, al lado de la
+                // forma con la que se recortan. Estaban en «El negocio», y
+                // elegir la forma en una pestaña para subir la imagen en otra
+                // es lo que hacía que el recorte nunca coincidiera.
+                marca={{
+                  logo_url: form.logo_url ?? null,
+                  portada_url: form.portada_url ?? null,
+                  color_marca: form.color_marca ?? null,
+                  onLogo: (url) => set("logo_url", url ?? ""),
+                  onPortada: (url) => set("portada_url", url ?? ""),
+                  onColor: (hex) => set("color_marca", hex ?? ""),
+                }}
                 onCambio={(nuevo) => set("tema", nuevo)}
               />
             </div>
@@ -835,116 +847,17 @@ function ContenidoMiPagina() {
           />
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Logo</Label>
-          <div className="flex items-center gap-3">
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border bg-muted">
-              {form.logo_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={urlDeImagen(form.logo_url)} alt="Logo" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                  sin logo
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <SubirImagen
-                proposito="logo"
-                size="sm"
-                etiqueta={form.logo_url ? "Cambiar" : "Subir logo"}
-                onSubida={(url) => set("logo_url", url)}
-              />
-              {form.logo_url && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => set("logo_url", "")}
-                >
-                  Quitar
-                </Button>
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Se ve en un círculo arriba de tu página. Al subirlo elegís qué parte
-            se ve.
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="color">Color de marca</Label>
-          <div className="flex items-center gap-2">
-            <input
-              id="color"
-              type="color"
-              className="h-9 w-12 cursor-pointer rounded-md border bg-transparent"
-              value={form.color_marca ?? "#00d4aa"}
-              onChange={(e) => set("color_marca", e.target.value)}
-            />
-            <Input
-              value={form.color_marca ?? ""}
-              placeholder="#00d4aa"
-              onChange={(e) => set("color_marca", e.target.value)}
-              className="w-32"
-            />
-          </div>
-        </div>
-      </div>
+      {/* El logo, la portada y el color de marca SE MUDARON a «Look y
+          colores» → Ajustes finos. No es un capricho de orden: la FORMA del
+          logo ya vivía allá, y elegirla en una pestaña para subir la imagen
+          en otra es lo que hacía que el recorte no coincidiera con lo que
+          después se veía. Acá quedan los datos que son texto. */}
+      <p className="rounded-xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+        ¿El logo, la portada y tu color? Están en{" "}
+        <b>Look y colores → Ajustes finos</b>, junto con la forma del logo:
+        así el recorte al subirlo sale con la forma que elegiste.
+      </p>
 
-      <div className="space-y-1.5">
-        <Label>Foto de portada</Label>
-        <div className="flex flex-wrap items-center gap-3">
-          {form.portada_url && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={urlDeImagen(form.portada_url)}
-              alt="Portada"
-              className="h-16 w-28 shrink-0 rounded-lg border object-cover"
-            />
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            <SubirImagen
-              proposito="portada"
-              size="sm"
-              etiqueta={form.portada_url ? "Cambiar portada" : "Subir portada"}
-              onSubida={(url) => set("portada_url", url)}
-            />
-            {form.portada_url && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => set("portada_url", "")}
-              >
-                Quitar
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Se muestra de fondo en la cabecera de tu página, con el nombre y
-          los botones encima. Va bien una foto del local en horizontal
-          (mínimo 1600&nbsp;px de ancho). Si la dejás vacía, la cabecera
-          queda blanca.
-        </p>
-        {portadaPrevia && (
-          <div
-            className="mt-2 h-32 w-full overflow-hidden rounded-xl border bg-cover bg-center"
-            style={{ backgroundImage: `url(${portadaPrevia})` }}
-          >
-            <div className="flex h-full w-full items-end bg-gradient-to-b from-black/45 via-black/25 to-black/80 p-3">
-              <span
-                className="text-lg font-bold text-white"
-                style={SYNE}
-              >
-                Así se va a ver
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   </Seccion>
           )}

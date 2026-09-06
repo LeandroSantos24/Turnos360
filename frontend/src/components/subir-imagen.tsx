@@ -35,8 +35,19 @@ import {
 } from "@/components/ui/dialog";
 import { subirImagen, Proposito } from "@/lib/subidas-api";
 
-/** Qué forma tiene el recorte de cada uso. `null` = sin recorte. */
-const FORMA: Record<Proposito, { aspecto: number | null; redondo: boolean; ayuda: string }> = {
+/** La forma del recorte de cada uso. `null` = sin recorte. */
+type FormaDeRecorte = { aspecto: number | null; redondo: boolean; ayuda: string };
+
+/**
+ * El default de cada propósito.
+ *
+ * OJO CON `logo`: acá decía «se ve en un círculo» SIEMPRE, con el círculo
+ * cableado, mientras el dueño podía tener elegido «Cuadrado» en el look de su
+ * página. Encuadraba dentro de un círculo, le sobraban las esquinas, y en su
+ * página aparecían. El que usa el logo pasa ahora la forma que corresponde
+ * (ver la prop `forma`); este valor es solo el respaldo para quien no la pase.
+ */
+const FORMA: Record<Proposito, FormaDeRecorte> = {
   avatar: { aspecto: 1, redondo: true, ayuda: "Se ve en un círculo. Centrá la cara." },
   logo: { aspecto: 1, redondo: true, ayuda: "Se ve en un círculo, arriba de tu página." },
   portada: { aspecto: 16 / 9, redondo: false, ayuda: "Es la foto grande de arriba de todo." },
@@ -82,14 +93,22 @@ export function SubirImagen({
   onSubida,
   etiqueta = "Subir foto",
   size = "default",
+  forma: formaElegida,
 }: {
   proposito: Proposito;
   /** Recibe la URL pública de la imagen ya guardada. */
   onSubida: (url: string) => void;
   etiqueta?: string;
   size?: "sm" | "default";
+  /**
+   * Con qué forma se recorta, si el que llama sabe algo que este componente
+   * no puede saber. Es el caso del logo: su forma la elige el dueño en el
+   * look de su página, y el recorte tiene que dar exactamente eso — si no,
+   * encuadra dentro de una figura y después ve otra.
+   */
+  forma?: FormaDeRecorte;
 }) {
-  const forma = FORMA[proposito];
+  const forma = formaElegida ?? FORMA[proposito];
   const input = useRef<HTMLInputElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [nombre, setNombre] = useState("imagen.webp");
