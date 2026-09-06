@@ -55,6 +55,13 @@ services:
       # olvido no rompe nada. En producción no hay default: el compose de
       # prod exige la variable y ENV=prod hace fail-fast.
       SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
+      # Encripta las credenciales de MP/WhatsApp/email que guarda cada
+      # empresa. Separada de SECRET_KEY a propósito: rotar la firma de los
+      # JWT no debe dejar ilegible lo que ya está encriptado en la base.
+      # Vacía en dev = se deriva de SECRET_KEY (crypto.py). Si la seteás
+      # ahora y ya tenías credenciales guardadas con la derivada, esas filas
+      # dejan de desencriptarse: en dev se vuelven a cargar y listo.
+      FERNET_KEY: ${FERNET_KEY:-}
       # URLs base (en deploy: el dominio real)
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
@@ -75,6 +82,34 @@ services:
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
       ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
+      # ── Tus datos de cobro ─────────────────────────────────────────────
+      # Se le muestran al dueño en «Mi suscripción» para que te transfiera.
+      # SIN ESTO EL CIRCUITO DE TRANSFERENCIA NO EXISTE: la pantalla decide si
+      # mostrar «Cómo pagar» mirando si hay CBU o alias, así que con estas
+      # variables vacías el botón «Pasar a Pro» avisa que hay que transferir y
+      # después no muestra a dónde. Estaban en el .env y no llegaban al
+      # contenedor — el .env solo alimenta la sustitución de este archivo, no
+      # se copia solo adentro.
+      COBRO_CBU: ${COBRO_CBU:-}
+      COBRO_ALIAS: ${COBRO_ALIAS:-}
+      COBRO_TITULAR: ${COBRO_TITULAR:-}
+      COBRO_CUIT: ${COBRO_CUIT:-}
+      COBRO_BANCO: ${COBRO_BANCO:-}
+      COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
+      # Link de pago de Mercado Pago pegado a mano (el «botón de pago» que
+      # se genera desde la cuenta de MP). Es una de las tres formas de que
+      # la pantalla de suscripción tenga algo que mostrar; sin ninguna, el
+      # dueño ve «hay que pagar» y ningún lugar donde hacerlo.
+      COBRO_MP_LINK: ${COBRO_MP_LINK:-}
+      # ── Mercado Pago (el TUYO, para cobrar las cuotas del SaaS) ────────
+      MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
+      MP_FIRMA_MODO: ${MP_FIRMA_MODO:-off}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # ── WhatsApp ───────────────────────────────────────────────────────
+      WA_PROVEEDOR: ${WA_PROVEEDOR:-simulado}
+      WA_PRECIO_MENSAJE_ARS: ${WA_PRECIO_MENSAJE_ARS:-73}
+      WA_WEBHOOK_VERIFY_TOKEN: ${WA_WEBHOOK_VERIFY_TOKEN:-}
+      WA_APP_SECRET: ${WA_APP_SECRET:-}
     ports:
       - "8000:8000"
     volumes:
@@ -109,6 +144,13 @@ services:
       # olvido no rompe nada. En producción no hay default: el compose de
       # prod exige la variable y ENV=prod hace fail-fast.
       SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
+      # Encripta las credenciales de MP/WhatsApp/email que guarda cada
+      # empresa. Separada de SECRET_KEY a propósito: rotar la firma de los
+      # JWT no debe dejar ilegible lo que ya está encriptado en la base.
+      # Vacía en dev = se deriva de SECRET_KEY (crypto.py). Si la seteás
+      # ahora y ya tenías credenciales guardadas con la derivada, esas filas
+      # dejan de desencriptarse: en dev se vuelven a cargar y listo.
+      FERNET_KEY: ${FERNET_KEY:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
       SMTP_USER: ${SMTP_USER:-}
@@ -122,6 +164,34 @@ services:
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
       ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
+      # ── Tus datos de cobro ─────────────────────────────────────────────
+      # Se le muestran al dueño en «Mi suscripción» para que te transfiera.
+      # SIN ESTO EL CIRCUITO DE TRANSFERENCIA NO EXISTE: la pantalla decide si
+      # mostrar «Cómo pagar» mirando si hay CBU o alias, así que con estas
+      # variables vacías el botón «Pasar a Pro» avisa que hay que transferir y
+      # después no muestra a dónde. Estaban en el .env y no llegaban al
+      # contenedor — el .env solo alimenta la sustitución de este archivo, no
+      # se copia solo adentro.
+      COBRO_CBU: ${COBRO_CBU:-}
+      COBRO_ALIAS: ${COBRO_ALIAS:-}
+      COBRO_TITULAR: ${COBRO_TITULAR:-}
+      COBRO_CUIT: ${COBRO_CUIT:-}
+      COBRO_BANCO: ${COBRO_BANCO:-}
+      COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
+      # Link de pago de Mercado Pago pegado a mano (el «botón de pago» que
+      # se genera desde la cuenta de MP). Es una de las tres formas de que
+      # la pantalla de suscripción tenga algo que mostrar; sin ninguna, el
+      # dueño ve «hay que pagar» y ningún lugar donde hacerlo.
+      COBRO_MP_LINK: ${COBRO_MP_LINK:-}
+      # ── Mercado Pago (el TUYO, para cobrar las cuotas del SaaS) ────────
+      MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
+      MP_FIRMA_MODO: ${MP_FIRMA_MODO:-off}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # ── WhatsApp ───────────────────────────────────────────────────────
+      WA_PROVEEDOR: ${WA_PROVEEDOR:-simulado}
+      WA_PRECIO_MENSAJE_ARS: ${WA_PRECIO_MENSAJE_ARS:-73}
+      WA_WEBHOOK_VERIFY_TOKEN: ${WA_WEBHOOK_VERIFY_TOKEN:-}
+      WA_APP_SECRET: ${WA_APP_SECRET:-}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app worker --loglevel=info
@@ -146,6 +216,13 @@ services:
       # olvido no rompe nada. En producción no hay default: el compose de
       # prod exige la variable y ENV=prod hace fail-fast.
       SECRET_KEY: ${SECRET_KEY:-clave-solo-de-desarrollo-no-usar-en-produccion}
+      # Encripta las credenciales de MP/WhatsApp/email que guarda cada
+      # empresa. Separada de SECRET_KEY a propósito: rotar la firma de los
+      # JWT no debe dejar ilegible lo que ya está encriptado en la base.
+      # Vacía en dev = se deriva de SECRET_KEY (crypto.py). Si la seteás
+      # ahora y ya tenías credenciales guardadas con la derivada, esas filas
+      # dejan de desencriptarse: en dev se vuelven a cargar y listo.
+      FERNET_KEY: ${FERNET_KEY:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
       SMTP_USER: ${SMTP_USER:-}
@@ -159,6 +236,34 @@ services:
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
       ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
+      # ── Tus datos de cobro ─────────────────────────────────────────────
+      # Se le muestran al dueño en «Mi suscripción» para que te transfiera.
+      # SIN ESTO EL CIRCUITO DE TRANSFERENCIA NO EXISTE: la pantalla decide si
+      # mostrar «Cómo pagar» mirando si hay CBU o alias, así que con estas
+      # variables vacías el botón «Pasar a Pro» avisa que hay que transferir y
+      # después no muestra a dónde. Estaban en el .env y no llegaban al
+      # contenedor — el .env solo alimenta la sustitución de este archivo, no
+      # se copia solo adentro.
+      COBRO_CBU: ${COBRO_CBU:-}
+      COBRO_ALIAS: ${COBRO_ALIAS:-}
+      COBRO_TITULAR: ${COBRO_TITULAR:-}
+      COBRO_CUIT: ${COBRO_CUIT:-}
+      COBRO_BANCO: ${COBRO_BANCO:-}
+      COBRO_WHATSAPP: ${COBRO_WHATSAPP:-}
+      # Link de pago de Mercado Pago pegado a mano (el «botón de pago» que
+      # se genera desde la cuenta de MP). Es una de las tres formas de que
+      # la pantalla de suscripción tenga algo que mostrar; sin ninguna, el
+      # dueño ve «hay que pagar» y ningún lugar donde hacerlo.
+      COBRO_MP_LINK: ${COBRO_MP_LINK:-}
+      # ── Mercado Pago (el TUYO, para cobrar las cuotas del SaaS) ────────
+      MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
+      MP_FIRMA_MODO: ${MP_FIRMA_MODO:-off}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # ── WhatsApp ───────────────────────────────────────────────────────
+      WA_PROVEEDOR: ${WA_PROVEEDOR:-simulado}
+      WA_PRECIO_MENSAJE_ARS: ${WA_PRECIO_MENSAJE_ARS:-73}
+      WA_WEBHOOK_VERIFY_TOKEN: ${WA_WEBHOOK_VERIFY_TOKEN:-}
+      WA_APP_SECRET: ${WA_APP_SECRET:-}
     volumes:
       - ../backend:/app
     command: celery -A app.celery_app beat --loglevel=info

@@ -99,6 +99,7 @@ services:
       # Cobro de la CUOTA del SaaS por Mercado Pago (tu cuenta, no la del
       # negocio). Vacío = apagado: sin token el botón no aparece.
       MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
+      WA_PROVEEDOR: ${WA_PROVEEDOR:-simulado}
       MP_SAAS_WEBHOOK_SECRET: ${MP_SAAS_WEBHOOK_SECRET:-}
       SENA_MINUTOS_PARA_PAGAR: ${SENA_MINUTOS_PARA_PAGAR:-30}
       SECRET_KEY: ${SECRET_KEY}
