@@ -45,11 +45,20 @@ def _formas_del_backend() -> set[str]:
 
 
 def _saltear_sin_frontend(ruta: pathlib.Path) -> None:
+    """Saltea con motivo si el archivo del frontend no está.
+
+    NO debería pasar: `frontend/src` va montado read-only en el contenedor del
+    backend justamente para que estos chequeos corran ahí (ver el volumen en
+    infra/docker-compose.yml). Si esto se saltea, el montaje se cayó y estos
+    guardas no están protegiendo nada — que es distinto de aprobar.
+    """
     if not ruta.exists():
         pytest.skip(
-            f"No encuentro {ruta} (es lo normal adentro del contenedor del "
-            "backend). Este chequeo corre en tu máquina con `pytest` desde la "
-            "raíz del repo."
+            f"No encuentro {ruta}. Tiene que estar montado: el volumen "
+            "`../frontend/src:/frontend/src:ro` del servicio backend en "
+            "infra/docker-compose.yml. Si lo agregaste recién, recreá el "
+            "contenedor (`docker compose up -d --force-recreate backend`). "
+            "Este chequeo NO corrió."
         )
 
 

@@ -894,9 +894,10 @@ def test_la_grilla_del_frontend_dice_lo_mismo_que_la_del_backend():
     # frontend está y le falta un archivo».
     if not (raiz / "frontend/src").exists():
         pytest.skip(
-            f"El frontend no está montado en {raiz} (es lo normal adentro del "
-            "contenedor del backend). Este chequeo corre en tu máquina con "
-            "`pytest` desde la raíz del repo."
+            f"El frontend no está montado en {raiz}. Tiene que estarlo: el "
+            "volumen `../frontend/src:/frontend/src:ro` del servicio backend "
+            "en infra/docker-compose.yml. Si lo agregaste recién, recreá el "
+            "contenedor. Este chequeo NO corrió."
         )
 
     assert revisados == len(fuentes), (

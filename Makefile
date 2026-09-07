@@ -61,10 +61,30 @@ dbml:        ## Regenera docs/turnos360.dbml desde los modelos
 psql:        ## Consola de PostgreSQL
 	$(COMPOSE) exec db psql -U turnos360 -d turnos360
 
-test:
-	$(COMPOSE) exec backend python -m pytest -q
+test:        ## Corre la suite. -rs para que los tests salteados digan por qué
+	# El -rs no es un adorno. Siete tests de la suite comparan TypeScript
+	# contra Python y necesitan que el frontend esté montado en el contenedor;
+	# cuando no lo está se saltean, y un salteo callado es una `s` perdida
+	# entre novecientas `.`. Con -rs, cada salteo dice su motivo al final.
+	$(COMPOSE) exec backend python -m pytest -q -rs
+
+recrear:     ## Rehace los contenedores para tomar cambios del compose
+	# CUÁNDO USAR ESTO Y NO `restart`, que es la confusión que ya costó dos
+	# corridas con siete tests salteados sin que se notara:
+	#
+	#   restart          → reinicia el PROCESO adentro del contenedor que ya
+	#                      existe. Alcanza para cambios de código Python, que
+	#                      va montado y se relee solo.
+	#   up --force-recreate → rehace el CONTENEDOR. Hace falta cada vez que
+	#                      cambia infra/docker-compose.yml: volúmenes nuevos,
+	#                      variables de entorno, puertos. `restart` no relee
+	#                      ese archivo NUNCA, y no avisa.
+	#
+	# --no-build a propósito: recrear no debería salir a internet a buscar
+	# imágenes. Si además cambió el Dockerfile, usá `make up`.
+	$(COMPOSE) up -d --force-recreate --no-build backend worker beat
 
 typecheck:   ## Verifica los tipos del panel contra la linea de base
 	$(COMPOSE) exec -T frontend npm run typecheck
 
-.PHONY: up down logs ps sh db-upgrade db-revision db-reset seed seed-minimo psql test typecheck dbml
+.PHONY: up down logs ps sh db-upgrade db-revision db-reset seed seed-minimo psql test typecheck dbml recrear

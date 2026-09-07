@@ -134,6 +134,16 @@ services:
       # Read-only: son de configuración, ningún test tiene por qué escribirlos.
       - ../infra:/infra:ro
       - ../.env.example:/.env.example:ro
+      # Y el código del frontend, por el MISMO motivo, que en la primera vuelta
+      # se me pasó: los tests que comparan la grilla de precios y la forma del
+      # logo contra el TypeScript se salteaban siete veces adentro del
+      # contenedor. Y el contenedor es donde Leandro corre la suite —no tiene
+      # un entorno de Python en la máquina—, así que esos siete guardas no
+      # corrían nunca en ningún lado. Un chequeo que solo puede correr donde
+      # nadie lo corre es lo mismo que no tenerlo.
+      #
+      # Solo src/ y read-only: el backend no compila nada del frontend, lo
+      # único que hace es leer esos archivos como texto para comparar números.
       - ../frontend/src:/frontend/src:ro
       # Las imágenes que sube el negocio. Volumen y no carpeta del código:
       # `../backend:/app` monta el repo encima, así que sin esto los archivos
