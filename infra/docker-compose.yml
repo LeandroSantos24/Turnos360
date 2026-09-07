@@ -134,6 +134,7 @@ services:
       # Read-only: son de configuración, ningún test tiene por qué escribirlos.
       - ../infra:/infra:ro
       - ../.env.example:/.env.example:ro
+      - ../frontend/src:/frontend/src:ro
       # Las imágenes que sube el negocio. Volumen y no carpeta del código:
       # `../backend:/app` monta el repo encima, así que sin esto los archivos
       # subidos irían a parar al árbol de fuentes.
