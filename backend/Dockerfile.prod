@@ -34,6 +34,13 @@ RUN useradd --create-home --uid 10001 app
 COPY --from=deps /install /usr/local
 COPY --chown=app:app . .
 
+# Carpeta de las imágenes que sube el negocio. Se crea ACÁ, con dueño `app` y
+# antes del USER, porque el compose monta encima un volumen con nombre: Docker
+# copia dueño y permisos de la carpeta de la imagen al inicializar un volumen
+# vacío. Sin esto el volumen nace root-owned y el primer mkdir del backend
+# falla con PermissionError.
+RUN mkdir -p /app/uploads && chown app:app /app/uploads
+
 USER app
 
 EXPOSE 8000

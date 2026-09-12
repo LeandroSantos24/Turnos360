@@ -32,14 +32,20 @@ Es exactamente el desastre que el propio comentario del `config.py` advierte
 ("Tiene que ser un VOLUMEN en producción") y que el comentario del volumen
 repite al pie. La declaración quedó huérfana.
 
-**Solución** — montar en `backend` y en `worker` (el worker también escribe si
-alguna tarea toca imágenes):
+**Solución** — montar en `backend`. Verificado con grep: `uploads_dir` solo lo usan
+`main.py` (lo sirve por StaticFiles) y `routers/subidas.py` (escribe). El worker y el
+beat no tocan esa carpeta, igual que en el compose de desarrollo, donde el volumen ya
+está montado solo en `backend`:
 
 ```yaml
   backend:
     volumes:
       - uploads:/app/uploads
 ```
+
+Dato que confirma que es una omisión y no una decisión: `infra/docker-compose.yml`
+(desarrollo) **sí** lo monta, en la línea 151, con un comentario que explica por qué.
+La línea se perdió al escribir el compose de producción.
 
 Ojo con los permisos: el contenedor corre como `app` (uid 10001) y `/app/uploads`
 no existe en la imagen, así que Docker crea el volumen vacío y **root-owned**, y

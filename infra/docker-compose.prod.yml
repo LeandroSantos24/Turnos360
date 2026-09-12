@@ -138,6 +138,22 @@ services:
       ADMIN_ALERTA_FALLIDOS: ${ADMIN_ALERTA_FALLIDOS:-true}
       ADMIN_ALERTA_EN_DEV: ${ADMIN_ALERTA_EN_DEV:-false}
       ADMIN_ALERTA_GEOLOCALIZAR: ${ADMIN_ALERTA_GEOLOCALIZAR:-true}
+    # LAS FOTOS QUE SUBE CADA NEGOCIO (logo, portada, equipo, galería).
+    #
+    # El volumen estaba declarado al pie del archivo pero NINGÚN servicio lo
+    # montaba, así que UPLOADS_DIR=/app/uploads escribía DENTRO del contenedor
+    # y el primer `up -d --build backend` borraba las imágenes de todos los
+    # clientes, sin aviso y sin forma de recuperarlas.
+    #
+    # Va solo en backend: es el único servicio que toca esa carpeta (main.py
+    # la sirve por StaticFiles, routers/subidas.py escribe). El worker y el
+    # beat no la usan, igual que en el compose de desarrollo.
+    #
+    # La carpeta se crea con dueño `app` en Dockerfile.prod: Docker copia
+    # dueño y permisos de la imagen al inicializar un volumen vacío, y sin eso
+    # queda root-owned y el mkdir del backend falla con PermissionError.
+    volumes:
+      - uploads:/app/uploads
     # --proxy-headers + --forwarded-allow-ips: uvicorn confía en el
     # X-Forwarded-For que manda Nginx, así slowapi limita por IP REAL.
     # Sin esto, todos los visitantes comparten la IP de Nginx y el límite
