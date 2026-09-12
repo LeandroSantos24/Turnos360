@@ -6,11 +6,14 @@ autorización multi-tenant, secretos, Docker/infra, dependencias.
 Pendiente para la parte 2: base de datos y rendimiento, código muerto, N+1,
 índices, bundle del frontend.
 
+**Estado al 2026-09-12: los dos CRÍTICOS están resueltos y verificados.**
+C1 en `ce5fb01`, C2 en `58e0dbb`.
+
 ---
 
-## 🔴 CRÍTICO — resolver antes del deploy
+## 🔴 CRÍTICO
 
-### C1. El volumen `uploads` está declarado pero no montado
+### C1. El volumen `uploads` está declarado pero no montado — ✅ RESUELTO (`ce5fb01`)
 
 `infra/docker-compose.prod.yml` declara el volumen al final:
 
@@ -59,8 +62,84 @@ RUN mkdir -p /app/uploads && chown app:app /app/uploads
 Docker copia dueño y permisos de la carpeta de la imagen al inicializar el
 volumen, así que con eso queda como `app:app`.
 
-**Verificación:** subir una foto, `docker compose ... up -d --build backend`,
-confirmar que la foto sigue estando.
+**Verificado el 2026-09-12** levantando el stack de producción:
+
+```
+✔ Volume turnos360-prod_uploads      Created
+✔ Container turnos360-prod-backend-1 Started
+
+$ docker compose ... exec backend ls -la /app/uploads
+drwxr-xr-x 2 app  app  4096 Sep  5 16:34 .
+```
+
+El volumen se crea, se monta, y la carpeta pertenece a `app` y no a root — que
+era el segundo paso, el que no es obvio.
+
+Falta todavía la prueba de PERSISTENCIA de punta a punta (escribir, rebuildear,
+confirmar que sobrevive). Lo estructural está verificado; lo que no se probó es
+el ciclo completo.
+
+---
+
+## 🔴 CRÍTICO (encontrado durante la verificación)
+
+### C2. Un comentario del `.env` terminaba siendo la clave de firma de los JWT — ✅ RESUELTO (`58e0dbb`)
+
+Apareció por accidente, verificando otra cosa.
+
+Docker Compose, cuando una variable del archivo de entorno queda **vacía** y
+lleva un comentario en la misma línea, toma **el comentario como valor**. Con
+`.env.prod.example` sin completar, esto es lo que recibía el backend:
+
+```
+SECRET_KEY:   '# firma de los JWT'
+FERNET_KEY:   '# cifra las credenciales guardadas. Distinta de'
+CORS_ORIGINS: '# separados por coma'
+REDIS_URL:    'redis://:# solo alfanumérico: viaja dentro de una URL@redis:6379/0'
+```
+
+(Cuando la variable **sí** tiene valor, Compose strippea bien el comentario. Por
+eso el problema solo aparece en las que quedan vacías, que son justamente las
+que hay que completar a mano.)
+
+Lo grave es lo que pasaba después. El fail-fast era:
+
+```python
+if self.secret_key.strip() in ("", PLACEHOLDER_SECRET):
+```
+
+`"# firma de los JWT"` no es `""` ni es `cambiar-en-produccion`, **así que
+pasaba**. Verificado cargando `Settings` con `ENV=prod` y ese valor: el backend
+arranca con normalidad.
+
+O sea: quien completara el `.env.prod` y se salteara `SECRET_KEY` levantaba en
+producción firmando los JWT con una cadena publicada en este repositorio.
+Cualquiera que leyera `.env.prod.example` podía forjar un token para cualquier
+empresa y cualquier rol, incluido el ámbito de super-admin. El fail-fast existe
+exactamente para impedir esto y este caso se le escapaba.
+
+Otras dos variables afectadas, menos graves pero igual de silenciosas:
+
+- `MP_WEBHOOK_SECRET` vacío → la verificación de firma de Mercado Pago comparaba
+  contra un comentario.
+- `ADMIN_ALERTA_EMAIL` vacío → `avisar_acceso_admin` devolvía `True` (el
+  comentario no es cadena vacía) y los avisos de acceso al panel de super-admin
+  salían hacia una dirección inexistente, fallando en silencio.
+
+**Solución aplicada**, en dos capas:
+
+1. `.env.prod.example`: los ocho comentarios en línea pasaron a su propia línea,
+   y el archivo termina en salto de línea. Sin ese salto, un `>> .env.prod` se
+   pega a la última línea —que es un comentario— y la variable se pierde adentro.
+   Así fue como se descubrió todo esto.
+2. `config.py`: el fail-fast rechaza cualquier secreto que empiece con `#` y
+   exige 32 caracteres como mínimo. Es el candado para el día que alguien vuelva
+   a poner un comentario en línea.
+
+**Verificado**: los cinco casos (comentario colado, secreto corto, vacío, iguales
+entre sí, correcto) — solo el último arranca. Y la suite completa del backend en
+verde contra un PostgreSQL real: **972 passed, 1 skipped**, más las cinco
+migraciones de Alembic corriendo desde cero.
 
 ---
 
