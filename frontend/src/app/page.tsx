@@ -37,6 +37,8 @@ const features = [
   { glyph: "%", title: "Comisiones por profesional", body: "Cada barbero con su porcentaje. La liquidación sale sola, sin cuentas en papelitos." },
   { glyph: "∞", title: "Membresías y gift cards", body: "\u201CPagás $50.000 y tenés los cortes del mes.\u201D Abonos, gift cards con QR y cupones para llenar horas flojas." },
   { glyph: "✓", title: "Ficha de cada cliente", body: "Historial, gasto total, servicio favorito y etiquetas: VIP, frecuente o en riesgo de no volver." },
+  { glyph: "+", title: "Historia clínica, si tu rubro la necesita", body: "Nutrición, kinesiología, psicología y consultorios: antecedentes, evolución de cada sesión, mediciones y adjuntos. Se registra quién la abrió y cuándo." },
+  { glyph: "▤", title: "Productos en el mismo ticket", body: "La bebida, la cera, el shampoo que se lleva. Se suman al turno y entran a la caja del día como cualquier otro cobro." },
 ];
 
 const shots = [
@@ -69,11 +71,11 @@ const rubros: { emoji: string; label: string; img?: string }[] = [
   { emoji: "💅", label: "Salones de uñas", img: "/img/rubro-unas.jpg" },
   { emoji: "✨", label: "Centros de estética", img: "/img/rubro-estetica.jpg" },
   { emoji: "🧖", label: "Spa y masajes", img: "/img/rubro-spa.jpg" },
-  { emoji: "🎨", label: "Tatuajes" },
+  { emoji: "🎨", label: "Tatuajes", img: "/img/rubro-tatuajes.jpg" },
   { emoji: "🥗", label: "Nutrición", img: "/img/rubro-nutricion.jpg" },
   { emoji: "🤸", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
-  { emoji: "🧠", label: "Psicología" },
-  { emoji: "🩺", label: "Consultorios" },
+  { emoji: "🧠", label: "Psicología", img: "/img/rubro-psicologia.jpg" },
+  { emoji: "🩺", label: "Consultorios", img: "/img/rubro-consultorios.jpg" },
 ];
 
 /**
