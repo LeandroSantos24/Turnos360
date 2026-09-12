@@ -355,6 +355,13 @@ export default function Page() {
           prefers-reduced-motion apaga todo. No es un detalle de accesibilidad
           de manual: hay gente a la que el movimiento continuo le da mareo, y
           esta es una página de venta que se abre desde el celular. */}
+      {/* OJO CON LAS COMILLAS DOBLES ACÁ ADENTRO, incluso en un comentario.
+          React las serializa como &quot; en el HTML del servidor y las deja
+          como " al hidratar en el cliente: los dos strings dejan de ser
+          idénticos y salta "Text content does not match server-rendered
+          HTML". Eran cuatro comillas en dos comentarios de CSS —20 caracteres
+          de diferencia sobre 16.537— y tiraban un error de hidratación en
+          toda la landing. Si necesitás comillas en este bloque, usá « ». */}
       <style>{`
         /* ── Barra superior ──────────────────────────────────────────────
            Grilla de tres columnas (1fr · auto · 1fr) y no space-between: con
@@ -521,7 +528,7 @@ export default function Page() {
            necesitan: son los que se venden solos.
 
            El destacado se levanta 12px sobre los otros dos: es la forma más
-           barata de decir "este" sin escribirlo. */
+           barata de decir «este» sin escribirlo. */
         .grilla-planes {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
@@ -611,7 +618,7 @@ export default function Page() {
 
         /* ── Revelado al hacer scroll ────────────────────────────────────
            La página entera aparecía de golpe, entera, quieta. Eso es lo que
-           se lee como "plana": no le falta color, le falta que las cosas
+           se lee como «plana»: no le falta color, le falta que las cosas
            lleguen. Cada bloque sube 18px y se enciende cuando entra en
            pantalla, escalonado con --demora.
 
@@ -897,7 +904,7 @@ export default function Page() {
         <div style={{ maxWidth: 1120, margin: "0 auto", textAlign: "center" }}>
           <h2 style={{ fontFamily: font.titulo, fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", margin: "0 0 12px" }}>Todo el negocio en un solo lugar</h2>
           <p style={{ color: "#5d6578", fontSize: 17, margin: "0 auto 8px", maxWidth: 560 }}>Agenda, clientes, caja y estadísticas desde el celular o la compu. Estas son pantallas reales del sistema.</p>
-          <img src="/img/notebook-mockup.png" alt="Turnos360 en una notebook" style={{ width: "100%", maxWidth: 720, mixBlendMode: "multiply", display: "block", margin: "0 auto 8px" }} />
+          <img src="/img/notebook-mockup.webp" alt="Turnos360 en una notebook" style={{ width: "100%", maxWidth: 720, display: "block", margin: "0 auto 8px" }} />
           <div style={{ display: "inline-flex", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 999, padding: 5, gap: 4, marginBottom: 28, flexWrap: "wrap", justifyContent: "center" }}>
             {shots.map((s, i) => (
               <button key={s.label} onClick={() => setTab(i)} style={{ border: "none", cursor: "pointer", fontFamily: font.texto, fontSize: 14.5, fontWeight: 700, padding: "9px 22px", borderRadius: 999, background: i === tab ? "#12b886" : "transparent", color: i === tab ? "#fff" : "#5d6578" }}>{s.label}</button>
