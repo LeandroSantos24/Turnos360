@@ -295,6 +295,42 @@ class Settings(BaseSettings):
 
         generar = 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
 
+        # UN COMENTARIO NO ES UN SECRETO.
+        #
+        # Docker Compose, cuando una variable queda VACÍA y tiene un comentario
+        # en la misma línea, se toma el comentario COMO VALOR:
+        #
+        #     SECRET_KEY=        # firma de los JWT
+        #
+        # deja SECRET_KEY valiendo literalmente "# firma de los JWT". Eso no es
+        # "" ni es el placeholder, así que los dos chequeos de abajo lo dejaban
+        # pasar: el backend arrancaba en producción firmando los JWT con una
+        # cadena escrita en .env.prod.example, que está en un repo público.
+        # Cualquiera podía forjar un token para cualquier empresa y cualquier
+        # rol, incluido el ámbito de super-admin.
+        #
+        # La plantilla ya no lleva comentarios en línea, pero esto es el
+        # candado: si alguien vuelve a poner uno, el backend no levanta.
+        #
+        # El largo mínimo va en el mismo control porque ataja la otra forma de
+        # lo mismo: un secreto "puesto a mano para probar" que quedó.
+        LARGO_MINIMO_SECRETO = 32
+        for nombre, valor in (("SECRET_KEY", self.secret_key), ("FERNET_KEY", self.fernet_key)):
+            v = (valor or "").strip()
+            if v.startswith("#"):
+                raise ValueError(
+                    f"{nombre} vale {v[:40]!r}, que es un COMENTARIO, no un secreto. "
+                    "Pasa cuando en el .env la variable queda vacía y tiene un "
+                    "comentario en la misma línea: Docker Compose toma el "
+                    f"comentario como valor. Poné el comentario en su propia "
+                    f"línea y completá {nombre}. {generar}"
+                )
+            if v and len(v) < LARGO_MINIMO_SECRETO:
+                raise ValueError(
+                    f"{nombre} tiene {len(v)} caracteres y el mínimo son "
+                    f"{LARGO_MINIMO_SECRETO}. {generar}"
+                )
+
         if self.secret_key.strip() in ("", PLACEHOLDER_SECRET):
             raise ValueError(
                 "SECRET_KEY sin configurar en producción. Generá uno real con: "
