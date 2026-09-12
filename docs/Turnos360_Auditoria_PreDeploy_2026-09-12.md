@@ -144,7 +144,7 @@ migraciones de Alembic corriendo desde cero.
 
 ## 🟠 IMPORTANTE — recomendable antes del deploy
 
-### I1. Los headers de seguridad no cubren el frontend, y no hay CSP
+### I1. Los headers de seguridad no cubren el frontend, y no hay CSP — ✅ HEADERS RESUELTOS (CSP pendiente)
 
 El middleware de `app/main.py` agrega `X-Content-Type-Options`, `X-Frame-Options: DENY`,
 `Referrer-Policy` y `HSTS`, pero **sólo a las respuestas de la API**. Las páginas HTML
@@ -163,9 +163,31 @@ add_header X-Content-Type-Options "nosniff"                       always;
 add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
 ```
 
-La CSP conviene arrancarla en `Content-Security-Policy-Report-Only` y mirar qué
-rompe antes de enforzarla — Next inyecta scripts inline y una CSP estricta sin
-nonce tira el panel abajo.
+**Aplicado el 2026-09-12** en `staging.conf` y en `produccion.conf.ejemplo`.
+
+Los headers van DENTRO de `location /`, no a nivel `server`, por una regla de
+nginx fácil de pisar: un `add_header` dentro de un location **reemplaza** todos
+los heredados del padre. A nivel `server` no habrían llegado a `/_next/static/`
+(que ya tiene su propio `add_header` de Cache-Control) y además se habrían
+duplicado en `/api/`, donde el backend ya los manda. Por eso `/_next/static/`
+repite el `nosniff` junto a su Cache-Control.
+
+**Verificado** levantando un nginx real contra un backend de prueba:
+
+```
+GET /                                    GET /_next/static/app.js
+HTTP/1.1 200 OK                          HTTP/1.1 200 OK
+X-Frame-Options: DENY                    X-Content-Type-Options: nosniff
+X-Content-Type-Options: nosniff          Cache-Control: public, max-age=31536000
+Referrer-Policy: strict-origin-when-...
+```
+
+Las dos configuraciones pasan `nginx -t`.
+
+**La CSP sigue pendiente**, a propósito: conviene arrancarla en
+`Content-Security-Policy-Report-Only` y mirar qué rompe antes de enforzarla —
+Next inyecta scripts inline y una CSP estricta sin nonce tira el panel abajo.
+No es algo para aplicar a ciegas.
 
 ### I2. Los tokens viven en `localStorage`
 
