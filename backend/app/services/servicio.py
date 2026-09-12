@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import Recurso, Servicio, ServicioSucursal, Sucursal
 from app.schemas.servicio import ServicioCrear, ServicioEditar
@@ -15,8 +15,19 @@ def listar(
     if solo_activos:
         condiciones.append(Servicio.activo.is_(True))
     total = db.scalar(select(func.count()).select_from(Servicio).where(*condiciones))
+    # selectinload: sin esto, ServicioOut.desde_modelo lee `servicio.recursos`
+    # de cada fila y dispara UNA consulta por servicio. Medido con 12
+    # servicios: 15 SELECTs, de los cuales 12 eran esa. Con selectinload los
+    # recursos de todos vienen en UNA consulta extra. Es el mismo patrón que
+    # ya usa services/recurso.py con las especialidades, y el mismo criterio
+    # que el `mapa_de_sucursales` de más arriba.
     items = list(
-        db.scalars(select(Servicio).where(*condiciones).order_by(Servicio.nombre))
+        db.scalars(
+            select(Servicio)
+            .where(*condiciones)
+            .options(selectinload(Servicio.recursos))
+            .order_by(Servicio.nombre)
+        )
     )
     return total or 0, items
 

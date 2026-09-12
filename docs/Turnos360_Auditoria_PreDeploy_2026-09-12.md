@@ -3,8 +3,7 @@
 Fecha: 2026-09-12 · Commit auditado: `e15e6c9` · Alcance de esta parte: autenticación,
 autorización multi-tenant, secretos, Docker/infra, dependencias.
 
-Pendiente para la parte 2: base de datos y rendimiento, código muerto, N+1,
-índices, bundle del frontend.
+Parte 2 (base de datos, rendimiento, código muerto, bundle) al final del documento.
 
 **Estado al 2026-09-12: los dos CRÍTICOS están resueltos y verificados.**
 C1 en `ce5fb01`, C2 en `58e0dbb`.
@@ -302,3 +301,95 @@ está comentado. Está documentado como decisión deliberada para el staging de 
 IP pública no hay Let's Encrypt). **No es un hallazgo** — pero es el paso que falta
 tildar el día del deploy real: cambiar el montaje a `produccion.conf.ejemplo`,
 descomentar 443 y los volúmenes de certbot.
+
+
+---
+
+# Parte 2 — base de datos, rendimiento y limpieza
+
+Auditado sobre `e1d3ae9`, con un PostgreSQL 16 real y la suite completa corriendo.
+
+## 🟠 IMPORTANTE
+
+### I5. N+1 al listar servicios — ✅ RESUELTO
+
+`ServicioOut.desde_modelo` hace `[r.id for r in servicio.recursos]`, y
+`servicio.recursos` es una relación **lazy** many-a-muchos. `svc.listar` no la
+precargaba, así que se disparaba **una consulta por servicio**.
+
+Medido, no deducido. Con 12 servicios:
+
+```
+servicios listados: 12
+SELECTs ejecutados: 15
+  x 12  SELECT recurso.id AS recurso_id, recurso.sucursal_id ...
+  x  1  SELECT count(*)
+  x  1  SELECT servicio.id, servicio.nombre, ...
+  x  1  SELECT servicio_sucursal.servicio_id, ...
+```
+
+Doce de las quince consultas eran la misma, repetida. Un negocio con 40
+servicios hacía 43 consultas para pintar una pantalla.
+
+Llama la atención porque el propio archivo ya resuelve bien el caso gemelo: la
+línea de arriba comenta *"Los locales de TODOS los servicios en una sola
+consulta, no una por fila"* y usa `mapa_de_sucursales`. Los recursos se
+quedaron afuera de ese criterio.
+
+**Solución** — una línea, el mismo patrón que ya usa `services/recurso.py` con
+las especialidades:
+
+```python
+.options(selectinload(Servicio.recursos))
+```
+
+**Resultado medido:** 15 → **4 consultas**, y ahora es constante: 40 servicios
+también son 4. Suite completa en verde (972 passed, 1 skipped).
+
+## 🟡 MEJORA
+
+### M4. Un TODO real
+
+`src/app/(panel)/membresias/asignar-a-cliente-dialog.tsx:7` — el resto de los
+`TODO` que aparecen en un grep son falsos positivos (la palabra "TODOS" en
+castellano y placeholders tipo `GIFT-XXXX-XXXX`).
+
+## 🟢 OK — revisado y correcto
+
+- **Índices.** Un barrido automático marcó 38 claves foráneas sin índice, pero
+  al revisar los `__table_args__` la mayoría es falsa alarma: hay compuestos
+  `(empresa_id, X)` en todas las tablas calientes, que es la forma correcta en
+  un multi-tenant donde toda consulta filtra por empresa primero.
+
+  Mención aparte para los **índices parciales** de `turno`: la tarea de
+  recordatorios filtra por fecha y flag *sin* `empresa_id`, así que ninguno de
+  los compuestos le servía. Están resueltos con `postgresql_where`, que es
+  justo lo que corresponde y lo que casi nadie mira. Antes eran dos scans
+  completos de tabla cada quince minutos.
+
+  Quedan sin índice `turno.servicio_id` y `turno.creado_por`, de impacto bajo:
+  no se filtra por ellas, y como los servicios se dan de baja lógica
+  (`activo=False`) tampoco hay borrados que disparen scans en la tabla hija.
+
+- **Otros N+1: no hay.** Barrido de consultas dentro de bucles en routers y
+  services: solo dos, las dos legítimas (el webhook de WhatsApp itera los
+  estados de un payload, y `giftcard` reintenta hasta 10 veces para generar un
+  código único). Los bucles de `cobranza.py` precargan en diccionarios por id o
+  usan JOIN explícito. En toda la capa de modelos hay apenas 8 relaciones, y
+  `selectinload` ya estaba donde hacía falta.
+
+- **Migraciones.** Las cinco de Alembic corren limpias desde una base vacía.
+
+- **Código muerto: no hay.** De 163 archivos en `src/`, **cero** sin ningún
+  import que los referencie. Cero `console.log`, cero `debugger`.
+
+- **Dependencias.** Cero sin usar. Tres aparecían como huérfanas y las tres son
+  falsos positivos: `@fontsource/figtree` y `@fontsource/sora` entran por
+  `@import` en `globals.css` (autohospedadas, sin pedidos a Google Fonts desde
+  la máquina del visitante), y `react-dom` la exige Next.
+
+- **Bundle.** `next build` compila sin errores. **87.5 kB** compartidos por
+  todas las rutas, que está muy bien para Next 14. La ruta más pesada es
+  `/agenda` con 227 kB, seguida de `/membresias` (221 kB) y `/clientes/[id]`
+  (196 kB) — ninguna preocupante. `images: { unoptimized: true }` y las fuentes
+  autohospedadas ayudan.
