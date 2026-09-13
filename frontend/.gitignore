@@ -34,3 +34,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capturas del panel para la landing (se generan, no se versionan)
+scripts/.capturas/
