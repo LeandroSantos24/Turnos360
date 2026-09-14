@@ -1,233 +1,64 @@
 "use client";
 
 /**
- * Mi suscripción (/suscripcion).
+ * PASO 1 — Mi suscripción (/suscripcion).
  *
- * Lo que el dueño necesita saber sobre su cuenta de Turnos360: en qué estado
- * está, cuánto paga, hasta cuándo, qué pagó antes y cómo pagar.
+ * En qué estado está, cuánto paga, hasta cuándo, qué pagó antes, y la grilla
+ * para cambiar de plan. El objetivo sigue siendo que nunca tenga que escribir
+ * para preguntar "¿cuándo me vence?".
  *
- * El objetivo es que nunca tenga que escribirte para preguntar "¿cuándo me
- * vence?" o "¿me pasás el CBU?". Los datos de cobro salen del entorno, no del
- * código.
+ * LO QUE YA NO ESTÁ ACÁ
+ * ─────────────────────
+ * Todo el circuito de cobro. Antes esta pantalla era una sola de 33 KB donde
+ * convivían el estado, la grilla, el checkout de Mercado Pago, los datos de
+ * transferencia y el aviso de pago, apareciendo y desapareciendo con cuatro
+ * banderas de estado. Eso tenía un problema concreto y no estético: la sección
+ * "Cómo pagar" SOLO se renderizaba si la empresa ya estaba por vencer, así que
+ * durante la prueba el botón de comprar hacía scroll a un elemento que no
+ * existía en el DOM. Alguien que quería pagar se quedaba sin camino, y del
+ * intento no quedaba ni rastro.
+ *
+ * Ahora cada paso es una ruta:
+ *
+ *   /suscripcion                          1 · elegir plan   (esta pantalla)
+ *   /suscripcion/cambiar                  2 · resumen
+ *   /suscripcion/cambiar/pago             3 · medio de pago
+ *   /suscripcion/cambiar/transferencia    4 · datos del banco
+ *   /suscripcion/cambiar/comprobante      5 · avisar el pago
+ *   /suscripcion/cambiar/listo            6 · confirmación
+ *
+ * El plan elegido viaja en el `?plan=` de la URL, así el botón "atrás", el F5
+ * y el volver del checkout caen donde corresponde.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { format, parseISO, isValid } from "date-fns";
-import { es } from "date-fns/locale";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CreditCard, Copy, Check, AlertTriangle, Clock, ExternalLink } from "lucide-react";
-import { Input } from "@/components/ui/input";
-
 import {
-  avisarPagoSuscripcion,
-  leerAvisoPago,
-  leerMiSuscripcion,
-  cambiarPlan,
-  pagarSuscripcionMP,
-  sincronizarDebitoAutomatico,
-  type MiSuscripcion,
-} from "@/lib/empresa-api";
+  AlertTriangle,
+  Clock,
+  CreditCard,
+  ExternalLink,
+} from "lucide-react";
+
+import { sincronizarDebitoAutomatico } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
 import { WA_LINK_ENTERPRISE } from "@/lib/contacto";
 import { DebitoAutomatico } from "./debito-automatico";
-
-const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
-
-function pesos(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  return `$${Number(n).toLocaleString("es-AR")}`;
-}
-
-/** "2026-08-05" -> "5 de agosto de 2026". Nunca formatea una fecha inválida. */
-function fechaLarga(iso: string | null): string {
-  if (!iso) return "—";
-  const d = parseISO(iso);
-  return isValid(d) ? format(d, "d 'de' MMMM 'de' yyyy", { locale: es }) : "—";
-}
-
-function fechaCorta(iso: string | null): string {
-  if (!iso) return "—";
-  const d = parseISO(iso);
-  return isValid(d) ? format(d, "d MMM yyyy", { locale: es }) : "—";
-}
-
-/** Colores del cartel de estado. */
-const ESTILO_ESTADO: Record<string, { fondo: string; borde: string; texto: string }> = {
-  activa: { fondo: "bg-emerald-500/10", borde: "border-emerald-500/30", texto: "text-emerald-700 dark:text-emerald-400" },
-  prorroga: { fondo: "bg-amber-500/10", borde: "border-amber-500/30", texto: "text-amber-700 dark:text-amber-400" },
-  vencida: { fondo: "bg-red-500/10", borde: "border-red-500/30", texto: "text-red-700 dark:text-red-400" },
-  sin_vencimiento: { fondo: "bg-muted", borde: "border-border", texto: "text-muted-foreground" },
-  prueba: { fondo: "bg-sky-500/10", borde: "border-sky-500/30", texto: "text-sky-700 dark:text-sky-400" },
-};
-
-/** Fila copiable: en el celular, tipear un CBU de 22 dígitos es garantía de error. */
-function FilaCopiable({ etiqueta, valor }: { etiqueta: string; valor: string }) {
-  const [copiado, setCopiado] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <div className="min-w-0">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          {etiqueta}
-        </p>
-        <p className="truncate text-sm font-medium tabular-nums">{valor}</p>
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="shrink-0"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(valor);
-            setCopiado(true);
-            toast.success(`${etiqueta} copiado`);
-            setTimeout(() => setCopiado(false), 1800);
-          } catch {
-            toast.error("No se pudo copiar. Seleccionalo a mano.");
-          }
-        }}
-      >
-        {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      </Button>
-    </div>
-  );
-}
+import {
+  Cargando,
+  ESTILO_ESTADO,
+  SYNE,
+  fechaCorta,
+  fechaLarga,
+  miPrecioActual,
+  pesos,
+  useSuscripcion,
+} from "./_suscripcion";
 
 export default function SuscripcionPage() {
-  const [datos, setDatos] = useState<MiSuscripcion | null>(null);
-  const [cargando, setCargando] = useState(true);
-  // Abre el bloque "Cómo pagar" desde el botón de arriba. Arranca cerrado para
-  // que la pantalla siga siendo, ante todo, "cuándo vence".
-  const [pagando, setPagando] = useState(false);
-  const [avisoPendiente, setAvisoPendiente] = useState(false);
-  const [yendoAMP, setYendoAMP] = useState(false);
-  const [avisando, setAvisando] = useState(false);
-  const [referencia, setReferencia] = useState("");
-  // Qué plan se está pidiendo. Guardar el CÓDIGO y no un booleano deja
-  // deshabilitar todos los botones y mostrar "Un momento…" solo en el que se
-  // tocó: con un booleano, los cuatro parecerían estar procesando.
-  const [cambiando, setCambiando] = useState<string | null>(null);
-  // El plan que se está comprando por transferencia. Es lo que permite que
-  // «Cómo pagar» diga cuánto transferir y que el aviso salga por ese monto,
-  // en vez de por el del plan que la empresa tiene hoy.
-  const [planAComprar, setPlanAComprar] = useState<string | null>(null);
-
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    try {
-      const [sus, aviso] = await Promise.all([
-        leerMiSuscripcion(),
-        leerAvisoPago().catch(() => ({ pendiente: false })),
-      ]);
-      setDatos(sus);
-      setAvisoPendiente(Boolean(aviso.pendiente));
-    } catch {
-      toast.error("No se pudo cargar tu suscripción");
-    } finally {
-      setCargando(false);
-    }
-  }, []);
-
-  /**
-   * Pide el cambio de plan y hace lo que corresponda con la respuesta.
-   *
-   * El backend decide qué tipo de movimiento es —subir, bajar, o cancelar una
-   * baja— y esta función solo obedece. Calcularlo acá significaría tener la
-   * regla en dos lugares, y el día que se separen el que manda es el que NO se
-   * ve: la pantalla diría "bajás al vencer" mientras el servidor cobra.
-   */
-  async function pedirCambio(plan: string) {
-    setCambiando(plan);
-    try {
-      const r = await cambiarPlan(plan);
-
-      if (r.accion === "pagar" && r.url) {
-        // Misma pestaña: el dueño vuelve solo por las back_urls y así no se
-        // pierde entre ventanas en el celular.
-        window.location.href = r.url;
-        return;
-      }
-
-      if (r.accion === "pagar_transferencia") {
-        /*
-         * ACÁ SE PERDÍA LA COMPRA.
-         *
-         * Antes esto hacía scroll a #como-pagar y nada más. Pero esa sección
-         * SOLO se renderiza si la empresa ya está por vencer: durante la
-         * prueba no existe en el DOM, así que el scroll no iba a ningún lado
-         * y del intento de compra quedaba únicamente un cartelito verde en la
-         * esquina. Alguien que quería pagar terminaba sin saber qué hacer, que
-         * es la peor forma de perder a un cliente: la que no deja rastro.
-         *
-         * Ahora `pagando` abre la sección y `planAComprar` recuerda QUÉ plan
-         * se está comprando, para poder mostrar su precio y avisar el pago por
-         * el monto correcto y no por el del plan viejo.
-         */
-        setPlanAComprar(plan);
-        setPagando(true);
-        if (r.detalle) toast.success(r.detalle);
-        // El scroll va después del repintado, si no la sección todavía no
-        // existe cuando se lo pedimos.
-        setTimeout(
-          () =>
-            document
-              .getElementById("como-pagar")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-          80,
-        );
-        await cargar();
-        return;
-      }
-
-      if (r.detalle) {
-        toast.success(r.detalle);
-      }
-      await cargar();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo cambiar el plan");
-    } finally {
-      setCambiando(null);
-    }
-  }
-
-  async function irAMercadoPago() {
-    setYendoAMP(true);
-    try {
-      const { url } = await pagarSuscripcionMP();
-      // Checkout Pro se abre en la misma pestaña: el dueño vuelve solo por las
-      // back_urls, y así no se pierde entre ventanas en el celular.
-      window.location.href = url;
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "No se pudo abrir Mercado Pago",
-      );
-      setYendoAMP(false);
-    }
-  }
-
-  async function avisarQueTransferi() {
-    setAvisando(true);
-    try {
-      const r = await avisarPagoSuscripcion({
-        // El monto del plan que está COMPRANDO, no el de su plan actual: si
-        // pasa de la prueba a Pro, avisó por Pro. Sin esto el aviso llegaba
-        // al panel con el número equivocado y la comparación «avisado vs
-        // esperado» marcaba diferencia en todas las altas.
-        monto: montoAPagar,
-        referencia: referencia.trim() || null,
-      });
-      toast.success(r.detalle);
-      setAvisoPendiente(true);
-      setReferencia("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo registrar el aviso");
-    } finally {
-      setAvisando(false);
-    }
-  }
-
-  useEffect(() => {
-    cargar();
-  }, [cargar]);
+  const router = useRouter();
+  const { datos, cargando, cargar } = useSuscripcion();
 
   /**
    * La vuelta del checkout de Mercado Pago.
@@ -267,12 +98,7 @@ export default function SuscripcionPage() {
     };
   }, [cargar]);
 
-  if (cargando) {
-    return <p className="p-6 text-sm text-muted-foreground">Cargando…</p>;
-  }
-  if (!datos) {
-    return <p className="p-6 text-sm text-muted-foreground">No se pudo cargar.</p>;
-  }
+  if (cargando || !datos) return <Cargando />;
 
   const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
   // LA CUOTA VIENE RESUELTA DEL SERVIDOR, y esta pantalla no la vuelve a
@@ -281,22 +107,18 @@ export default function SuscripcionPage() {
   // los dos números se contradecían en la misma pantalla: así fue como
   // apareció «$14.990» arriba de una grilla que decía $13.900.
   const precioAPagar = datos.cuota;
-  // Lo que hay que transferir AHORA: el precio del plan que se está
-  // comprando si vino de la grilla, y si no el de la cuota de siempre.
-  const planComprando = planAComprar
-    ? datos.grilla.find((p) => p.codigo === planAComprar)
-    : undefined;
-  const montoAPagar = planComprando?.precio ?? precioAPagar;
   // El precio del plan que tiene hoy. Es lo que decide si cada botón dice
   // "Pasar a" o "Bajar a" — se compara por PRECIO y no por el orden de la
   // grilla, igual que en el backend, para que digan lo mismo siempre.
-  const miPrecio =
-    datos.grilla.find((p) => p.codigo === datos.plan_codigo)?.precio ?? 0;
+  const miPrecio = miPrecioActual(datos);
   const c = datos.cobro;
-  const hayTransferencia = Boolean(c.cbu || c.alias);
-  // c.mp_checkout es el Checkout de verdad (genera el pago y lo acredita solo).
-  // c.mp_link es el link permanente de siempre, que sigue sirviendo de respaldo.
-  const hayCobro = hayTransferencia || Boolean(c.mp_link) || c.mp_checkout;
+  const hayCobro =
+    Boolean(c.cbu || c.alias) || Boolean(c.mp_link) || c.mp_checkout;
+
+  /** Entra al circuito. Sin plan = pagar el que ya tiene. */
+  function irAlCircuito(plan?: string) {
+    router.push(plan ? `/suscripcion/cambiar?plan=${plan}` : "/suscripcion/cambiar/pago");
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
@@ -350,12 +172,7 @@ export default function SuscripcionPage() {
 
         {datos.estado === "prueba" && (
           <p className="mt-4 text-sm">
-            {/* Antes esto decía «escribinos para seguir». Era el techo del
-                producto: la prueba terminaba en un WhatsApp que había que
-                mandar y contestar, y el que no lo mandaba se perdía sin que
-                nadie se enterara. Ahora la prueba termina en un botón.
-
-                El precio que se promete es el del PLAN DE ENTRADA, que es a
+            {/* El precio que se promete es el del PLAN DE ENTRADA, que es a
                 lo que cae quien no elige nada. El de lista puede tener una
                 promo encima y prometería un número que después no es. */}
             Estás usando Turnos360 gratis, con todas las funciones. Cuando
@@ -401,18 +218,20 @@ export default function SuscripcionPage() {
 
         {hayCobro && (
           <div className="mt-5 flex flex-wrap items-center gap-3">
+            {/* En prueba manda a ELEGIR (la grilla está acá abajo); con un
+                plan ya elegido, entra derecho al paso 3 a pagar el que tiene.
+                Antes este botón hacía scroll a una sección que durante la
+                prueba ni siquiera existía en el DOM. */}
             <Button
               size="lg"
-              onClick={() => {
-                setPagando(true);
-                document
-                  .getElementById("como-pagar")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
+              onClick={() =>
+                datos.estado === "prueba"
+                  ? document
+                      .getElementById("planes")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  : irAlCircuito()
+              }
             >
-              {/* Decía «Activar mi plan Pro», con Pro escrito a mano: el
-                  botón nombraba un plan que el dueño no había elegido y que
-                  no es el que la pantalla iba a cobrarle. */}
               {datos.estado === "prueba" ? "Elegir mi plan" : "Pagar este mes"}
             </Button>
             {precioAPagar !== null && (
@@ -426,16 +245,14 @@ export default function SuscripcionPage() {
 
       {/* EL DÉBITO AUTOMÁTICO VA ACÁ, pegado al estado y arriba de todo el
           resto. Es la opción que le saca trabajo a los dos lados y la que
-          queremos que elija; «Cómo pagar» queda abajo como alternativa para
-          el que prefiere no dar una tarjeta. */}
+          queremos que elija. */}
       <DebitoAutomatico datos={datos} onCambio={cargar} />
 
       {/* Qué incluye tu plan, y cuánto estás usando.
-          Va ANTES de "Cómo pagar" a propósito: el dueño tiene que ver que se
-          está quedando sin lugar antes de chocarse con el error al cargar el
-          profesional número cuatro. */}
+          El dueño tiene que ver que se está quedando sin lugar antes de
+          chocarse con el error al cargar el profesional número cuatro. */}
       {datos.plan_etiqueta && (
-        <section className="rounded-2xl border bg-card p-5 md:p-6">
+        <section id="planes" className="rounded-2xl border bg-card p-5 md:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-base font-bold" style={SYNE}>
               Tu plan {datos.plan_etiqueta}
@@ -492,8 +309,7 @@ export default function SuscripcionPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={cambiando !== null}
-                onClick={() => pedirCambio(datos.plan_codigo)}
+                onClick={() => irAlCircuito(datos.plan_codigo)}
               >
                 Seguir en {datos.plan_etiqueta}
               </Button>
@@ -504,19 +320,18 @@ export default function SuscripcionPage() {
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {datos.grilla.map((p) => {
                 const esElMio = p.codigo === datos.plan_codigo;
-                const enCurso = cambiando === p.codigo;
                 return (
                   <div
                     key={p.codigo}
                     className={`flex flex-col rounded-xl border p-4 ${
-                      esElMio ? "border-primary bg-primary/5" : ""
+                      esElMio ? "border-primary/60 bg-primary/5" : ""
                     }`}
                   >
                     <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
                       {p.etiqueta}
                       {esElMio && (
-                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                          tu plan
+                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                          Tu plan
                         </span>
                       )}
                     </p>
@@ -524,9 +339,8 @@ export default function SuscripcionPage() {
                     <p className="mt-1 text-lg font-bold tabular-nums">
                       {p.a_convenir ? "A convenir" : pesos(p.precio)}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {p.resumen}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{p.resumen}</p>
+
                     <p className="mt-2 flex-1 text-xs text-muted-foreground">
                       {p.para_quien}
                     </p>
@@ -543,7 +357,7 @@ export default function SuscripcionPage() {
                         >
                           Hablemos <ExternalLink className="h-3 w-3" />
                         </a>
-                      ) : esElMio ? (
+                      ) : esElMio && !datos.plan_programado ? (
                         <p className="py-2 text-center text-xs text-muted-foreground">
                           Es el que tenés
                         </p>
@@ -552,11 +366,10 @@ export default function SuscripcionPage() {
                           size="sm"
                           variant={p.precio > (miPrecio ?? 0) ? "default" : "outline"}
                           className="w-full"
-                          disabled={cambiando !== null}
-                          onClick={() => pedirCambio(p.codigo)}
+                          onClick={() => irAlCircuito(p.codigo)}
                         >
-                          {enCurso
-                            ? "Un momento…"
+                          {esElMio
+                            ? `Seguir en ${p.etiqueta}`
                             : p.precio > (miPrecio ?? 0)
                               ? `Pasar a ${p.etiqueta}`
                               : `Bajar a ${p.etiqueta}`}
@@ -566,174 +379,6 @@ export default function SuscripcionPage() {
                   </div>
                 );
               })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Cómo pagar */}
-      {hayCobro && (pagando || avisoPendiente || datos.estado !== "prueba") && (
-        <section id="como-pagar" className="rounded-2xl border bg-card p-5 md:p-6">
-          <h2 className="text-base font-bold" style={SYNE}>
-            {planComprando ? `Pasar a ${planComprando.etiqueta}` : "Cómo pagar"}
-          </h2>
-
-          {/* CUÁNTO transferir, arriba de todo y en grande.
-              El dato que la persona necesita para ir al homebanking es el
-              monto; tenerlo que deducir de la grilla de más arriba es
-              exactamente donde se transfiere de menos. */}
-          {planComprando && (
-            <div className="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-3.5">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Transferí exactamente
-              </p>
-              <p className="text-2xl font-bold tabular-nums" style={SYNE}>
-                {pesos(planComprando.precio)}
-              </p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {planComprando.resumen}. Tu plan cambia cuando confirmamos la
-                transferencia contra el banco.
-              </p>
-            </div>
-          )}
-
-          {avisoPendiente && (
-            <div className="mt-4 flex gap-3 rounded-xl border border-sky-500/40 bg-sky-500/10 p-3.5">
-              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-              <div className="text-sm">
-                <p className="font-medium">Tu pago está en proceso</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  Nos avisaste que transferiste. Lo confirmamos dentro de las
-                  próximas 24 horas hábiles y vas a ver el vencimiento
-                  actualizado en esta misma pantalla. Mientras tanto tu cuenta
-                  sigue funcionando normalmente.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {c.mp_checkout && (
-            <div className="mt-4">
-              <Button
-                size="lg"
-                className="w-full"
-                disabled={yendoAMP}
-                onClick={irAMercadoPago}
-              >
-                {yendoAMP ? "Abriendo Mercado Pago…" : "Pagar con Mercado Pago"}
-              </Button>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Se acredita solo: apenas Mercado Pago nos confirma el pago, tu
-                vencimiento se corre 30 días sin que tengas que avisar nada.
-              </p>
-            </div>
-          )}
-
-          {c.mp_link && (
-            <a
-              href={c.mp_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-semibold text-background"
-            >
-              Pagar con Mercado Pago
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          )}
-
-          {hayTransferencia && (
-            <div className="mt-4">
-              <p className="mb-1 text-sm font-medium">Transferencia bancaria</p>
-              <div className="divide-y rounded-xl border px-3.5">
-                {c.alias && <FilaCopiable etiqueta="Alias" valor={c.alias} />}
-                {c.cbu && <FilaCopiable etiqueta="CBU" valor={c.cbu} />}
-                {c.titular && (
-                  <div className="py-2.5">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Titular
-                    </p>
-                    <p className="text-sm font-medium">{c.titular}</p>
-                  </div>
-                )}
-                {c.cuit && (
-                  <div className="py-2.5">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      CUIT / CUIL
-                    </p>
-                    <p className="text-sm font-medium tabular-nums">{c.cuit}</p>
-                  </div>
-                )}
-                {c.banco && (
-                  <div className="py-2.5">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Banco
-                    </p>
-                    <p className="text-sm font-medium">{c.banco}</p>
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 rounded-xl border bg-muted/40 p-3.5">
-                <p className="text-sm font-medium">Cómo sigue</p>
-                <ol className="mt-1.5 space-y-1 pl-4 text-sm text-muted-foreground">
-                  <li className="list-decimal">
-                    Transferís {montoAPagar ? <b>{pesos(montoAPagar)}</b> : "el importe"}{" "}
-                    a los datos de arriba.
-                  </li>
-                  <li className="list-decimal">
-                    Tocás <b>Ya transferí</b> acá abajo. Si querés, además nos
-                    mandás el comprobante por WhatsApp.
-                  </li>
-                  <li className="list-decimal">
-                    Lo confirmamos contra el banco y registramos el pago: tu
-                    vencimiento se corre 30 días.
-                  </li>
-                </ol>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  La verificación es manual, así que puede demorar unas horas.
-                  Mientras tanto tu cuenta sigue funcionando: para eso están los{" "}
-                  {datos.dias_prorroga} días de gracia.
-                </p>
-                {c.whatsapp && (
-                  <a
-                    href={`https://wa.me/${c.whatsapp}?text=${encodeURIComponent(
-                      "Hola! Te paso el comprobante de la transferencia de Turnos360.",
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border bg-background px-3.5 py-2 text-sm font-medium"
-                  >
-                    Mandar el comprobante
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-
-                {!avisoPendiente && (
-                  <div className="mt-4 border-t pt-3.5">
-                    <p className="text-sm font-medium">¿Ya transferiste?</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Avisanos y lo confirmamos contra el banco. Si tenés el
-                      número de operación a mano, ponelo: lo encontramos más
-                      rápido.
-                    </p>
-                    <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-                      <Input
-                        placeholder="N.º de operación (opcional)"
-                        value={referencia}
-                        onChange={(e) => setReferencia(e.target.value)}
-                        maxLength={300}
-                      />
-                      <Button
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={avisando}
-                        onClick={avisarQueTransferi}
-                      >
-                        {avisando ? "Avisando…" : "Ya transferí"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </section>
