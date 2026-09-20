@@ -13,7 +13,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
-import { Play, CheckCircle2, Link2Off } from "lucide-react";
+import { Calendar, Play, CheckCircle2, Link2Off } from "lucide-react";
 
 import {
   listarTurnosDelDia,
@@ -99,10 +99,12 @@ export default function MiDiaPage() {
   const hoy = format(new Date(), "EEEE d 'de' MMMM", { locale: es });
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Mi día</h1>
-        <p className="text-sm capitalize text-muted-foreground">
+        <h1 className="titulo-pantalla">
+          Mi <b>día</b>.
+        </h1>
+        <p className="mt-2 text-sm capitalize text-muted-foreground">
           {hoy}
           {recursoNombre ? ` · ${recursoNombre}` : ""}
           {cargando && " · cargando…"}
@@ -117,12 +119,17 @@ export default function MiDiaPage() {
 
       {/* No vinculado: cartel para pedirle al dueño */}
       {vinculado === false && (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-            <Link2Off size={22} className="text-muted-foreground" />
-          </div>
-          <p className="mb-1 font-medium">Todavía no estás vinculado a una agenda</p>
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-ambar)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <Link2Off className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">
+            Todavía no estás vinculado a una agenda
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
             Pedile al dueño que te asigne tu silla (recurso) para ver tus turnos
             del día acá.
           </p>
@@ -131,9 +138,17 @@ export default function MiDiaPage() {
 
       {/* Vinculado, sin turnos hoy */}
       {vinculado && !cargando && turnos.length === 0 && (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            No tenés turnos para hoy.
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-cielo)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <Calendar className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">No tenés turnos para hoy</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Cuando alguien reserve con vos, el turno aparece acá con el nombre,
+            la hora y el servicio.
           </p>
         </div>
       )}

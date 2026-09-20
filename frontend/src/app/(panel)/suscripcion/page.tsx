@@ -34,12 +34,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  AlertTriangle,
-  Clock,
-  CreditCard,
-  ExternalLink,
-} from "lucide-react";
+import { AlertTriangle, Clock, ExternalLink } from "lucide-react";
 
 import { sincronizarDebitoAutomatico } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
@@ -121,13 +116,12 @@ export default function SuscripcionPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header>
-        <h1 className="flex items-center gap-2 text-2xl font-bold" style={SYNE}>
-          <CreditCard className="h-6 w-6" />
-          Mi suscripción
+        <h1 className="titulo-pantalla">
+          Mi <b>suscripción</b>.
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           Tu plan, tus vencimientos y cómo pagar.
         </p>
       </header>

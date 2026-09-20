@@ -172,7 +172,7 @@ export default function RecursosPage() {
   }
 
   return (
-    <div className="superficie min-h-full p-6 sm:p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           {/* El título habla el idioma del rubro. "Recursos" es la palabra más

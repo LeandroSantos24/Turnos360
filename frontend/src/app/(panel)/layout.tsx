@@ -461,7 +461,11 @@ export default function PanelLayout({
       </aside>
 
       {/* Contenido */}
-      <main className="min-w-0 flex-1 overflow-y-auto bg-background">
+      {/* `superficie` acá y no en cada pantalla: el fondo con los halos de
+          marca tiene que cubrir TODO el área de contenido, no solo la columna
+          de 1200px. Antes lo ponían cuatro pantallas por su cuenta y las otras
+          dieciséis quedaban con el gris plano. */}
+      <main className="superficie min-w-0 flex-1 overflow-y-auto bg-background">
         {/* Sin este aviso, el dueño comparte su link, no funciona, y no tiene
             forma de saber que le falta confirmar el email. */}
         {dueno && usuario.email_verificado === false && (

@@ -13,7 +13,7 @@ import { useEffect, useState, useCallback } from "react";
 import { addDays, format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { isToday } from "date-fns/isToday";
 import { es } from "date-fns/locale";
-import { Plus, Printer, Search } from "lucide-react";
+import { Calendar, Plus, Printer, Search } from "lucide-react";
  
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
 import { useSucursales } from "@/lib/use-sucursales";
@@ -321,10 +321,12 @@ export default function AgendaPage() {
   }
  
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       {/* Encabezado */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Agenda</h1>
+        <h1 className="titulo-pantalla">
+          Tu <b>agenda</b>.
+        </h1>
  
         <div className="flex flex-wrap items-center gap-3">
           {/* Filtro por local. Solo existe si el negocio tiene más de uno. */}
@@ -590,9 +592,19 @@ export default function AgendaPage() {
         Listado del día
       </h2>
       {!cargando && turnos.length === 0 ? (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día.
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-cielo)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <Calendar className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">
+            {recursoActual?.nombre ?? "Este recurso"} no tiene turnos este día
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            El día está libre. Podés cargar un turno a mano o esperar a que
+            alguien reserve desde tu página.
           </p>
         </div>
       ) : (

@@ -119,16 +119,18 @@ export default function MembresiasPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div>
-          <h1 className="text-2xl font-bold">Membresías</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="titulo-pantalla">
+            Tus <b>membresías</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             <span className="tabular-nums">{planes.length}</span>{" "}
             {planes.length === 1 ? "plan de abono" : "planes de abono"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setAsignandoACliente(true)}>
             <UserPlus size={16} className="mr-1" />
             Asignar a cliente
@@ -155,8 +157,11 @@ export default function MembresiasPage() {
       {!cargando && !error && (
         <>
           {/* Resumen general de rentabilidad */}
-          {stats && (
-            <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* Sin planes no hay números que mostrar: cuatro tarjetas con 0,
+              $0, 0 y — no dicen nada y encima empujan el contenido real
+              hacia abajo. La fila aparece cuando hay algo que medir. */}
+          {stats && planes.length > 0 && (
+            <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-2xl border bg-card p-5">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Users size={16} />
@@ -205,11 +210,27 @@ export default function MembresiasPage() {
 
           {/* Planes */}
           {planes.length === 0 ? (
-            <div className="rounded-2xl border bg-card p-12 text-center">
-              <p className="text-sm text-muted-foreground">
-                Todavía no hay planes de abono. Creá el primero (ej.
-                &quot;PRO&quot;).
+            <div
+              className="tarjeta vacio"
+              style={{ "--tono": "var(--acento-violeta)" } as React.CSSProperties}
+            >
+              <span className="vacio-icono">
+                <Users className="h-7 w-7" />
+              </span>
+              <p className="text-lg font-semibold">
+                Todavía no tenés planes de abono
               </p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Un abono es un precio fijo por mes que le da al cliente una
+                cantidad de cortes. Te adelanta la plata y te asegura que
+                vuelva.
+              </p>
+              <SoloDueno>
+                <Button className="mt-4" onClick={abrirCrear}>
+                  <Plus size={16} className="mr-1" />
+                  Crear el primero
+                </Button>
+              </SoloDueno>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

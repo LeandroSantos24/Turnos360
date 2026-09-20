@@ -709,10 +709,10 @@ function ContenidoMiPagina() {
   }
 
   return (
-    <div className="superficie min-h-full">
+    <div className="min-h-full">
       {/* ── Cabecera ───────────────────────────────────────────────── */}
       <div className="border-b bg-card/60 px-6 py-5 backdrop-blur sm:px-8">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-4">
+        <div className="flex w-full flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="titulo-pantalla">
               Tu <b>página</b>.
@@ -739,7 +739,7 @@ function ContenidoMiPagina() {
 
         La previa está a la derecha y se actualiza mientras se escribe.
       */}
-      <div className="mx-auto grid max-w-[1200px] gap-6 p-6 sm:p-8 lg:grid-cols-[210px_minmax(0,1fr)_340px]">
+      <div className="grid w-full gap-6 p-6 sm:p-8 lg:grid-cols-[210px_minmax(0,1fr)_340px]">
         {/* Rail de secciones */}
         <nav className="lg:sticky lg:top-6 lg:self-start">
           <div className="flex gap-1.5 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">

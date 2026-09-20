@@ -10,7 +10,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Lock, ArrowDownRight, ArrowUpRight, Printer } from "lucide-react";
+import { Plus, Lock, ArrowDownRight, ArrowUpRight, Printer, Receipt } from "lucide-react";
 
 import {
   cajaActual,
@@ -159,11 +159,11 @@ export default function CajaPage() {
   const operable = !multi || mirando === null || mirando === miSucursal;
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
-            Caja
+          <h1 className="titulo-pantalla">
+            Tu <b>caja</b>.
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             El control del dinero del día: apertura, cobros, gastos y cierre.
@@ -220,9 +220,17 @@ export default function CajaPage() {
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : !resumen ? (
         // ── Caja cerrada ──
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            No hay una caja abierta. Abrí la caja para empezar a registrar el día.
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-ambar)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <Lock className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">La caja está cerrada</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Abrila con el efectivo que tengas en el cajón y a partir de ahí se
+            registran los cobros y los gastos del día.
           </p>
           <Button className="mt-4" disabled={!operable} onClick={() => setAbriendo(true)}>
             <Plus className="mr-1.5 h-4 w-4" /> Abrir caja
@@ -393,9 +401,17 @@ export default function CajaPage() {
             )}
           </div>
           {movimientos.length === 0 ? (
-            <div className="rounded-2xl border bg-card p-10 text-center">
-              <p className="text-sm text-muted-foreground">
-                Todavía no hay movimientos. Los cobros y gastos aparecen acá.
+            <div
+              className="tarjeta vacio"
+              style={{ "--tono": "var(--acento-lima)" } as React.CSSProperties}
+            >
+              <span className="vacio-icono">
+                <Receipt className="h-7 w-7" />
+              </span>
+              <p className="text-lg font-semibold">Todavía no hay movimientos</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Cada cobro que registres en un turno y cada gasto que cargues
+                aparecen acá, en orden.
               </p>
             </div>
           ) : (

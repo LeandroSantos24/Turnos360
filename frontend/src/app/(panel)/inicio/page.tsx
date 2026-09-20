@@ -300,12 +300,14 @@ export default function InicioPage() {
   const subtitulo = `Resumen de ${textoPeriodo(periodo, desdeCustom, hastaCustom)}`;
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       {/* Cabecera + filtros */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Inicio</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="titulo-pantalla">
+            Tu <b>resumen</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             {subtitulo}
             {cargando && " · cargando…"}
           </p>

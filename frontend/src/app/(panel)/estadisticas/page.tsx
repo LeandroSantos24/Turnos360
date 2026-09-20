@@ -18,7 +18,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
-import { Printer, TrendingUp, TrendingDown } from "lucide-react";
+import { BarChart3, Printer, TrendingUp, TrendingDown } from "lucide-react";
 
 import {
   obtenerFacturacion,
@@ -177,13 +177,13 @@ function ContenidoEstadisticas() {
     datos.por_dia.length === 0;
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={SYNE}>
-            Estadísticas
+          <h1 className="titulo-pantalla">
+            Tus <b>estadísticas</b>.
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             La facturación real: lo que entró de verdad en el período.
           </p>
         </div>
@@ -276,9 +276,19 @@ function ContenidoEstadisticas() {
       {cargando || !datos ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : sinDatos ? (
-        <div className="rounded-2xl border bg-card p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay cobros registrados en este período.
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-violeta)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <BarChart3 className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">
+            Sin cobros en este período
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Acá se mide la facturación real, no los turnos agendados. Probá con
+            un período más largo desde el selector de arriba.
           </p>
         </div>
       ) : (

@@ -17,7 +17,7 @@ import { NuevoServicioDialog } from "./nuevo-servicio-dialog";
 import { EditarServicioDialog } from "./editar-servicio-dialog";
 import { SoloDueno } from "@/components/si-rol";
 import { toast } from "sonner";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Scissors, Search, Trash2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -154,13 +154,15 @@ export default function ServiciosPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <AvisoDeEjemplo cantidad={servicios.length} />
 
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Servicios</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="titulo-pantalla">
+            Tus <b>servicios</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             <span className="tabular-nums">{visibles.length}</span> de{" "}
             <span className="tabular-nums">{servicios.length}</span>{" "}
             {servicios.length === 1 ? "servicio" : "servicios"}
@@ -190,12 +192,30 @@ export default function ServiciosPage() {
       )}
 
       {!cargando && !error && visibles.length === 0 && (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {buscar
-              ? "No se encontraron servicios con ese nombre."
-              : "Todavía no hay servicios. Creá el primero."}
-          </p>
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-teal)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            {buscar ? <Search className="h-7 w-7" /> : <Scissors className="h-7 w-7" />}
+          </span>
+          {buscar ? (
+            <>
+              <p className="text-lg font-semibold">Ningún resultado</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Ningún servicio coincide con lo que escribiste.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-semibold">Todavía no hay servicios</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Un servicio es lo que ofrecés, con su precio y cuánto dura. Es
+                lo primero que elige el cliente al reservar, así que sin esto la
+                página de reservas no puede funcionar.
+              </p>
+            </>
+          )}
         </div>
       )}
 

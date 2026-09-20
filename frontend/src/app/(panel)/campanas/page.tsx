@@ -293,8 +293,8 @@ export default function CampanasPage() {
 
   if (!cfg) {
     return (
-      <div className="superficie min-h-full p-6 sm:p-8">
-        <div className="mx-auto max-w-3xl space-y-3">
+      <div className="min-h-full p-6 sm:p-8">
+        <div className="w-full space-y-6">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="tarjeta h-[88px] animate-pulse" />
           ))}
@@ -312,8 +312,8 @@ export default function CampanasPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="superficie min-h-full p-6 sm:p-8">
-      <div className="mx-auto max-w-3xl space-y-8">
+    <div className="min-h-full p-6 sm:p-8">
+      <div className="w-full space-y-6">
         <div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>

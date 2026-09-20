@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { LineChart, Save, CheckCircle2, Circle } from "lucide-react";
+import { Save, CheckCircle2, Circle } from "lucide-react";
 
 import {
   leerSeguimiento,
@@ -110,14 +110,13 @@ export default function SeguimientoPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold" style={SYNE}>
-            <LineChart className="h-6 w-6" />
-            Seguimiento
+          <h1 className="titulo-pantalla">
+            Tu <b>seguimiento</b>.
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Conectá tu píxel y medí las visitas y reservas de tu página en tus
             campañas.
           </p>

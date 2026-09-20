@@ -12,7 +12,7 @@ import { useTermino } from "@/lib/config-rubro";
 import { EditarClienteDialog } from "./editar-cliente-dialog";
 import { Paginacion } from "@/components/paginacion";
 import { toast } from "sonner";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Search, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/ui/input";
@@ -105,10 +105,12 @@ export default function ClientesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{Termino}s</h1>
+          <h1 className="titulo-pantalla">
+            Tus <b>{Termino.toLowerCase()}s</b>.
+          </h1>
           <p className="text-sm text-muted-foreground">
             <span className="tabular-nums">{total}</span>{" "}
             {total === 1 ? termino : `${termino}s`}
@@ -136,12 +138,35 @@ export default function ClientesPage() {
       )}
 
       {!cargando && !error && clientes.length === 0 && (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {buscar
-              ? "No se encontraron clientes con ese criterio."
-              : "Todavía no hay clientes cargados."}
-          </p>
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-cielo)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            {buscar ? <Search className="h-7 w-7" /> : <Users className="h-7 w-7" />}
+          </span>
+          {/* Buscar sin resultados y no tener nada cargado son dos estados
+              distintos: al que busca no hay que invitarlo a crear, hay que
+              ayudarlo a buscar mejor. */}
+          {buscar ? (
+            <>
+              <p className="text-lg font-semibold">Ningún resultado</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Probá con parte del nombre, con el teléfono sin el 0 ni el 15, o
+                con el DNI.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-semibold">
+                Todavía no tenés {termino}s cargados
+              </p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Se cargan solos cuando alguien reserva desde tu página. Los que
+                ya atendés los podés agregar a mano.
+              </p>
+            </>
+          )}
         </div>
       )}
 

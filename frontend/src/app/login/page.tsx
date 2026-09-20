@@ -3,16 +3,18 @@
 /**
  * Pantalla de login (/login).
  *
- * Split-screen: a la izquierda un panel de marca (qué es Turnos360 + features
- * + redes), a la derecha el formulario. En móvil se muestra solo el formulario.
- * La lógica de auth es la de siempre: captura email + clave, llama a la API,
- * guarda el token y redirige al panel.
+ * Split-screen: a la izquierda la foto de un local real, oscurecida, con la
+ * marca y lo que hace el producto; a la derecha el formulario. En móvil la
+ * foto queda como una banda corta arriba y el formulario abajo.
+ *
+ * La lógica de auth no cambió: email + clave, llamada a la API, token y al panel.
  */
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, MessageCircle, BarChart3 } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, BarChart3, CalendarCheck, Eye, EyeOff, MessageCircle } from "lucide-react";
 
 import { login } from "@/lib/auth-api";
 import { INSTAGRAM, FACEBOOK, YOUTUBE } from "@/lib/contacto";
@@ -20,12 +22,32 @@ import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { EASE } from "@/components/landing/movimiento";
+
+const VENTAJAS = [
+  {
+    icono: <CalendarCheck className="h-[18px] w-[18px]" />,
+    titulo: "Agenda con carriles paralelos",
+    desc: "Varios profesionales atendiendo a la misma hora, sin turnos que se pisen.",
+  },
+  {
+    icono: <MessageCircle className="h-[18px] w-[18px]" />,
+    titulo: "Seña online y recordatorios",
+    desc: "El que reserva paga y le llega el aviso. Menos ausentes, sin perseguir a nadie.",
+  },
+  {
+    icono: <BarChart3 className="h-[18px] w-[18px]" />,
+    titulo: "Caja, comisiones y clientes",
+    desc: "Cuánto entró, cuánto le toca a cada uno y quién hace tres meses que no viene.",
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [clave, setClave] = useState("");
+  const [verClave, setVerClave] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -43,78 +65,123 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* ===== Panel de marca (solo desktop) ===== */}
-      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-[#0a0f1e] p-12 text-white lg:flex">
-        {/* Halo decorativo teal */}
-        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#00d4aa]/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-[#00d4aa]/10 blur-3xl" />
+    <div className="flex min-h-screen flex-col lg:flex-row">
+      {/* ═══ Panel de marca ═══
+          En móvil es una banda de 200px arriba; en desktop, media pantalla. */}
+      <div className="relative h-[200px] shrink-0 overflow-hidden bg-[#080d18] lg:h-auto lg:w-[52%] lg:shrink">
+        <img
+          src="/img/elfaro-portada.webp"
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
+        />
+        {/* El velo es DIRECCIONAL: casi opaco del lado del texto, mucho más
+            liviano a la derecha, donde no hay nada escrito. Plano y parejo, o
+            se comía la foto o dejaba el texto ilegible sobre el pelo claro. */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(760px 520px at 12% 10%, rgba(18,184,134,0.20), transparent 62%)," +
+              "linear-gradient(104deg, rgba(8,13,24,0.96) 0%, rgba(8,13,24,0.90) 42%, rgba(8,13,24,0.58) 100%)",
+          }}
+        />
 
-        {/* Marca + tagline */}
-        <div className="relative">
-          <h1
-            className="text-4xl font-bold tracking-tight"
-            style={{ fontFamily: "var(--fuente-marca)" }}
+        <div className="relative flex h-full flex-col p-8 text-white lg:p-12 xl:p-16">
+          <Link
+            href="/"
+            className="hidden items-center gap-2 text-sm text-white/55 transition-colors hover:text-white lg:inline-flex"
           >
-            Turnos<span className="text-[#00d4aa]">360</span>
-          </h1>
-          <p className="mt-3 max-w-sm text-lg text-white/70">
-            La forma simple de gestionar tus turnos, clientes y facturación — todo en un solo lugar.
-          </p>
-        </div>
+            <ArrowLeft className="h-4 w-4" />
+            Volver al inicio
+          </Link>
 
-        {/* Features */}
-        <div className="relative space-y-6">
-          <Feature
-            icon={<CalendarCheck className="h-5 w-5" />}
-            titulo="Agenda inteligente"
-            desc="Toda tu agenda organizada, con sobreturnos y vistas por día, semana o equipo."
-          />
-          <Feature
-            icon={<MessageCircle className="h-5 w-5" />}
-            titulo="Recordatorios por WhatsApp"
-            desc="Menos ausentes con avisos automáticos a tus clientes. (próximamente)"
-          />
-          <Feature
-            icon={<BarChart3 className="h-5 w-5" />}
-            titulo="Clientes y métricas"
-            desc="CRM, membresías y números claros para entender tu negocio."
-          />
-        </div>
+          {/* Centrado y no repartido con justify-between: en una pantalla alta,
+              el bloque de arriba y el de abajo se iban a los extremos y entre
+              medio quedaba medio metro de nada. */}
+          <div className="flex flex-1 flex-col justify-center gap-10 lg:gap-14">
+            <div>
+              <motion.h1
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: EASE }}
+                className="text-3xl font-bold tracking-tight lg:text-[44px] lg:leading-[1.05]"
+                style={{ fontFamily: "var(--fuente-marca)" }}
+              >
+                Turnos<span className="text-[#12b886]">360</span>
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: EASE, delay: 0.08 }}
+                className="mt-3 max-w-md text-[15px] leading-relaxed text-white/60 lg:mt-5 lg:text-lg"
+              >
+                Tu agenda, tus cobros y tus números — todo en un solo lugar.
+              </motion.p>
+            </div>
 
-        {/* Redes. Cada ícono aparece SOLO si hay URL cargada en lib/contacto:
-            antes los tres iban a href="#", que en producción es un link que
-            no lleva a ningún lado. Mejor ausente que roto. */}
-        <div className="relative">
-          <p className="mb-3 text-xs uppercase tracking-wide text-white/40">Seguinos</p>
-          <div className="flex gap-3">
-            <RedSocial href={INSTAGRAM} label="Instagram"><IconoInstagram /></RedSocial>
-            {FACEBOOK && (
-              <RedSocial href={FACEBOOK} label="Facebook"><IconoFacebook /></RedSocial>
-            )}
-            {YOUTUBE && (
-              <RedSocial href={YOUTUBE} label="YouTube"><IconoYoutube /></RedSocial>
-            )}
+            {/* Las ventajas solo en desktop: en la banda de 200px no entran y
+                amontonarlas ahí hace que no se lea ninguna. */}
+            <div className="hidden space-y-7 lg:block">
+              {VENTAJAS.map((v, i) => (
+                <motion.div
+                  key={v.titulo}
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.55, ease: EASE, delay: 0.16 + i * 0.09 }}
+                  className="flex gap-4"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#12b886]/25 bg-[#12b886]/[0.12] text-[#12b886]">
+                    {v.icono}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold leading-snug">{v.titulo}</h3>
+                    <p className="mt-1 max-w-sm text-sm leading-relaxed text-white/55">{v.desc}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cada ícono aparece SOLO si hay URL en lib/contacto: antes los tres
+              iban a href="#", que en producción es un link que no lleva a ningún
+              lado. Mejor ausente que roto. */}
+          <div className="hidden lg:block">
+            <p className="mb-3 text-xs uppercase tracking-wide text-white/35">Seguinos</p>
+            <div className="flex gap-3">
+              <RedSocial href={INSTAGRAM} label="Instagram"><IconoInstagram /></RedSocial>
+              {FACEBOOK && <RedSocial href={FACEBOOK} label="Facebook"><IconoFacebook /></RedSocial>}
+              {YOUTUBE && <RedSocial href={YOUTUBE} label="YouTube"><IconoYoutube /></RedSocial>}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ===== Panel del formulario ===== */}
-      <div className="flex w-full items-center justify-center bg-background p-6 lg:w-1/2">
-        <div className="w-full max-w-sm">
-          {/* Marca chica (solo móvil, donde no se ve el panel de la izquierda) */}
-          <h1
-            className="mb-8 text-center text-3xl font-bold lg:hidden"
-            style={{ fontFamily: "var(--fuente-marca)" }}
+      {/* ═══ Formulario ═══ */}
+      <div className="flex flex-1 items-center justify-center bg-background px-6 py-12 lg:py-6">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: EASE, delay: 0.1 }}
+          className="w-full max-w-[380px]"
+        >
+          <Link
+            href="/"
+            className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground lg:hidden"
           >
-            Turnos<span className="text-[#00d4aa]">360</span>
-          </h1>
+            <ArrowLeft className="h-4 w-4" />
+            Volver al inicio
+          </Link>
 
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
+          <div className="mb-7">
+            <h2
+              className="text-[27px] font-bold leading-tight tracking-tight"
+              style={{ fontFamily: "var(--fuente-titulos)" }}
+            >
               Bienvenido de nuevo
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">Ingresá a tu panel</p>
+            <p className="mt-1.5 text-[15px] text-muted-foreground">Ingresá a tu panel</p>
           </div>
 
           <form onSubmit={manejarSubmit} className="space-y-4">
@@ -123,71 +190,80 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="dueno@lacueva.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoFocus
+                className="h-11"
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="clave">Contraseña</Label>
-              <Input
-                id="clave"
-                type="password"
-                placeholder="••••••••"
-                value={clave}
-                onChange={(e) => setClave(e.target.value)}
-                required
-              />
+              <div className="flex items-center justify-between">
+                <Label htmlFor="clave">Contraseña</Label>
+                <Link
+                  href="/olvide-password"
+                  className="text-[13px] text-muted-foreground transition-colors hover:text-[#0e8371]"
+                >
+                  ¿La olvidaste?
+                </Link>
+              </div>
+              {/* El ojo evita el error más común del login en el celular: la
+                  clave bien tipeada pero con una letra de más que nadie ve. */}
+              <div className="relative">
+                <Input
+                  id="clave"
+                  type={verClave ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={clave}
+                  onChange={(e) => setClave(e.target.value)}
+                  required
+                  className="h-11 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerClave((v) => !v)}
+                  aria-label={verClave ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {verClave ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             {error && (
-              <p className="text-sm text-destructive" role="alert">
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: EASE }}
+                className="rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 py-2.5 text-sm text-destructive"
+                role="alert"
+              >
                 {error}
-              </p>
+              </motion.p>
             )}
 
-            <div className="text-right">
-              <Link
-                href="/olvide-password"
-                className="text-sm text-gray-500 hover:text-[#00b894]"
-              >
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-            <Button type="submit" className="w-full" disabled={cargando}>
+            <Button type="submit" className="h-11 w-full text-[15px]" disabled={cargando}>
               {cargando ? "Ingresando…" : "Ingresar"}
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-muted-foreground">
-            Turnos360 — automatización de turnos para tu negocio
+          <p className="mt-7 text-center text-sm text-muted-foreground">
+            ¿Todavía no tenés cuenta?{" "}
+            <Link href="/registro" className="font-semibold text-[#0e8371] hover:underline">
+              Probalo gratis
+            </Link>
           </p>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
 }
 
-/** Una feature del panel de marca: ícono en círculo teal + título + descripción. */
-function Feature({
-  icon, titulo, desc,
-}: { icon: React.ReactNode; titulo: string; desc: string }) {
-  return (
-    <div className="flex gap-4">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00d4aa]/15 text-[#00d4aa]">
-        {icon}
-      </div>
-      <div>
-        <h3 className="font-semibold">{titulo}</h3>
-        <p className="mt-0.5 text-sm text-white/60">{desc}</p>
-      </div>
-    </div>
-  );
-}
-
-/** Botón redondo de red social. A futuro, reemplazá href="#" por tu link real. */
 function RedSocial({
   href, label, children,
 }: { href: string; label: string; children: React.ReactNode }) {
@@ -197,15 +273,14 @@ function RedSocial({
       aria-label={label}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 transition-colors hover:bg-[#00d4aa]/20 hover:text-[#00d4aa]"
+      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/60 transition-colors hover:border-[#12b886]/30 hover:bg-[#12b886]/15 hover:text-[#12b886]"
     >
       {children}
     </a>
   );
 }
 
-
-/* ===== Íconos de redes como SVG propios (no dependen de lucide) ===== */
+/* ═══ Íconos de redes como SVG propios (no dependen de lucide) ═══ */
 
 function IconoInstagram() {
   return (

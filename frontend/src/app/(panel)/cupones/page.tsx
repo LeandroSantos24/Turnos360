@@ -119,11 +119,13 @@ export default function CuponesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Cupones</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="titulo-pantalla">
+            Tus <b>cupones</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Códigos de descuento para la reserva online.
           </p>
         </div>
@@ -140,13 +142,27 @@ export default function CuponesPage() {
       {cargando ? (
         <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : cupones.length === 0 ? (
-        <div className="rounded-2xl border bg-card p-12 text-center">
-          <TicketPercent className="mx-auto h-10 w-10 text-muted-foreground/40" />
-          <p className="mt-3 font-medium">Todavía no hay cupones</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+        <div
+          className="tarjeta vacio"
+          style={{ "--tono": "var(--acento-rosa)" } as React.CSSProperties}
+        >
+          <span className="vacio-icono">
+            <TicketPercent className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-semibold">Todavía no hay cupones</p>
+          <p className="max-w-md text-sm text-muted-foreground">
             Creá un código (ej. INAUGURACION20) y compartilo en tu Instagram: el
             cliente lo carga al reservar y el descuento se aplica solo.
           </p>
+          <Button
+            className="mt-4"
+            onClick={() => {
+              setEditando(null);
+              setAbierto(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" /> Crear el primero
+          </Button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

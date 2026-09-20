@@ -15,15 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  Check,
-  MessageCircle,
-  Phone,
-  Send,
-  ShoppingCart,
-  TestTube,
-} from "lucide-react";
+import { AlertTriangle, Check, Phone, Send, ShoppingCart, TestTube } from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError, esCancelado } from "@/lib/api";
@@ -128,15 +120,14 @@ function ContenidoWhatsapp() {
   const saldoBajo = !sinSaldo && (estado?.disponible ?? 0) < SALDO_BAJO;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       {/* ── Encabezado ──────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2.5">
-        <MessageCircle className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
-            WhatsApp
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="titulo-pantalla">
+            Tu <b>WhatsApp</b>.
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Los recordatorios de turno que salen por WhatsApp, y cuántos
             mensajes te quedan.
           </p>

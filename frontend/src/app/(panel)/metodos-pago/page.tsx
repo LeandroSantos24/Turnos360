@@ -310,9 +310,9 @@ function ContenidoMetodosPago() {
   const seApaga = aQuitar !== null && aQuitar.clave !== null;
 
   return (
-    <div className="superficie min-h-full p-6 sm:p-8">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="min-h-full p-6 sm:p-8">
+      <div className="w-full">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div>
             <h1 className="titulo-pantalla">
               Tus <b>cobros</b>.

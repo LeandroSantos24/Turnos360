@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { UserCircle, Crown, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Crown, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api";
@@ -50,11 +50,10 @@ export default function CuentaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-5 p-6">
-      <div className="flex items-center gap-2.5">
-        <UserCircle className="h-6 w-6 text-primary" />
-        <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
-          Mi cuenta
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-6">
+        <h1 className="titulo-pantalla">
+          Mi <b>cuenta</b>.
         </h1>
       </div>
 
@@ -65,7 +64,12 @@ export default function CuentaPage() {
         <p className="mt-0.5 text-sm text-muted-foreground">
           Si te la creó el negocio, acá elegís la tuya.
         </p>
-        <form onSubmit={manejarSubmit} className="mt-4 space-y-3">
+        {/* El formulario NO se estira a los 1200px del contenedor: un campo
+            de contraseña de 1150px de ancho se ve absurdo y encima cuesta
+            más leerlo. El encabezado se alinea con el del resto del panel,
+            que es lo que se nota al navegar; el formulario mantiene su
+            ancho de formulario. */}
+        <form onSubmit={manejarSubmit} className="mt-4 max-w-md space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="c-actual">Contraseña actual</Label>
             <Input

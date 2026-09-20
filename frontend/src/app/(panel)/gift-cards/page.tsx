@@ -164,11 +164,12 @@ export default function GiftCardsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Gift className="h-6 w-6 text-primary" />
-          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">Gift cards</h1>
+        <div className="min-w-0">
+          <h1 className="titulo-pantalla">
+            Tus <b>gift cards</b>.
+          </h1>
         </div>
         {!creando && (
           <Button onClick={() => setCreando(true)}>

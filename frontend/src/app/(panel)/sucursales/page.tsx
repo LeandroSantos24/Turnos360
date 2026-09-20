@@ -113,11 +113,13 @@ function ContenidoSucursales() {
   const sinCupo = datos.usadas >= datos.tope;
 
   return (
-    <div className="p-8">
+    <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Sucursales</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="titulo-pantalla">
+            Tus <b>sucursales</b>.
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Tus locales. Cada uno tiene su equipo, su agenda y su caja.
           </p>
         </div>

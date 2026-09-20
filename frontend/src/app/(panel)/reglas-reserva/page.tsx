@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { format, addDays, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
-import { CalendarClock, Save } from "lucide-react";
+import { Save } from "lucide-react";
 
 import {
   leerReglasReserva,
@@ -205,14 +205,13 @@ export default function ReglasReservaPage() {
   const tope = topeEfectivo(form);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold" style={SYNE}>
-            <CalendarClock className="h-6 w-6" />
-            Reglas de reserva
+          <h1 className="titulo-pantalla">
+            Tus <b>reglas de reserva</b>.
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Cómo te entran los turnos desde tu página. Podés cambiarlas cuando
             quieras.
           </p>

@@ -19,17 +19,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  Check,
-  Copy,
-  KeyRound,
-  Link2,
-  MessageCircle,
-  Pencil,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, Check, Copy, KeyRound, Link2, MessageCircle, Pencil, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
@@ -159,19 +149,18 @@ function ContenidoEquipo() {
   const sinEmail = miembros.filter((m) => m.activo && !m.email_recuperable).length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 p-6">
-      <div className="flex items-center gap-2.5">
-        <Users className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="font-[family-name:var(--fuente-titulos)] text-2xl font-bold">
-            Equipo
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="titulo-pantalla">
+            Tu <b>equipo</b>.
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Quién tiene cuenta en tu negocio y quién necesita que le des una mano
             para entrar.
           </p>
         </div>
-        <Button className="ml-auto" onClick={abrirAlta}>
+        <Button onClick={abrirAlta}>
           <UserPlus className="mr-1.5 h-4 w-4" />
           Sumar a alguien
         </Button>
