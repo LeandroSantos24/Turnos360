@@ -18,12 +18,17 @@ const API =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
 
-// Se regenera como mucho una vez por hora (alcanza: los slugs cambian poco).
-export const revalidate = 3600;
+// Dinámico: si se prerenderiza en el build (sin backend a mano) sale sin
+// ninguna vidriera hasta la primera revalidación. La consulta al backend
+// igual queda cacheada una hora por el `revalidate` del fetch.
+export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: SITE, changeFrequency: "weekly", priority: 1 },
+    { url: `${SITE}/registro`, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${SITE}/terminos`, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${SITE}/privacidad`, changeFrequency: "yearly", priority: 0.2 },
   ];
 
   try {

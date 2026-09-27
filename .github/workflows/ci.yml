@@ -51,7 +51,7 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependencias
-        run: pip install -e "./backend[dev]"
+        run: pip install -c backend/requirements.lock -e "./backend[dev]"
 
       - name: Lint (ruff)
         run: ruff check backend/app backend/tests

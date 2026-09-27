@@ -37,7 +37,11 @@ def crear_cupon(
     )
     if repetido:
         return None
-    cupon = CuponDescuento(empresa_id=empresa_id, **datos.model_dump())
+    from app.services.membresia import servicios_propios
+
+    valores = datos.model_dump()
+    valores["servicios_ids"] = servicios_propios(db, empresa_id, valores.get("servicios_ids"))
+    cupon = CuponDescuento(empresa_id=empresa_id, **valores)
     db.add(cupon)
     db.commit()
     db.refresh(cupon)
@@ -66,7 +70,11 @@ def editar_cupon(
         )
         if repetido:
             return None
+    from app.services.membresia import servicios_propios
+
     for campo, valor in datos.model_dump().items():
+        if campo == "servicios_ids":
+            valor = servicios_propios(db, empresa_id, valor)
         setattr(cupon, campo, valor)
     db.commit()
     db.refresh(cupon)

@@ -1,11 +1,18 @@
 import { MetadataRoute } from "next";
 
+import { RUTAS_PRIVADAS } from "@/lib/rutas-privadas.mjs";
+
 /**
  * robots.txt (Next lo sirve en /robots.txt).
  *
- * Lo público (landing + vidrieras /<slug>) queda abierto; el panel, el admin
- * y las vistas de impresión se excluyen: son páginas detrás de login que a
- * Google solo le hacen gastar crawl en pantallas vacías.
+ * Abierto: la landing, las vidrieras /<slug>, registro y las legales.
+ * Cerrado: el panel, el admin, las vistas de impresión y las pantallas con
+ * token en la URL. Cada ruta va dos veces —exacta con `$` y como carpeta—
+ * porque Disallow es por PREFIJO: "/caja" a secas también tapaba la vidriera
+ * de un negocio con slug "cajaboba".
+ *
+ * robots.txt NO es seguridad: la protección está en el backend. Las privadas
+ * además salen con X-Robots-Tag: noindex (next.config.mjs).
  */
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://turnos360.com.ar";
@@ -16,22 +23,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: [
-          "/admin",
-          "/login",
-          "/inicio",
-          "/agenda",
-          "/clientes",
-          "/servicios",
-          "/recursos",
-          "/membresias",
-          "/mi-pagina",
-          "/mi-dia",
-          "/estadisticas",
-          "/caja",
-          "/metodos-pago",
-          "/imprimir",
-        ],
+        disallow: ["/api/", ...RUTAS_PRIVADAS.flatMap((r) => [`/${r}$`, `/${r}/`, `/${r}?`])],
       },
     ],
     sitemap: `${SITE}/sitemap.xml`,

@@ -46,6 +46,11 @@ from fastapi import Depends
 
 log = logging.getLogger("turnos360.subidas")
 
+# Bomba de descompresión: un PNG de pocos MB puede declarar 150 M de píxeles
+# y pedir ~450 MB de RAM al decodificar (el contenedor tiene 640 MB para dos
+# workers). 40 M de píxeles sobra para cualquier foto de celular.
+Image.MAX_IMAGE_PIXELS = 40_000_000
+
 router = APIRouter(prefix="/subidas", tags=["subidas"])
 
 # Los formatos que aceptamos ENTRAR. La salida siempre es webp.
@@ -112,6 +117,13 @@ async def subir_imagen(
 
     try:
         img = Image.open(BytesIO(crudo))
+        # Pillow entre 1x y 2x del tope solo AVISA: el corte explícito va acá,
+        # con las dimensiones del encabezado, antes de decodificar nada.
+        if img.width * img.height > Image.MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "La imagen tiene demasiados píxeles. Mandá una foto normal de celular.",
+            )
         # `verify()` recorre la estructura y detecta un archivo corrupto o que
         # solo pretende ser una imagen. Deja el objeto inutilizable, así que
         # después hay que volver a abrirlo — es el uso previsto de Pillow.
@@ -125,7 +137,7 @@ async def subir_imagen(
         img.load()
     except HTTPException:
         raise
-    except (UnidentifiedImageError, OSError, ValueError):
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Ese archivo no es una imagen que podamos leer.",

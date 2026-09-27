@@ -351,7 +351,7 @@ export default function Page() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(datosEstructurados(faqs)) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(datosEstructurados(faqs)).replace(/</g, "\\u003c") }}
       />
 
       <style>{`

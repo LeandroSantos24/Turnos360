@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Política de privacidad · Turnos360",
   description:
     "Cómo Turnos360 recopila, usa y protege los datos de los negocios y de sus clientes.",
+  alternates: { canonical: "/privacidad" },
 };
 
 const TINTA = "#0c1015";

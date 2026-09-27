@@ -19,7 +19,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-turnos360}
       POSTGRES_DB: ${POSTGRES_DB:-turnos360}
     ports:
-      - "5432:5432"
+      # Solo esta máquina: con 0.0.0.0 la base queda abierta a toda la red local.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -33,7 +34,7 @@ services:
     restart: unless-stopped
     logging: *logs
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

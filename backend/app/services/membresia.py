@@ -18,10 +18,25 @@ from app.models.enums import EstadoMembresia, EstadoTurno, TipoMovimiento
 from app.services.finanzas import caja_abierta, sucursal_de_usuario
 
 
+def servicios_propios(db, empresa_id: int, ids) -> list[int]:
+    """Solo los ids de servicios de ESTA empresa (filtra ajenos: Regla 1)."""
+    ids = [int(i) for i in (ids or [])]
+    if not ids:
+        return []
+    from app.models.agenda import Servicio
+    validos = set(db.scalars(
+        select(Servicio.id).where(Servicio.empresa_id == empresa_id, Servicio.id.in_(ids))
+    ))
+    return [i for i in dict.fromkeys(ids) if i in validos]
+
+
 # ===== PLANES =====
 
 def crear_plan(db: Session, empresa_id: int, datos) -> PlanAbono:
-    plan = PlanAbono(empresa_id=empresa_id, **datos.model_dump())
+    valores = datos.model_dump()
+    valores["servicios_cubiertos"] = servicios_propios(
+        db, empresa_id, valores.get("servicios_cubiertos"))
+    plan = PlanAbono(empresa_id=empresa_id, **valores)
     db.add(plan)
     db.commit()
     db.refresh(plan)
@@ -44,6 +59,8 @@ def editar_plan(db: Session, empresa_id: int, plan_id: int, datos) -> PlanAbono:
     if not plan or plan.empresa_id != empresa_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan no encontrado")
     for campo, valor in datos.model_dump(exclude_unset=True).items():
+        if campo == "servicios_cubiertos" and valor is not None:
+            valor = servicios_propios(db, empresa_id, valor)
         setattr(plan, campo, valor)
     db.commit()
     db.refresh(plan)

@@ -54,7 +54,24 @@ fi
 
 echo "[$(date -Is)] OK — $(du -h "$ARCHIVO" | cut -f1)"
 
+# Fotos que sube cada negocio (volumen `uploads`). No están en la base: sin
+# esto, perder el disco es perder todos los logos, portadas y galerías.
+FOTOS="$DESTINO/uploads-$FECHA.tar.gz"
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE" exec -T backend \
+    tar czf - -C /app uploads > "$FOTOS"
+if ! gzip -t "$FOTOS" 2>/dev/null; then
+    echo "ERROR: el backup de fotos está cortado o corrupto. Se borra." >&2
+    rm -f "$FOTOS"
+    exit 1
+fi
+echo "[$(date -Is)] Fotos OK — $(du -h "$FOTOS" | cut -f1)"
+
+# OJO: esto deja los backups en el MISMO servidor. Si se pierde el disco o la
+# instancia, se pierden con él. Copiarlos afuera (rclone a un bucket, rsync a
+# otra máquina) es parte del deploy de producción, no opcional.
+
 # Rotación
+find "$DESTINO" -name 'uploads-*.tar.gz' -mtime +"$RETENCION_DIAS" -delete
 BORRADOS=$(find "$DESTINO" -name 'turnos360-*.sql.gz' -mtime +"$RETENCION_DIAS" -print -delete | wc -l)
 echo "[$(date -Is)] Rotación: $BORRADOS archivo(s) viejo(s) borrado(s). Quedan $(ls -1 "$DESTINO"/turnos360-*.sql.gz 2>/dev/null | wc -l)."
 

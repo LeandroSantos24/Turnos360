@@ -10,6 +10,7 @@ import datetime as dt
 from anyio import to_thread
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DB
 import logging
@@ -300,10 +301,16 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
     monto_pagado = float(
         pago.get("transaction_amount") or turno.sena_monto or 0
     )
-    svc_fin.registrar_sena_cobrada(
-        db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))
-    )
-    db.commit()
+    try:
+        svc_fin.registrar_sena_cobrada(
+            db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))
+        )
+        db.commit()
+    except IntegrityError:
+        # Dos avisos del mismo pago en paralelo (MP los manda así): el otro ya
+        # la registró y uq_pago_sena_turno frenó el duplicado. No es un error.
+        db.rollback()
+        log.info("seña ya registrada por un aviso paralelo", extra={"turno_id": turno.id})
 
 
 @router.get("/rubros", response_model=list[RubroPublicoOut])
@@ -414,7 +421,10 @@ def vidriera(
     # Solo cuenta la apertura de la página, no los pedidos de horarios ni el
     # resto del wizard: si contara todo, un cliente indeciso que mira cinco
     # días valdría lo mismo que cinco personas distintas.
-    visitas.registrar_por_slug(db, slug)
+    # El servidor de Next pide la vidriera para armar el <title> y el Open
+    # Graph (SEO). Eso no es una persona mirando: no se cuenta.
+    if request.headers.get("x-turnos360-ssr") != "1":
+        visitas.registrar_por_slug(db, slug)
 
     return datos
 

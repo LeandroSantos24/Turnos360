@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Términos y condiciones · Turnos360",
   description:
     "Términos y condiciones de uso de Turnos360, la plataforma de gestión de turnos para negocios de servicios.",
+  alternates: { canonical: "/terminos" },
 };
 
 /* Página legal: sobria y legible. La marca aparece en la navbar y el acento;

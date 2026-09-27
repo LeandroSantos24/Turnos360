@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   title: "Turnos360 · Agenda, reservas online y caja para tu negocio",
   description:
     "Los que reservan y no vienen te cuestan plata. Turnos360 cobra la seña online, manda recordatorios y te muestra los números reales de tu barbería, peluquería o salón.",
+  // Canonical de la home. Las páginas públicas que no son la home lo pisan
+  // con el suyo (vidriera, términos, privacidad, registro); las privadas van
+  // con X-Robots-Tag: noindex (next.config.mjs), así que no cuenta.
+  alternates: { canonical: "/" },
   keywords: [
     "software de turnos",
     "agenda online barbería",

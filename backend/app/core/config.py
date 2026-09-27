@@ -331,6 +331,14 @@ class Settings(BaseSettings):
                     f"{LARGO_MINIMO_SECRETO}. {generar}"
                 )
 
+        # CORS: en producción, orígenes explícitos. "*" deja que cualquier
+        # sitio le hable a la API desde el navegador de un usuario logueado.
+        if not self.cors_origins_lista or "*" in self.cors_origins_lista:
+            raise ValueError(
+                "CORS_ORIGINS vacío o con '*'. En producción van los dominios "
+                "reales (https://turnos360.com.ar,...), separados por coma."
+            )
+
         if self.secret_key.strip() in ("", PLACEHOLDER_SECRET):
             raise ValueError(
                 "SECRET_KEY sin configurar en producción. Generá uno real con: "

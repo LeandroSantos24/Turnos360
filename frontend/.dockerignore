@@ -1,2 +1,9 @@
 node_modules
 .next
+
+# Next carga .env* en build time y lo hornea en el bundle: nunca a la imagen.
+.env
+.env.*
+!.env.example
+
+.git

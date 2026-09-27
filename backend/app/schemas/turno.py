@@ -5,8 +5,14 @@ Al listar/ver, se devuelven datos relacionados (cliente, recurso, servicio)
 para pintarlos en la agenda sin más consultas.
 """
 import datetime as dt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.models.enums import EstadoTurno, TipoTurno
+def _hora_de_pared(v: dt.datetime) -> dt.datetime:
+    """Misma convención que la reserva pública: hora de pared etiquetada UTC.
+    Sin esto, un datetime sin zona hacía reventar el motor (TypeError -> 500)."""
+    return v.replace(tzinfo=dt.timezone.utc)
+
+
 class TurnoCrear(BaseModel):
     """Lo que se manda para reservar un turno.
     No se manda fecha_fin: la calcula el sistema desde la duración del servicio.
@@ -18,13 +24,23 @@ class TurnoCrear(BaseModel):
     fecha_inicio: dt.datetime
     tipo: TipoTurno = TipoTurno.SIMPLE
     categoria: str | None = Field(default=None, max_length=60)
-    notas: str | None = None
-    importe_previsto: float | None = None
+    notas: str | None = Field(default=None, max_length=2000)
+    importe_previsto: float | None = Field(default=None, ge=0, le=100_000_000)
     es_sobreturno: bool = False  # si es True, salta la validación de disponibilidad
+
+    @field_validator("fecha_inicio")
+    @classmethod
+    def _zona(cls, v: dt.datetime) -> dt.datetime:
+        return _hora_de_pared(v)
 class TurnoMover(BaseModel):
     """Reprogramar: nuevo horario y/o nuevo recurso."""
     fecha_inicio: dt.datetime
     recurso_id: int | None = None  # si cambia de profesional
+
+    @field_validator("fecha_inicio")
+    @classmethod
+    def _zona(cls, v: dt.datetime) -> dt.datetime:
+        return _hora_de_pared(v)
 class TurnoCambiarEstado(BaseModel):
     """Cambiar el estado del turno (confirmar, atender, cancelar...).
 

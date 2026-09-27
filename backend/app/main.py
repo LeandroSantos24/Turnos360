@@ -36,6 +36,14 @@ configurar_logging(nivel=settings.log_level, json_salida=settings.log_json)
 
 _docs = None if settings.es_produccion else "/docs"
 
+if settings.es_produccion and settings.mp_firma_modo == "off":
+    import logging
+
+    logging.getLogger("turnos360.mp").warning(
+        "MP_FIRMA_MODO=off en producción: los webhooks de Mercado Pago no se "
+        "autentican por firma. Pasar a 'log' y luego a 'enforce'."
+    )
+
 app = FastAPI(
     title="Turnos360 API",
     version="0.1.0",
@@ -58,9 +66,13 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_lista,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Sin cookies: la sesión viaja en el header Authorization, así que las
+    # credenciales de CORS no hacen falta. Apagadas, ni un CORS_ORIGINS="*"
+    # mal puesto permite lecturas con credenciales desde otro sitio.
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=600,
 )
 
 

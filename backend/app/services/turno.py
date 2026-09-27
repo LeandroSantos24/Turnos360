@@ -430,6 +430,28 @@ def cambiar_estado(
             f"No se puede pasar de '{turno.estado.value}' a '{datos.estado.value}'",
         )
 
+    # Reabrir un turno que había soltado el hueco (cancelado) lo vuelve a
+    # ocupar. Mientras estuvo cancelado, ese horario pudo venderse: sin este
+    # chequeo, reabrirlo creaba la silla doble. Mismo candado que crear/mover.
+    if (
+        turno.estado not in disp.ESTADOS_OCUPAN
+        and datos.estado in disp.ESTADOS_OCUPAN
+        and not turno.es_sobreturno
+        and turno.fecha_fin is not None
+    ):
+        bloquear_agenda(db, empresa_id, turno.recurso_id)
+        serv = db.get(Servicio, turno.servicio_id) if turno.servicio_id else None
+        if not disp.esta_disponible(
+            db, empresa_id, turno.recurso_id, turno.fecha_inicio, turno.fecha_fin,
+            excluir_turno_id=turno.id,
+            grupo_agenda=serv.grupo_agenda if serv else None,
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Ese horario ya está ocupado por otro turno. Movelo a otro "
+                "horario antes de reabrirlo.",
+            )
+
     turno.estado = datos.estado
     if datos.estado == EstadoTurno.CANCELADO and datos.motivo_cancelacion:
         turno.motivo_cancelacion = datos.motivo_cancelacion

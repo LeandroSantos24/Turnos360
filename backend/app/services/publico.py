@@ -682,11 +682,32 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     }
 
 def slugs_activos(db: Session) -> list[str]:
-    """Slugs de las empresas activas. Alimenta el sitemap de la landing."""
+    """Slugs de las vidrieras VISIBLES. Alimenta el sitemap de la landing.
+
+    Mismo criterio que resolver_empresa: una empresa del registro público sin
+    email verificado da 404, así que tampoco va al sitemap (eran URLs rotas
+    para Google, y confirmaban que ese slug existe).
+    """
+    from app.models import Usuario
+    from app.models.enums import RolUsuario
+
+    verificada = (
+        select(Usuario.id)
+        .where(
+            Usuario.empresa_id == Empresa.id,
+            Usuario.rol == RolUsuario.DUENO,
+            Usuario.email_verificado.is_(True),
+        )
+        .exists()
+    )
     return list(
         db.scalars(
             select(Empresa.slug)
-            .where(Empresa.activa.is_(True), Empresa.slug.is_not(None))
+            .where(
+                Empresa.activa.is_(True),
+                Empresa.slug.is_not(None),
+                (Empresa.de_registro_publico.is_not(True)) | verificada,
+            )
             .order_by(Empresa.slug)
         )
     )

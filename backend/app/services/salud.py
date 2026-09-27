@@ -5,12 +5,38 @@ La ficha es 1:1 con el paciente; guardar_ficha hace upsert (crea o actualiza).
 Antes de tocar la ficha, se valida que el paciente sea de ESTA empresa.
 """
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Adjunto, EntradaClinica, FichaClinica, MedicionAntropometrica
+from app.models import Adjunto, EntradaClinica, FichaClinica, MedicionAntropometrica, Turno
 from app.schemas.salud import AdjuntoCrear, EntradaCrear, FichaGuardar, MedicionCrear
 from app.services import cliente as svc_cliente
+
+
+def _exigir_propios(
+    db: Session, empresa_id: int, cliente_id: int,
+    *, turno_id: int | None = None, entrada_id: int | None = None,
+) -> None:
+    """Las referencias del body tienen que ser de ESTE paciente y ESTA empresa.
+
+    Sin esto, un id de otra empresa quedaba enganchado por FK a la historia
+    clínica propia (y a la inversa, le trababa a la otra empresa el borrado).
+    """
+    if turno_id is not None and db.scalar(
+        select(Turno.id).where(
+            Turno.id == turno_id, Turno.empresa_id == empresa_id,
+            Turno.cliente_id == cliente_id,
+        )
+    ) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Turno no encontrado")
+    if entrada_id is not None and db.scalar(
+        select(EntradaClinica.id).where(
+            EntradaClinica.id == entrada_id, EntradaClinica.empresa_id == empresa_id,
+            EntradaClinica.cliente_id == cliente_id,
+        )
+    ) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entrada clínica no encontrada")
 
 
 def obtener_ficha(db: Session, empresa_id: int, cliente_id: int) -> FichaClinica | None:
@@ -74,6 +100,7 @@ def crear_entrada(
     """Alta de un control. None si el paciente no es de esta empresa (→ 404)."""
     if svc_cliente.obtener(db, empresa_id, cliente_id) is None:
         return None
+    _exigir_propios(db, empresa_id, cliente_id, turno_id=datos.turno_id)
     entrada = EntradaClinica(
         empresa_id=empresa_id, cliente_id=cliente_id, **datos.model_dump()
     )
@@ -150,6 +177,7 @@ def crear_medicion(
     """
     if svc_cliente.obtener(db, empresa_id, cliente_id) is None:
         return None
+    _exigir_propios(db, empresa_id, cliente_id, entrada_id=datos.entrada_id)
 
     valores = datos.model_dump()
 
@@ -210,6 +238,7 @@ def crear_adjunto(
     """
     if svc_cliente.obtener(db, empresa_id, cliente_id) is None:
         return None
+    _exigir_propios(db, empresa_id, cliente_id, entrada_id=datos.entrada_clinica_id)
     if not datos.ruta.lower().startswith(("http://", "https://")):
         raise ValueError("La ruta debe ser una URL http(s)")
     adjunto = Adjunto(empresa_id=empresa_id, cliente_id=cliente_id, **datos.model_dump())
