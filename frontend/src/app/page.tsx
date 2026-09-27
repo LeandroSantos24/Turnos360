@@ -36,9 +36,18 @@ const font = {
   marca: "var(--fuente-marca)",
 };
 
-/** El ancho útil de toda la página. Antes 1120: en un monitor de 1920 el
- *  contenido quedaba en una columna angosta con dos franjas vacías enormes. */
-const ANCHO = 1240;
+/** El ancho útil de toda la página.
+ *
+ *  Fue 1120, después 1240 y ahora 1440. El motivo es siempre el mismo: en un
+ *  monitor de 1920 el contenido quedaba en una columna angosta con dos franjas
+ *  vacías a los costados, y la página se leía como si le faltara algo.
+ *
+ *  1440 es el techo, no un paso más en la misma dirección. Más que esto y el
+ *  renglón de texto pasa de los 90 caracteres: el ojo pierde el salto de línea
+ *  y hay que releer. Por eso el párrafo del hero sigue con su propio tope de
+ *  540px aunque la página entera sea más ancha — el ancho de la PÁGINA y el
+ *  ancho del TEXTO son dos decisiones distintas. */
+const ANCHO = 1440;
 const LADOS = "clamp(20px,5vw,72px)";
 const caja = { maxWidth: ANCHO, margin: "0 auto" } as const;
 
@@ -829,7 +838,7 @@ export default function Page() {
                 paddingTop: 34,
               }}
             >
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7a91", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: "#7d8ca3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 Se integra con
               </span>
               {/* Cada logo en su pastilla clara: son marcas con su propio color
@@ -837,11 +846,27 @@ export default function Page() {
                   se veía. Monocromarlos en blanco lo arreglaba, pero acá el
                   logo de Mercado Pago es parte del argumento de venta y tiene
                   que leerse como Mercado Pago. */}
+              {/* Las alturas van una por una y no todas iguales: cada logo
+                  tiene su propia proporción, y el que es cuadrado (el pin de
+                  Maps) se ve MÁS grande que uno alargado (Mercado Pago) a la
+                  misma altura en píxeles. Lo que hay que emparejar es el peso
+                  visual, no el número. */}
               {[
-                { src: "/img/mercado-pago.png", alt: "Mercado Pago", h: 26 },
-                { src: "/img/whatsapp.png", alt: "WhatsApp", h: 20 },
-                { src: "/img/google-calendar.png", alt: "Google Calendar", h: 22 },
-                { src: "/img/google-maps.png", alt: "Google Maps", h: 20 },
+                // Medido sobre los archivos, no a ojo. Cada PNG tiene distinto
+                // margen interno, así que la misma altura de <img> da logos de
+                // tamaños distintos:
+                //   mercado-pago    360x203, tinta 348x92   → usa 45% del alto
+                //   whatsapp        300x68,  tinta 299x67   → 99%
+                //   google-calendar 300x110, tinta 298x90   → 82%
+                //   google-maps     500x500, tinta 348x498  → 100%
+                // A h=34, Mercado Pago rendía 15px de logo contra 27 de
+                // WhatsApp. Estos valores dan ~26px de tinta en los tres
+                // lockups; el pin de Maps va a 33 porque un ícono angosto pesa
+                // menos que una palabra ancha a la misma altura.
+                { src: "/img/mercado-pago.png", alt: "Mercado Pago", h: 57 },
+                { src: "/img/whatsapp.png", alt: "WhatsApp", h: 26 },
+                { src: "/img/google-calendar.png", alt: "Google Calendar", h: 32 },
+                { src: "/img/google-maps.png", alt: "Google Maps", h: 33 },
               ].map((i) => (
                 <span
                   key={i.alt}
@@ -850,8 +875,8 @@ export default function Page() {
                     alignItems: "center",
                     background: "rgba(255,255,255,0.94)",
                     border: "1px solid rgba(255,255,255,0.14)",
-                    borderRadius: 12,
-                    padding: "10px 16px",
+                    borderRadius: 14,
+                    padding: "14px 22px",
                   }}
                 >
                   <img src={i.src} alt={i.alt} style={{ height: i.h, display: "block" }} />
@@ -958,7 +983,7 @@ export default function Page() {
             <Revelar demora={0.06}>
               <div
                 className="visor-panel"
-                style={{ position: "relative", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 22, padding: "clamp(8px,1.5vw,16px)", boxShadow: "0 32px 76px -22px rgba(16,22,32,0.22)", overflow: "hidden", maxWidth: 1040, margin: "0 auto" }}
+                style={{ position: "relative", background: "#fff", border: "1px solid #e9ecf1", borderRadius: 22, padding: "clamp(8px,1.5vw,16px)", boxShadow: "0 32px 76px -22px rgba(16,22,32,0.22)", overflow: "hidden", maxWidth: 1240, margin: "0 auto" }}
               >
                 {/* Las cuatro capturas APILADAS y cruzadas por opacidad: cambiando
                     el src, el navegador descarta la vieja antes de tener la nueva

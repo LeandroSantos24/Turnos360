@@ -92,7 +92,10 @@ export const PLANES = [
   },
   {
     codigo: "multi",
-    etiqueta: "Multi",
+    // "Multisucursal" y no "Multi": el código del plan es un dato interno y
+    // "multi" solo no significa nada para el dueño. La palabra completa dice
+    // exactamente qué compra.
+    etiqueta: "Multisucursal",
     precio: 34990,
     resumen: "Equipo ilimitado · hasta 3 locales",
     paraQuien: "El que abrió el segundo local y necesita compararlos.",
@@ -108,3 +111,17 @@ export const PLANES = [
     paraQuien: "Cadenas y franquicias. Precio y cupos pactados a mano.",
   },
 ];
+
+/**
+ * El nombre visible de un plan a partir de su código.
+ *
+ * Existe porque la tarjeta de «Mi cuenta» traducía los planes con un ternario
+ * suelto —`pro` → "Plan Pro", `gratuito` → "Plan Gratuito", cualquier otro →
+ * el código crudo—. El día que se sumó el plan multi, esa pantalla empezó a
+ * mostrar «multi» en minúscula, que se lee como un error del sistema.
+ *
+ * Si mañana aparece un plan nuevo, acá no hay que tocar nada: sale de PLANES.
+ */
+export function etiquetaPlan(codigo: string): string {
+  return PLANES.find((p) => p.codigo === codigo)?.etiqueta ?? codigo;
+}

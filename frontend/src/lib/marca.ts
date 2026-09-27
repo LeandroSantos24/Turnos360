@@ -9,7 +9,7 @@
  * Pero el logo es lo primero que se ve de la marca, así que NUNCA puede
  * quedar un hueco. La secuencia es:
  *
- *   1. Se pinta el archivo del repo (16 KB, mismo origen, ya cacheado).
+ *   1. Se pinta el archivo del repo (37 KB, mismo origen, ya cacheado).
  *   2. En paralelo se consulta si hay override. Si lo hay, se cambia el src.
  *   3. Si esa imagen no carga —URL mal, borrada, Cloudinary caído—, el
  *      `onError` vuelve al archivo del repo.
@@ -29,7 +29,13 @@ import { useEffect, useState } from "react";
 
 import { API_URL } from "@/lib/api";
 
-/** El del repo. Es el default y el respaldo de todo lo demás. */
+/**
+ * El del repo. Es el default y el respaldo de todo lo demás.
+ *
+ * Tiene transparencia real: era RGB con el fondo blanco horneado, y sobre el
+ * navy de la barra lateral eso se veía como un cuadrado blanco alrededor de la
+ * marca. Si algún día se reemplaza el archivo, que sea con alfa.
+ */
 export const LOGO_LOCAL = "/marca/logo-turnos360.webp";
 
 /**

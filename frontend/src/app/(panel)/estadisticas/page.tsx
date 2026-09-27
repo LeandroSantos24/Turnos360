@@ -818,35 +818,104 @@ function EstadoBox({ label, valor, color }: { label: string; valor: number; colo
 }
 
 /* ── Barras de horarios más demandados ── */
+/** Tope del eje. Siempre par, para que la marca del medio sea un entero:
+ *  un eje que dice 7,5 se lee como un número roto. */
+function topeEje(max: number): number {
+  return 2 * Math.ceil(max / 2);
+}
+
 function HorariosBar({ horas }: { horas: { hora: number; cantidad: number }[] }) {
   const mapa = new Map(horas.map((h) => [h.hora, h.cantidad]));
-  const desde = Math.min(...horas.map((h) => h.hora));
-  const hasta = Math.max(...horas.map((h) => h.hora));
+
+  /* EL RANGO ES EL DÍA, NO LOS DATOS.
+     Del mínimo al máximo de lo que hubiera, dos turnos a dos horas distintas
+     daban dos columnas de media pantalla cada una — se leían como dos bloques
+     de color y daban a entender que el negocio abre dos horas. Con una jornada
+     de referencia (9 a 20, que se amplía sola si hay turnos afuera), esos dos
+     turnos se ven como lo que son: dos picos en un día casi vacío. */
+  const desde = Math.min(9, ...horas.map((h) => h.hora));
+  const hasta = Math.max(20, ...horas.map((h) => h.hora));
   const rango: number[] = [];
   for (let h = desde; h <= hasta; h++) rango.push(h);
+
   const max = Math.max(1, ...horas.map((h) => h.cantidad));
+  const tope = topeEje(max);
+  const pico = horas.reduce((a, b) => (b.cantidad > a.cantidad ? b : a), horas[0]);
+  const total = horas.reduce((a, b) => a + b.cantidad, 0);
+
   return (
-    /* items-stretch (no items-end) es lo que hace que esto funcione.
-       Con items-end, cada columna toma su ALTURA NATURAL —o sea, la del
-       "9h" de abajo— en vez de estirarse a los 160 px del contenedor. El
-       hueco de la barra quedaba en 0 px de alto y su height en % daba 0:
-       se veían las etiquetas y ninguna barra.
-       min-h-0 va para que el flex-1 pueda ceder alto en vez de desbordar. */
-    <div className="flex h-40 items-stretch gap-1">
-      {rango.map((h) => {
-        const c = mapa.get(h) ?? 0;
-        return (
-          <div key={h} className="flex h-full flex-1 flex-col items-center gap-1" title={`${c} turnos`}>
-            <div className="flex min-h-0 w-full flex-1 items-end">
-              <div
-                className="w-full rounded-t bg-primary/80"
-                style={{ height: `${Math.max((c / max) * 100, c > 0 ? 4 : 0)}%` }}
-              />
-            </div>
-            <span className="text-[9px] text-muted-foreground">{h}h</span>
+    <div>
+      {/* El titular dice el dato; el gráfico muestra la forma del día. Sin esta
+          línea hay que leer el gráfico para sacar la conclusión más obvia. */}
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          Tu hora más pedida es las{" "}
+          <b className="tabular-nums text-foreground">{pico.hora}:00</b> con{" "}
+          <b className="tabular-nums text-foreground">{pico.cantidad}</b>{" "}
+          {pico.cantidad === 1 ? "turno" : "turnos"}
+        </span>
+        <span className="tabular-nums">{total} en total</span>
+      </div>
+
+      <div className="flex gap-2.5">
+        {/* El eje. Sin escala, una barra llena puede ser 1 turno o 50. */}
+        <div className="flex h-44 w-7 flex-none flex-col items-end justify-between text-[10px] tabular-nums text-muted-foreground/70">
+          <span>{tope}</span>
+          <span>{tope / 2}</span>
+          <span>0</span>
+        </div>
+        <div className="relative h-44 flex-1">
+          <div className="absolute inset-x-0 top-0 border-t border-dashed border-border/70" />
+          <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/70" />
+          <div className="absolute inset-x-0 bottom-0 border-t border-border" />
+          {/* Las barras llenan su columna con 4px de aire. Antes tenían un ancho
+              máximo de 38px y flotaban perdidas en una tarjeta de 1600px. */}
+          <div className="absolute inset-0 flex items-end gap-1">
+            {rango.map((h) => {
+              const c = mapa.get(h) ?? 0;
+              const esPico = c === max && c > 0;
+              return (
+                <div key={h} className="group relative flex h-full flex-1 items-end">
+                  <div
+                    className={`w-full rounded-t-md transition-colors group-hover:bg-primary ${
+                      esPico ? "bg-primary" : "bg-primary/40"
+                    }`}
+                    style={{ height: c > 0 ? `${Math.max((c / tope) * 100, 3)}%` : "0%" }}
+                  />
+                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-background opacity-0 transition-opacity group-hover:opacity-100">
+                    {c}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      </div>
+
+      <div className="flex gap-2.5">
+        <div className="w-7 flex-none" />
+        <div className="mt-1.5 flex flex-1 gap-1">
+          {rango.map((h) => {
+            const c = mapa.get(h) ?? 0;
+            const esPico = c === max && c > 0;
+            return (
+              <span
+                key={h}
+                className={`flex-1 text-center text-[10px] tabular-nums ${
+                  esPico ? "font-semibold text-foreground" : "text-muted-foreground/70"
+                }`}
+              >
+                {h}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        Turnos por hora de inicio. Para decidir a qué hora conviene tener más
+        gente — y qué horas muertas llenar con una promo.
+      </p>
     </div>
   );
 }

@@ -236,22 +236,24 @@ export default function PanelLayout({
         >
           <Link href={inicioHref} className="group flex items-center gap-3">
             {/*
-              MÁS AIRE, NO MÁS PÍXELES.
-              El archivo ya es de 1080×1080: la resolución nunca fue el
-              problema. La caja medía 36px y tenía 4px de padding, así que el
-              logo se dibujaba a 28 — y a ese tamaño el aro, las agujas y el
-              tilde se empastan en una mancha. Ahora la caja es de 44px y el
-              padding es mínimo, con un anillo suave que lo despega del navy
-              sin ponerle un borde duro alrededor.
+              SIN BALDOSA BLANCA.
+              Antes acá había un `bg-white` con un anillo y una sombra, y el
+              archivo del logo ADEMÁS traía el fondo blanco horneado (era RGB,
+              sin canal alfa: 1080×1080 píxeles blancos). O sea que el cuadrado
+              se veía por partida doble, y sacar solo uno de los dos no
+              alcanzaba.
 
-              El detalle fino del dibujo sigue siendo mucho para un ícono chico
-              (un favicon de 16px va a ser una mancha igual): eso se resuelve
-              con una versión simplificada de la marca, no con CSS.
+              Ahora el archivo tiene transparencia real y la marca se apoya
+              directo sobre el navy. El interior del aro deja ver el fondo, que
+              es como tiene que leerse un aro.
+
+              La caja sigue en 44px: a 28 el aro, las agujas y el tilde se
+              empastaban en una mancha. El detalle fino del dibujo sigue siendo
+              mucho para un ícono muy chico (un favicon de 16px va a ser una
+              mancha igual); eso se arregla con una versión simplificada de la
+              marca, no con CSS.
             */}
-            <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-0.5 transition-transform group-hover:scale-105"
-              style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.12), 0 2px 8px rgba(0,0,0,0.25)" }}
-            >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center transition-transform group-hover:scale-105">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logo.src}

@@ -11,6 +11,7 @@ import { Crown, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api";
+import { etiquetaPlan } from "@/lib/precios";
 import { obtenerSuscripcion, type Suscripcion } from "@/lib/empresa-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,8 +142,9 @@ function TarjetaSuscripcion() {
   // en gris en vez de tirar abajo toda la pantalla de Mi cuenta.
   const estilo = ESTILOS[sus.estado] ?? ESTILOS.sin_vencimiento;
 
-  const nombrePlan =
-    sus.plan === "pro" ? "Plan Pro" : sus.plan === "gratuito" ? "Plan Gratuito" : sus.plan;
+  // Antes esto era un ternario con dos casos y un "si no, mostrá el código
+  // crudo". Por eso el plan multi aparecía como «multi» en minúscula.
+  const nombrePlan = `Plan ${etiquetaPlan(sus.plan)}`;
 
   return (
     <div

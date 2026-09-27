@@ -221,7 +221,11 @@ GRILLA: dict[Plan, Limites] = {
         funciones=DE_PRO,
     ),
     Plan.MULTI: Limites(
-        etiqueta="Multi",
+        # "Multisucursal" y no "Multi". Esta etiqueta viaja al panel y se pinta
+        # al lado del rol en la barra lateral y en Mi suscripción: "multi" solo
+        # no le dice nada al dueño, la palabra completa sí. Espejo de la grilla
+        # del frontend en lib/precios.ts.
+        etiqueta="Multisucursal",
         precio=34990,
         profesionales=None,
         usuarios=None,
