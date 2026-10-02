@@ -30,6 +30,10 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+# Sin la URL de la API el bundle se hornea con el fallback http://localhost:8000
+# y el panel en producción no puede hablar con el backend. Mejor que el build
+# falle acá que descubrirlo con el sitio publicado.
+RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "ERROR: falta el build-arg NEXT_PUBLIC_API_URL" && exit 1)
 RUN npm run build
 
 # ── 3. Runtime (solo lo necesario, usuario sin privilegios) ─────

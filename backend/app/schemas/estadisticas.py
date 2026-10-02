@@ -12,6 +12,10 @@ class ProfesionalTotal(BaseModel):
     recurso: str
     total: float
     turnos: int
+    # Servicios pagados con saldo de gift card: trabajo hecho que NO es
+    # ingreso nuevo (la plata entró al vender la tarjeta). Cuenta para
+    # comisiones; no suma a la facturación.
+    prepago: float = 0.0
     ticket: float = 0.0   # facturación ÷ turnos
     pct: float = 0.0      # % del total facturado
 
@@ -30,8 +34,9 @@ class EstadosResumen(BaseModel):
 
 class ServicioTotal(BaseModel):
     servicio: str
-    cantidad: int
-    total: float
+    cantidad: int        # turnos FINALIZADOS del período (demanda)
+    total: float         # plata cobrada en el período por ese servicio
+    prepago: float = 0.0
 
 
 class HoraTotal(BaseModel):
@@ -107,7 +112,11 @@ class EstadisticasFacturacion(BaseModel):
     # atención: es la que se usa para el ticket promedio, porque meter la
     # venta de un abono de $50.000 ahí adentro dejaría el número sin sentido.
     por_origen: list[OrigenTotal] = []
+    # Σ de lo cobrado por turnos (mostrador + señas). Es exactamente la suma de
+    # por_profesional y de por_servicio.
     facturado_turnos: float = 0.0
+    # Uso de saldo de gift cards en el período. No es facturación.
+    prepago_consumido: float = 0.0
 
     # Rendimiento de los cupones de descuento del período.
     por_cupon: list[CuponRendimiento] = []

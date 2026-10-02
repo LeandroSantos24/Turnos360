@@ -127,6 +127,8 @@ def test_el_entorno_se_normaliza_y_sigue_siendo_produccion(escrito):
         env=escrito,
         secret_key="una-clave-larga-de-verdad-para-produccion",
         fernet_key="otra-clave-distinta-y-tambien-larga",
+        api_base_url="https://api.turnos360.com.ar",
+        public_base_url="https://turnos360.com.ar",
     )
     assert s.es_produccion is True
 

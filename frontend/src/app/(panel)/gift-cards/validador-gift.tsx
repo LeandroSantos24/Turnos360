@@ -97,7 +97,9 @@ export function ValidadorGift({ onCanjeada }: { onCanjeada: () => void }) {
         </h2>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Escribí el código de la gift card para verificar que sea genuina y canjearla.
+        Escribí el código para verificar que sea genuina y ver su saldo. Para
+        usarla en un turno, cobralo desde la agenda eligiendo «Gift card»: así
+        se descuenta solo lo que corresponde y queda atado al turno.
       </p>
 
       <div className="mt-4 flex items-end gap-2">
@@ -135,7 +137,10 @@ export function ValidadorGift({ onCanjeada }: { onCanjeada: () => void }) {
                 <span className="font-bold">Gift card válida</span>
               </div>
               <div className="mt-2 space-y-0.5 text-sm text-[#0e6b5c]">
-                <p className="text-2xl font-extrabold">{montoFmt(gc.monto)}</p>
+                <p className="text-2xl font-extrabold">{montoFmt(gc.saldo ?? gc.monto)}</p>
+                {(gc.saldo ?? gc.monto) < gc.monto && (
+                  <p className="text-xs">Saldo disponible de {montoFmt(gc.monto)}</p>
+                )}
                 {gc.concepto && <p>{gc.concepto}</p>}
                 {gc.beneficiario && <p>Para: {gc.beneficiario}</p>}
                 {gc.vence && <p className="text-xs">Vence: {gc.vence.split("-").reverse().join("/")}</p>}
@@ -179,8 +184,8 @@ export function ValidadorGift({ onCanjeada }: { onCanjeada: () => void }) {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Canjear esta gift card?</AlertDialogTitle>
             <AlertDialogDescription>
-              Vas a canjear <b>{gc?.codigo}</b> por{" "}
-              <b>{gc ? montoFmt(gc.monto) : ""}</b>
+              Vas a canjear <b>{gc?.codigo}</b> por todo su saldo,{" "}
+              <b>{gc ? montoFmt(gc.saldo ?? gc.monto) : ""}</b>
               {gc?.beneficiario ? ` (para ${gc.beneficiario})` : ""}. Esta acción
               es <b>definitiva</b>: la tarjeta queda usada y no se puede volver
               atrás.

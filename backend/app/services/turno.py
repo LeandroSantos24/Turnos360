@@ -102,10 +102,15 @@ def _resolver_nombres(db: Session, turno: Turno) -> Turno:
 
 
 def _total_con_items(turno: Turno, items_sum: float) -> float:
-    """Total real del turno: (servicio + adicionales) con el descuento aplicado."""
+    """Total real del turno: (servicio + adicionales) − % − descuento fijo.
+
+    Es LA cuenta del total: la usan la agenda, el saldo y el cobro. El fijo va
+    después del % y nunca deja el total en negativo.
+    """
     base = float(turno.importe_previsto or 0) + items_sum
     pct = float(turno.descuento_pct or 0)
-    return round(base * (1 - pct / 100), 2)
+    fijo = float(getattr(turno, "descuento_monto", 0) or 0)
+    return round(max(base * (1 - pct / 100) - fijo, 0.0), 2)
 
 
 def _setear_totales(db: Session, turnos: list[Turno]) -> None:
@@ -133,7 +138,9 @@ def _setear_totales(db: Session, turnos: list[Turno]) -> None:
             Pago.origen,
             func.coalesce(func.sum(Pago.monto), 0),
         )
-        .where(Pago.turno_id.in_(ids))
+        # Los anulados no pagaron nada: sumarlos dejaba un saldo menor al
+        # real y la recepción le cobraba de menos al cliente.
+        .where(Pago.turno_id.in_(ids), Pago.anulado.is_(False))
         .group_by(Pago.turno_id, Pago.origen)
     ).all()
     senas: dict[int, float] = {}
@@ -146,7 +153,10 @@ def _setear_totales(db: Session, turnos: list[Turno]) -> None:
     for t in turnos:
         t.total = _total_con_items(t, sumas.get(t.id, 0.0))
         t.senado = senas.get(t.id, 0.0)
-        t.saldo = round(max((t.total or 0.0) - t.senado, 0.0), 2)
+        # Saldo = total − TODO lo pagado (seña, cobros parciales, gift card).
+        # Antes restaba solo la seña: después de un cobro parcial el saldo
+        # seguía mostrando el total.
+        t.saldo = round(max((t.total or 0.0) - cobros.get(t.id, 0.0), 0.0), 2)
         # TODA la plata registrada de este turno (seña + cobro del mostrador).
         # Sirve para avisar cuando se reabre un turno que ya tenía cobros:
         # el pago no se anula solo, y si nadie lo mira el arqueo del día
@@ -265,7 +275,9 @@ def crear(db: Session, empresa_id: int, datos: TurnoCrear) -> Turno:
 
     # 3.5. ¿El cliente tiene un abono activo que cubre este servicio?
     # Si sí: el turno queda en $0 y se marca como cubierto (para finanzas).
-    cubierto = _abono_cubre_servicio(db, empresa_id, datos.cliente_id, servicio.id)
+    cubierto = _abono_cubre_servicio(
+        db, empresa_id, datos.cliente_id, servicio.id, datos.fecha_inicio.date()
+    )
 
     # El servicio tiene que prestarse en el local donde atiende esta persona.
     # Con un solo local siempre se cumple (todo servicio nace ofrecido en
@@ -324,15 +336,28 @@ def mover(
     Excluye el propio turno del chequeo (si no, chocaría consigo mismo).
     """
     turno = db.scalar(
-        select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        select(Turno)
+        .where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        .with_for_update()
     )
     if turno is None:
         return None
 
+    # Un turno atendido o cobrado ya es un hecho económico: moverlo de día o
+    # de profesional reescribe a quién se le atribuye una plata ya cobrada.
+    if turno.estado in (EstadoTurno.FINALIZADO, EstadoTurno.AUSENTE) or turno.cobrado:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este turno ya fue atendido o cobrado y no se puede reprogramar. "
+            "Si fue un error, reabrilo o anulá el cobro primero.",
+        )
+
     nuevo_recurso_id = datos.recurso_id or turno.recurso_id
+    nuevo_recurso = None
     if datos.recurso_id is not None:
         # si cambia de recurso, validar que el nuevo sea de la empresa
-        if _entidad_de_empresa(db, Recurso, datos.recurso_id, empresa_id) is None:
+        nuevo_recurso = _entidad_de_empresa(db, Recurso, datos.recurso_id, empresa_id)
+        if nuevo_recurso is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurso no encontrado")
 
     # recalcular duración a partir del servicio (la misma de antes)
@@ -368,6 +393,21 @@ def mover(
     if datos.fecha_inicio != turno.fecha_inicio:
         turno.recordatorio_enviado = False
         turno.recordatorio_2h_enviado = False
+
+    # Reasignado a alguien de OTRO local: el turno se muda con él. Antes se
+    # quedaba en el local viejo y el cobro entraba a la caja de un local donde
+    # no se atendió.
+    if nuevo_recurso is not None and nuevo_recurso.sucursal_id != turno.sucursal_id:
+        from app.services import servicio as servicio_svc
+
+        if turno.servicio_id and not servicio_svc.se_ofrece_en(
+            db, turno.servicio_id, nuevo_recurso.sucursal_id
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Ese servicio no se ofrece en el local de ese profesional.",
+            )
+        turno.sucursal_id = nuevo_recurso.sucursal_id
 
     turno.fecha_inicio = datos.fecha_inicio
     turno.fecha_fin = nueva_fin
@@ -452,6 +492,25 @@ def cambiar_estado(
                 "horario antes de reabrirlo.",
             )
 
+    # Un turno cancelado no puede seguir facturando. Si tiene cobro del
+    # mostrador (o uso de gift card) vigente, primero se anula el cobro. La
+    # seña online sí puede quedar: es la política de seña no reembolsable, y
+    # si se devuelve, Mercado Pago avisa y se revierte sola.
+    if datos.estado == EstadoTurno.CANCELADO:
+        cobrado = db.scalar(
+            select(func.count(Pago.id)).where(
+                Pago.turno_id == turno.id,
+                Pago.anulado.is_(False),
+                Pago.origen.is_distinct_from("sena"),
+            )
+        )
+        if cobrado:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Este turno tiene un cobro registrado. Anulá el cobro antes de "
+                "cancelarlo, así la plata sale de la caja y de las estadísticas.",
+            )
+
     turno.estado = datos.estado
     if datos.estado == EstadoTurno.CANCELADO and datos.motivo_cancelacion:
         turno.motivo_cancelacion = datos.motivo_cancelacion
@@ -489,36 +548,69 @@ def cambiar_estado(
 
 
 def aplicar_descuento(
-    db: Session, empresa_id: int, turno_id: int, pct: float
+    db: Session, empresa_id: int, turno_id: int, pct: float, monto: float | None = None
 ) -> Turno | None:
-    """Guarda el % de descuento del turno. None si no es de esta empresa."""
+    """Guarda el descuento del turno (% y/o fijo en pesos).
+
+    No se toca el precio de un turno ya cobrado: el turno diría un total y la
+    caja otro. Tampoco se acepta un descuento que deje el total por debajo de
+    lo ya pagado (por ejemplo, la seña).
+    """
+    from app.services.finanzas import total_y_pagado
+
     turno = db.scalar(
-        select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        select(Turno)
+        .where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        .with_for_update()
     )
     if turno is None:
         return None
+    if turno.cobrado:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El turno ya está cobrado. Para cambiar el precio, anulá el cobro primero.",
+        )
+    previo = (turno.descuento_pct, turno.descuento_monto)
     turno.descuento_pct = pct
+    if monto is not None:
+        turno.descuento_monto = monto
+    total, pagado = total_y_pagado(db, turno)
+    if total + 0.009 < pagado:
+        turno.descuento_pct, turno.descuento_monto = previo
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Con ese descuento el total (${total:,.2f}) queda por debajo de lo "
+            f"ya pagado (${pagado:,.2f}).",
+        )
     db.commit()
     db.refresh(turno)
+    _setear_totales(db, [turno])
     return _resolver_nombres(db, turno)
 
 def _abono_cubre_servicio(
-    db: Session, empresa_id: int, cliente_id: int, servicio_id: int
+    db: Session, empresa_id: int, cliente_id: int, servicio_id: int, fecha: dt.date
 ) -> bool:
-    """¿El cliente tiene un abono activo que cubre este servicio?
+    """¿El cliente tiene un abono que cubre este servicio EL DÍA DEL TURNO?
 
-    Devuelve True si: tiene membresía vigente Y el servicio está en la lista
-    de servicios cubiertos del plan. Si la lista está vacía, NO cubre (el dueño
-    debe marcar explícitamente qué servicios incluye el abono).
+    Devuelve True si: tiene membresía vigente en esa fecha, el servicio está
+    en la lista de cubiertos del plan y, si el plan no es ilimitado, le queda
+    cupo. Si la lista está vacía, NO cubre.
+
+    Antes se miraba la vigencia de HOY (un turno de dentro de dos meses salía
+    gratis con un abono que vencía mañana) y `cantidad_cupos` no se
+    controlaba nunca: un plan de 4 cortes cubría cortes ilimitados en $0.
     """
-    membresia = svc_membresia.membresia_activa_de(db, empresa_id, cliente_id)
+    membresia = svc_membresia.membresia_vigente_en(db, empresa_id, cliente_id, fecha)
     if not membresia:
         return False
     plan = membresia.plan
     if not plan:
         return False
-    cubiertos = plan.servicios_cubiertos or []
-    return servicio_id in cubiertos
+    if servicio_id not in (plan.servicios_cubiertos or []):
+        return False
+    if not plan.ilimitado and plan.cantidad_cupos:
+        return svc_membresia.cupos_usados(db, membresia) < int(plan.cantidad_cupos)
+    return True
 
 
 def pedir_resena_manual(db: Session, empresa_id: int, turno_id: int) -> dict:

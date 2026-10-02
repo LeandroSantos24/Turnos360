@@ -8,10 +8,11 @@ a ella para poder cerrarla con cifras reales.
 import datetime as dt
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_ as sa_or, func, select
+from sqlalchemy import and_ as sa_and, or_ as sa_or, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.enums import EstadoCaja, TipoMovimiento
+from app.models.enums import EstadoCaja, EstadoTurno, TipoMovimiento
 from app.models.finanzas import (
     Caja,
     CategoriaFinanciera,
@@ -172,7 +173,11 @@ def sucursal_de_usuario(db: Session, empresa_id: int, usuario_id: int | None) ->
 
 
 def caja_abierta(
-    db: Session, empresa_id: int, sucursal_id: int | None = None
+    db: Session,
+    empresa_id: int,
+    sucursal_id: int | None = None,
+    *,
+    bloquear: bool = False,
 ) -> Caja | None:
     """La caja abierta de un local. Sin local, la del principal.
 
@@ -180,27 +185,51 @@ def caja_abierta(
     del centro y la del barrio no se cuentan juntas, y cada encargado firma lo
     suyo. El índice único parcial de la base lo garantiza.
 
-    El default al principal mantiene andando todo lo que todavía no pasa el
-    local, que para un negocio de una sola sucursal es lo mismo de siempre.
+    `bloquear=True` la toma con FOR SHARE hasta el commit. Lo usan TODOS los
+    caminos que escriben plata: sin eso, un cobro que leyó «caja abierta»
+    justo antes de que otra pestaña la cerrara terminaba escribiendo un
+    movimiento dentro de un arqueo ya firmado. Con el candado, el cierre
+    espera a que el cobro termine (y lo incluye), o el cobro ve la caja ya
+    cerrada y su movimiento queda para la próxima.
     """
     if sucursal_id is None:
         sucursal_id = sucursal_svc.id_principal(db, empresa_id)
-    return db.scalar(
-        select(Caja).where(
-            Caja.empresa_id == empresa_id,
-            Caja.sucursal_id == sucursal_id,
-            Caja.estado == EstadoCaja.ABIERTA,
-        )
+    consulta = select(Caja).where(
+        Caja.empresa_id == empresa_id,
+        Caja.sucursal_id == sucursal_id,
+        Caja.estado == EstadoCaja.ABIERTA,
     )
+    if bloquear:
+        consulta = consulta.with_for_update(read=True)
+    return db.scalar(consulta)
 
 
 def abrir_caja(
     db: Session, empresa_id: int, datos: CajaAbrir, usuario_id: int
 ) -> Caja | None:
-    """Abre la caja del local de quien la abre. None si ya hay una (409)."""
+    """Abre la caja del local de quien la abre. None si ya hay una (409).
+
+    ADOPTA LO QUE QUEDÓ AFUERA. Un cobro o un gasto con la caja cerrada se
+    registra igual, con caja_id NULL. Antes quedaba así para siempre: la plata
+    existía en Estadísticas y en ningún arqueo. Ahora la caja nueva adopta los
+    movimientos sin caja de su local posteriores al último cierre: es la plata
+    que físicamente está en el cajón cuando se vuelve a abrir. Si el local
+    nunca tuvo caja, no adopta nada (no se arrastra la historia de meses).
+    """
     sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
     if caja_abierta(db, empresa_id, sucursal_id) is not None:
         return None
+    # Desde la APERTURA de la última caja: todo lo que entró mientras estuvo
+    # abierta quedó adentro, así que un movimiento sin caja posterior a esa
+    # apertura es, por fuerza, posterior a su cierre. Se compara contra la
+    # hora de la base (las dos fechas las pone Postgres), no la de Python.
+    ultimo_cierre = db.scalar(
+        select(func.max(Caja.fecha_apertura)).where(
+            Caja.empresa_id == empresa_id,
+            Caja.sucursal_id == sucursal_id,
+            Caja.estado == EstadoCaja.CERRADA,
+        )
+    )
     c = Caja(
         empresa_id=empresa_id,
         sucursal_id=sucursal_id,
@@ -208,6 +237,23 @@ def abrir_caja(
         abierta_por=usuario_id,
     )
     db.add(c)
+    try:
+        db.flush()
+    except IntegrityError:
+        # Dos pestañas abriendo a la vez: el índice único frenó a la segunda.
+        db.rollback()
+        return None
+    if ultimo_cierre is not None:
+        for mov in db.scalars(
+            select(MovimientoFinanciero).where(
+                MovimientoFinanciero.empresa_id == empresa_id,
+                MovimientoFinanciero.sucursal_id == sucursal_id,
+                MovimientoFinanciero.caja_id.is_(None),
+                MovimientoFinanciero.anulado.is_(False),
+                MovimientoFinanciero.fecha >= ultimo_cierre,
+            )
+        ):
+            mov.caja_id = c.id
     db.commit()
     db.refresh(c)
     return c
@@ -331,8 +377,15 @@ def resumen_caja(db: Session, empresa_id: int, caja: Caja) -> dict:
                 MovimientoFinanciero.caja_id == caja.id,
                 MovimientoFinanciero.tipo == tipo,
                 MovimientoFinanciero.anulado.is_(False),
+                # Por CLAVE, no por nombre: el dueño puede renombrar
+                # «Efectivo» a «Efectivo $» y el cajón dejaba de esperar
+                # billetes. El nombre queda solo para métodos propios.
                 sa_or(
-                    func.lower(MetodoPago.nombre) == "efectivo",
+                    MetodoPago.clave == "efectivo",
+                    sa_and(
+                        MetodoPago.clave.is_(None),
+                        func.lower(MetodoPago.nombre) == "efectivo",
+                    ),
                     MovimientoFinanciero.metodo_pago_id.is_(None),
                 ),
             )
@@ -373,7 +426,17 @@ def cerrar_caja(
     barrio con la plata que él contó, y el arqueo del otro local quedaría
     firmado por alguien que no estuvo ahí.
     """
-    caja = caja_abierta(db, empresa_id, sucursal_de_usuario(db, empresa_id, usuario_id))
+    # FOR UPDATE: espera a que terminen los cobros en curso (que la tienen
+    # tomada con FOR SHARE) y así el arqueo los incluye.
+    caja = db.scalar(
+        select(Caja)
+        .where(
+            Caja.empresa_id == empresa_id,
+            Caja.sucursal_id == sucursal_de_usuario(db, empresa_id, usuario_id),
+            Caja.estado == EstadoCaja.ABIERTA,
+        )
+        .with_for_update()
+    )
     if caja is None:
         return None
     caja.estado = EstadoCaja.CERRADA
@@ -394,12 +457,34 @@ def registrar_cobro(
 
     Por cada línea: calcula la comisión del método, crea el movimiento de
     ingreso y el pago. Si hay caja abierta, asocia los movimientos a ella.
+
+    Una línea puede pagarse con GIFT CARD (`gift_card_codigo`): descuenta su
+    saldo y deja un pago de origen 'giftcard_uso' SIN movimiento de caja. La
+    plata de esa tarjeta ya entró cuando se vendió; contarla de nuevo era
+    plata fantasma.
+
+    Reglas de integridad (auditoría 2026-10-02):
+      · El turno se toma con FOR UPDATE: dos cobros simultáneos (doble click,
+        dos pestañas) se serializan y el segundo ve `cobrado`.
+      · No se cobra un turno CANCELADO.
+      · No se cobra más que el saldo (total − lo ya pagado). Un sobrante no
+        tiene origen trazable: no es servicio, ni adicional, ni propina.
+      · Se puede cobrar MENOS: el turno queda con saldo pendiente y sin marcar
+        como cobrado, en vez de perder la diferencia en silencio.
     """
     turno = db.scalar(
-        select(Turno).where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        select(Turno)
+        .where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        .with_for_update()
     )
     if turno is None:
         return None
+
+    if turno.estado == EstadoTurno.CANCELADO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede cobrar un turno cancelado.",
+        )
 
     # Idempotencia. El flag `cobrado` se escribía y no se leía nunca, así
     # que un reintento (red que corta, dos pestañas, el proxy que devuelve
@@ -413,17 +498,48 @@ def registrar_cobro(
             detail="Este turno ya fue cobrado.",
         )
 
+    total, pagado = total_y_pagado(db, turno)
+    suma = round(sum(float(linea.monto) for linea in datos.pagos), 2)
+    if turno.importe_previsto is None:
+        # Servicio SIN precio cargado (consulta de precio variable): el cobro
+        # define el precio. Se guarda en el turno para que turno, caja y
+        # estadísticas digan lo mismo. $0 explícito (abono) no entra acá.
+        pct = float(turno.descuento_pct or 0)
+        fijo = float(turno.descuento_monto or 0)
+        base = (suma + pagado + fijo) / (1 - pct / 100) if pct < 100 else 0.0
+        turno.importe_previsto = round(max(base - _suma_items(db, turno.id), 0.0), 2)
+        total, pagado = total_y_pagado(db, turno)
+    saldo = round(total - pagado, 2)
+    if saldo <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este turno no tiene saldo para cobrar. Si el precio está mal, "
+                "agregá un adicional o revisá el descuento."
+            ),
+        )
+    if suma > saldo + 0.009:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"El cobro (${suma:,.2f}) supera lo que falta cobrar "
+                f"(${saldo:,.2f})."
+            ),
+        )
+
     # El local es el del TURNO, no el de quien cobra: la plata de una atención
     # entra donde se atendió, aunque la cobre el dueño desde otro local.
     sucursal_id = turno.sucursal_id
-    caja = caja_abierta(db, empresa_id, sucursal_id)
+    caja = caja_abierta(db, empresa_id, sucursal_id, bloquear=True)
     caja_id = caja.id if caja else None
 
     # Los métodos de pago se traen de una sola vez, no uno por línea. En un
     # pago dividido (mitad efectivo, mitad transferencia) eran dos consultas;
     # ahora es una, y sirve igual para cualquier cantidad de líneas.
     ids_metodos = {
-        linea.metodo_pago_id for linea in datos.pagos if linea.metodo_pago_id is not None
+        linea.metodo_pago_id
+        for linea in datos.pagos
+        if linea.metodo_pago_id is not None and not linea.gift_card_codigo
     }
     metodos: dict[int, MetodoPago] = {}
     if ids_metodos:
@@ -450,8 +566,18 @@ def registrar_cobro(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Alguno de los métodos de pago no existe en este negocio.",
         )
+    tarjetas = _validar_gift_cards(db, empresa_id, datos.pagos)
 
     for linea in datos.pagos:
+        if linea.gift_card_codigo:
+            pagos_creados.append(
+                _usar_gift_card(
+                    db, turno, tarjetas[linea.gift_card_codigo.strip().upper()],
+                    float(linea.monto), usuario_id,
+                )
+            )
+            total_cobrado += float(linea.monto)
+            continue
         metodo = metodos.get(linea.metodo_pago_id) if linea.metodo_pago_id else None
         comision = 0.0
         if metodo and metodo.comision_pct:
@@ -486,7 +612,9 @@ def registrar_cobro(
         total_cobrado += float(linea.monto)
         total_comision += comision
 
-    turno.cobrado = True
+    # Cobrado = no queda saldo. Un cobro parcial deja el turno con saldo a la
+    # vista (y se puede volver a cobrar lo que falta).
+    turno.cobrado = suma >= saldo - 0.009
     db.commit()
     for p in pagos_creados:
         db.refresh(p)
@@ -500,11 +628,198 @@ def registrar_cobro(
     }
 
 
+# Pago que no es ingreso: uso del saldo de una gift card ya vendida.
+ORIGEN_USO_GIFT = "giftcard_uso"
+# Lo que se revierte al anular el cobro de un turno. La seña NO: esa plata
+# está en Mercado Pago y se revierte sola si MP avisa una devolución.
+ORIGENES_COBRO_TURNO = ("turno", ORIGEN_USO_GIFT)
+
+
+def _suma_items(db: Session, turno_id: int) -> float:
+    from app.models.items import ItemTurno
+
+    return float(
+        db.scalar(
+            select(
+                func.coalesce(func.sum(ItemTurno.precio * ItemTurno.cantidad), 0)
+            ).where(ItemTurno.turno_id == turno_id)
+        )
+        or 0
+    )
+
+
+def total_y_pagado(db: Session, turno: Turno) -> tuple[float, float]:
+    """(total del turno, lo ya pagado vigente). La única cuenta del saldo."""
+    from app.services.turno import _total_con_items
+
+    items = _suma_items(db, turno.id)
+    pagado = float(
+        db.scalar(
+            select(func.coalesce(func.sum(Pago.monto), 0)).where(
+                Pago.turno_id == turno.id, Pago.anulado.is_(False)
+            )
+        )
+        or 0
+    )
+    return _total_con_items(turno, items), round(pagado, 2)
+
+
+def _validar_gift_cards(db: Session, empresa_id: int, lineas) -> dict:
+    """Toma (FOR UPDATE) y valida TODAS las gift cards del cobro antes de
+    escribir nada: si una falla, no queda medio cobro registrado."""
+    from app.models import GiftCard
+    from app.models.enums import EstadoGiftCard
+
+    pedido: dict[str, float] = {}
+    for linea in lineas:
+        if linea.gift_card_codigo:
+            cod = linea.gift_card_codigo.strip().upper()
+            pedido[cod] = pedido.get(cod, 0.0) + float(linea.monto)
+    tarjetas = {}
+    for cod, monto in pedido.items():
+        gc = db.scalar(
+            select(GiftCard)
+            .where(GiftCard.empresa_id == empresa_id, func.upper(GiftCard.codigo) == cod)
+            .with_for_update()
+        )
+        if gc is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa gift card no existe en este negocio.")
+        if gc.estado != EstadoGiftCard.ACTIVA or gc.esta_vencida:
+            motivo = "está vencida" if gc.esta_vencida else f"está {gc.estado.value}"
+            raise HTTPException(status.HTTP_409_CONFLICT, f"La gift card {gc.codigo} {motivo}.")
+        disponible = float(gc.saldo if gc.saldo is not None else gc.monto)
+        if monto > disponible + 0.009:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"La gift card {gc.codigo} tiene ${disponible:,.2f} de saldo.",
+            )
+        tarjetas[cod] = gc
+    return tarjetas
+
+
+def _usar_gift_card(
+    db: Session, turno: Turno, gc, monto: float, usuario_id: int | None
+) -> Pago:
+    """Descuenta saldo de una gift card (ya validada) para pagar el turno."""
+    from app.models.enums import EstadoGiftCard
+
+    disponible = float(gc.saldo if gc.saldo is not None else gc.monto)
+    gc.saldo = round(disponible - monto, 2)
+    if gc.saldo <= 0.009:
+        gc.saldo = 0
+        gc.estado = EstadoGiftCard.CANJEADA
+        gc.canjeada_en = dt.datetime.now(dt.timezone.utc)
+        usuario = db.get(Usuario, usuario_id) if usuario_id else None
+        gc.canjeada_por = usuario.nombre if usuario else None
+    pago = Pago(
+        empresa_id=turno.empresa_id,
+        sucursal_id=turno.sucursal_id,
+        turno_id=turno.id,
+        cliente_id=turno.cliente_id,
+        metodo_pago_id=None,
+        monto=monto,
+        comision_aplicada=0,
+        movimiento_id=None,
+        gift_card_id=gc.id,
+        origen=ORIGEN_USO_GIFT,
+    )
+    db.add(pago)
+    db.flush()
+    return pago
+
+
+def anular_cobro(
+    db: Session, empresa_id: int, turno_id: int, usuario_id: int, motivo: str | None
+) -> dict | None:
+    """Revierte el cobro de un turno en las tres puntas a la vez.
+
+    Antes no había forma: Caja rechazaba anular el movimiento («reabrí el
+    turno»), reabrir el turno no tocaba la plata, y el aviso de la agenda
+    mandaba a Caja. Un cobro cargado al cliente equivocado o con el método
+    equivocado quedaba para siempre; la única salida era psql.
+
+    Anula los pagos del mostrador y los usos de gift card (devuelve el saldo
+    a la tarjeta), anula sus movimientos y deja el turno sin cobrar. La seña
+    online NO se toca: esa plata está en Mercado Pago.
+
+    Si algún movimiento es de una caja CERRADA se rechaza: ese arqueo quedó
+    firmado. Se corrige con un movimiento de ajuste en la caja actual.
+    """
+    from app.models import GiftCard
+    from app.models.enums import EstadoGiftCard
+
+    turno = db.scalar(
+        select(Turno)
+        .where(Turno.id == turno_id, Turno.empresa_id == empresa_id)
+        .with_for_update()
+    )
+    if turno is None:
+        return None
+    pagos = list(
+        db.scalars(
+            select(Pago).where(
+                Pago.turno_id == turno.id,
+                Pago.empresa_id == empresa_id,
+                Pago.anulado.is_(False),
+                sa_or(Pago.origen.in_(ORIGENES_COBRO_TURNO), Pago.origen.is_(None)),
+            )
+        )
+    )
+    if not pagos:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este turno no tiene cobros para anular.")
+
+    movs = {
+        p.movimiento_id: db.get(MovimientoFinanciero, p.movimiento_id)
+        for p in pagos
+        if p.movimiento_id is not None
+    }
+    for mov in movs.values():
+        if mov is not None and mov.caja_id is not None:
+            caja = db.get(Caja, mov.caja_id)
+            if caja is not None and caja.estado == EstadoCaja.CERRADA:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "El cobro está en una caja ya cerrada. Cargá un movimiento "
+                    "de ajuste en la caja actual en vez de tocar un arqueo firmado.",
+                )
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    texto = (motivo or "").strip()[:200] or f"Cobro del turno #{turno.id} anulado"
+    total = 0.0
+    for p in pagos:
+        p.anulado, p.anulado_en, p.anulado_por_id = True, ahora, usuario_id
+        p.motivo_anulacion = texto
+        total += float(p.monto)
+        mov = movs.get(p.movimiento_id)
+        if mov is not None and not mov.anulado:
+            mov.anulado, mov.anulado_en, mov.anulado_por_id = True, ahora, usuario_id
+            mov.motivo_anulacion = texto
+        if p.gift_card_id is not None:
+            gc = db.scalar(
+                select(GiftCard).where(GiftCard.id == p.gift_card_id).with_for_update()
+            )
+            if gc is not None:
+                gc.saldo = round(float(gc.saldo or 0) + float(p.monto), 2)
+                if gc.estado == EstadoGiftCard.CANJEADA:
+                    gc.estado = EstadoGiftCard.ACTIVA
+                    gc.canjeada_en = None
+                    gc.canjeada_por = None
+    turno.cobrado = False
+    db.commit()
+    return {"turno_id": turno.id, "pagos_anulados": len(pagos), "monto": round(total, 2)}
+
+
 def pagos_de_turno(db: Session, empresa_id: int, turno_id: int) -> list[Pago]:
+    """Pagos VIGENTES del turno. Los anulados quedan en la base para auditar
+    pero no se muestran como cobrados."""
     return list(
         db.scalars(
             select(Pago)
-            .where(Pago.empresa_id == empresa_id, Pago.turno_id == turno_id)
+            .where(
+                Pago.empresa_id == empresa_id,
+                Pago.turno_id == turno_id,
+                Pago.anulado.is_(False),
+            )
             .order_by(Pago.fecha)
         )
     )
@@ -516,7 +831,7 @@ def registrar_gasto(
     db: Session, empresa_id: int, datos: GastoCrear, usuario_id: int
 ) -> MovimientoFinanciero:
     sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
-    caja = caja_abierta(db, empresa_id, sucursal_id)
+    caja = caja_abierta(db, empresa_id, sucursal_id, bloquear=True)
 
     # Regla 1: los ids vienen del body, así que hay que verificar que sean
     # de ESTA empresa. Sin esto se podía apuntar a un método de otro tenant
@@ -676,9 +991,27 @@ def anular_movimiento(
     if pago is not None and pago.turno_id is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Este movimiento es el cobro de un turno. Para revertirlo, reabrí "
-            "el turno desde la agenda: así se ajustan el turno y la caja juntos.",
+            "Este movimiento es el cobro de un turno. Para revertirlo usá "
+            "«Anular cobro» en el detalle del turno: así se ajustan el turno y "
+            "la caja juntos.",
         )
+
+    # La venta de una gift card se revierte por su propio camino, que
+    # controla que no se haya usado. Anular solo el movimiento dejaba la
+    # tarjeta ACTIVA y con saldo: el cliente la usaba gratis.
+    if pago is not None and pago.origen == "giftcard":
+        from app.models import GiftCard
+        from app.services import giftcard as svc_gc
+
+        gc = db.scalar(
+            select(GiftCard).where(
+                GiftCard.movimiento_id == mov.id, GiftCard.empresa_id == empresa_id
+            )
+        )
+        if gc is not None:
+            svc_gc.anular(db, empresa_id, gc.id, usuario_id)
+            db.refresh(mov)
+            return mov
 
     if mov.caja_id is not None:
         caja = db.get(Caja, mov.caja_id)
@@ -704,6 +1037,19 @@ def anular_movimiento(
         pago.anulado_por_id = usuario_id
         pago.motivo_anulacion = mov.motivo_anulacion
 
+    # Venta de abono anulada: la membresía pasa a cortesía (sin cobro). Si no,
+    # la rentabilidad del plan seguía sumando una plata que ya no está.
+    if pago is not None and pago.origen == "abono":
+        from app.models.modulos.fidelizacion import Membresia
+
+        for m in db.scalars(
+            select(Membresia).where(
+                Membresia.movimiento_id == mov.id, Membresia.empresa_id == empresa_id
+            )
+        ):
+            m.monto_cobrado = None
+            m.metodo_pago_id = None
+
     db.commit()
     db.refresh(mov)
     return mov
@@ -712,17 +1058,19 @@ def anular_movimiento(
 # ─────────────────────────── Historial comercial ───────────────────────────
 
 def total_cobrado_cliente(db: Session, empresa_id: int, cliente_id: int) -> dict:
-    """Suma de lo realmente cobrado a un cliente (todos sus pagos)."""
-    total = db.scalar(
-        select(func.coalesce(func.sum(Pago.monto), 0)).where(
-            Pago.empresa_id == empresa_id, Pago.cliente_id == cliente_id
-        )
-    )
-    cantidad = db.scalar(
-        select(func.count(Pago.id)).where(
-            Pago.empresa_id == empresa_id, Pago.cliente_id == cliente_id
-        )
-    )
+    """Suma de lo realmente cobrado a un cliente (todos sus pagos).
+
+    Sin anulados (una venta revertida no es plata cobrada) y sin usos de gift
+    card (esa plata la pagó quien compró la tarjeta, y ya se contó entonces).
+    """
+    cond = [
+        Pago.empresa_id == empresa_id,
+        Pago.cliente_id == cliente_id,
+        Pago.anulado.is_(False),
+        sa_or(Pago.origen.is_(None), Pago.origen != ORIGEN_USO_GIFT),
+    ]
+    total = db.scalar(select(func.coalesce(func.sum(Pago.monto), 0)).where(*cond))
+    cantidad = db.scalar(select(func.count(Pago.id)).where(*cond))
     return {"total_cobrado": float(total or 0), "cantidad_pagos": int(cantidad or 0)}
 
 
@@ -854,7 +1202,7 @@ def registrar_sena_cobrada(
         return None
 
     metodo = _metodo_mercado_pago(db, turno.empresa_id)
-    caja = caja_abierta(db, turno.empresa_id, turno.sucursal_id)
+    caja = caja_abierta(db, turno.empresa_id, turno.sucursal_id, bloquear=True)
     comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
 
     mov = MovimientoFinanciero(
@@ -895,8 +1243,54 @@ def senado_de(db: Session, turno_id: int) -> float:
     return float(
         db.scalar(
             select(func.coalesce(func.sum(Pago.monto), 0)).where(
-                Pago.turno_id == turno_id, Pago.origen == "sena"
+                Pago.turno_id == turno_id,
+                Pago.origen == "sena",
+                Pago.anulado.is_(False),
             )
         )
         or 0
     )
+
+
+def revertir_sena(db: Session, turno: Turno, motivo: str) -> bool:
+    """Mercado Pago avisó que la seña se devolvió (refunded / charged_back).
+
+    Antes el aviso se cortaba por «pago ya procesado» y la seña devuelta
+    seguía en caja y en estadísticas para siempre.
+
+    El pago se anula (sale de Estadísticas). Del lado de la caja:
+      · si el movimiento está en una caja abierta o sin caja → se anula;
+      · si su caja ya está CERRADA → no se toca ese arqueo: se registra un
+        EGRESO «Devolución de seña» en la caja de hoy, con el mismo método.
+    Devuelve False si no había seña vigente (aviso repetido).
+    """
+    pago = db.scalar(
+        select(Pago)
+        .where(Pago.turno_id == turno.id, Pago.origen == "sena", Pago.anulado.is_(False))
+        .with_for_update()
+    )
+    if pago is None:
+        return False
+    ahora = dt.datetime.now(dt.timezone.utc)
+    pago.anulado, pago.anulado_en, pago.motivo_anulacion = True, ahora, motivo[:200]
+    mov = db.get(MovimientoFinanciero, pago.movimiento_id) if pago.movimiento_id else None
+    if mov is not None and not mov.anulado:
+        caja = db.get(Caja, mov.caja_id) if mov.caja_id else None
+        if caja is None or caja.estado == EstadoCaja.ABIERTA:
+            mov.anulado, mov.anulado_en, mov.motivo_anulacion = True, ahora, motivo[:200]
+        else:
+            hoy = caja_abierta(db, turno.empresa_id, turno.sucursal_id, bloquear=True)
+            db.add(
+                MovimientoFinanciero(
+                    empresa_id=turno.empresa_id,
+                    sucursal_id=turno.sucursal_id,
+                    caja_id=hoy.id if hoy else None,
+                    tipo=TipoMovimiento.EGRESO,
+                    concepto="Devolución de seña",
+                    descripcion=f"Turno #{turno.id} · {motivo}"[:300],
+                    monto=pago.monto,
+                    metodo_pago_id=pago.metodo_pago_id,
+                )
+            )
+    turno.sena_estado = "devuelta"
+    return True

@@ -54,6 +54,9 @@ class GiftCard(TenantMixin, Base):
     # como texto en 'concepto' para v1; el monto es lo que mueve la caja.
     monto: Mapped[float] = mapped_column(Numeric(12, 2))
     concepto: Mapped[str | None] = mapped_column(String(120))  # "Corte + barba", opcional
+    # Lo que queda por usar. Se descuenta en cada cobro que la usa; en 0 pasa a
+    # CANJEADA. NULL solo en filas anteriores a la migración 0006.
+    saldo: Mapped[float | None] = mapped_column(Numeric(12, 2))
 
     estado: Mapped[EstadoGiftCard] = mapped_column(
         enum_pg(EstadoGiftCard, "estado_gift_card"),

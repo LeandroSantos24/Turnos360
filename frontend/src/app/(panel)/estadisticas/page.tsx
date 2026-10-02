@@ -358,6 +358,7 @@ function ContenidoEstadisticas() {
                         {p.recurso}{" "}
                         <span className="text-muted-foreground">
                           · {p.turnos} turnos · ticket {pesos(p.ticket)}
+                          {p.prepago > 0 && ` · ${pesos(p.prepago)} con gift card`}
                         </span>
                       </span>
                       <span className="font-semibold tabular-nums" style={NUM}>
@@ -515,6 +516,8 @@ function ContenidoEstadisticas() {
                   El ticket promedio se calcula solo sobre la atención
                   ({pesos(datos.facturado_turnos)}): una venta de abono no es
                   una visita y desvirtuaría el número.
+                  {datos.prepago_consumido > 0 &&
+                    ` Además se usaron ${pesos(datos.prepago_consumido)} de gift cards: no suman acá porque esa plata ya entró cuando se vendieron.`}
                 </p>
               </Card>
             </div>

@@ -38,6 +38,8 @@ import {
   Receipt,
   Building2,
   Lock,
+  Menu,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -144,6 +146,12 @@ export default function PanelLayout({
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<UsuarioMe | null>(null);
   const [config, setConfig] = useState<ConfigEmpresa | null>(null);
+  // Menú en el celular. Antes el sidebar de 240 px quedaba fijo también en
+  // un teléfono de 390 px y el contenido se leía en una columna de 150 px.
+  const [menuMovil, setMenuMovil] = useState(false);
+  useEffect(() => {
+    setMenuMovil(false);
+  }, [pathname]);
 
   // Terminología del rubro (preset): "Clientes" -> "Pacientes" en nutrición.
   // Se usa config directo porque estos hooks corren FUERA del ConfigRubroProvider.
@@ -221,9 +229,19 @@ export default function PanelLayout({
     <ConfigRubroProvider value={config}>
     <ConfirmarProvider>
     <div className="flex h-screen h-[100dvh] overflow-hidden">
-      {/* Sidebar navy */}
+      {/* Fondo oscuro detrás del menú abierto en el celular */}
+      {menuMovil && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setMenuMovil(false)}
+          aria-hidden
+        />
+      )}
+      {/* Sidebar navy: fijo desde md; en el celular es un cajón */}
       <aside
-        className="flex w-60 shrink-0 flex-col"
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col transition-transform md:static md:translate-x-0 ${
+          menuMovil ? "translate-x-0" : "-translate-x-full"
+        }`}
         style={{
           background: "hsl(222 47% 8%)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
@@ -468,6 +486,19 @@ export default function PanelLayout({
           de 1200px. Antes lo ponían cuatro pantallas por su cuenta y las otras
           dieciséis quedaban con el gris plano. */}
       <main className="superficie min-w-0 flex-1 overflow-y-auto bg-background">
+        <div className="sticky top-0 z-20 flex items-center gap-3 border-b bg-background/90 px-4 py-2.5 backdrop-blur md:hidden">
+          <button
+            type="button"
+            onClick={() => setMenuMovil((v) => !v)}
+            className="rounded-md p-1.5 hover:bg-muted"
+            aria-label={menuMovil ? "Cerrar menú" : "Abrir menú"}
+          >
+            {menuMovil ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+          <Link href={inicioHref} className="text-sm font-semibold">
+            Turnos360
+          </Link>
+        </div>
         {/* Sin este aviso, el dueño comparte su link, no funciona, y no tiene
             forma de saber que le falta confirmar el email. */}
         {dueno && usuario.email_verificado === false && (

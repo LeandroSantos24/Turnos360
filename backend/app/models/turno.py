@@ -99,6 +99,11 @@ class Turno(TenantMixin, Base):
     )
     # Descuento aplicado al turno (%). Total = (servicio + adicionales) − este %.
     descuento_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    # Descuento fijo en pesos, después del %. Un cupón de $5.000 guardado como
+    # 33,33 % dejaba el turno en $10.000,50: el redondeo cobraba de más.
+    descuento_monto: Mapped[float] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0", nullable=False
+    )
     # Qué cupón produjo ese descuento, si vino de uno. Antes solo se guardaba
     # el porcentaje y un contador global de usos: con eso era imposible saber
     # cuánta gente usó un código y cuánto facturó, que es exactamente lo que

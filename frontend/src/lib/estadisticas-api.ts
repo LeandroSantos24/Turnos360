@@ -10,6 +10,8 @@ export interface ProfesionalTotal {
   turnos: number;
   ticket: number;
   pct: number;
+  /** Servicios pagados con gift card: trabajo hecho, no ingreso nuevo. */
+  prepago: number;
 }
 export interface DiaTotal {
   fecha: string;
@@ -25,6 +27,7 @@ export interface ServicioTotal {
   servicio: string;
   cantidad: number;
   total: number;
+  prepago: number;
 }
 export interface HoraTotal {
   hora: number;
@@ -90,6 +93,8 @@ export interface EstadisticasFacturacion {
   por_origen: OrigenTotal[];
   /** Solo la atención. Es la base del ticket promedio. */
   facturado_turnos: number;
+  /** Uso de saldo de gift cards en el período (no es facturación). */
+  prepago_consumido: number;
   por_cupon: CuponRendimiento[];
   cupones_resumen: CuponesResumen;
   /**

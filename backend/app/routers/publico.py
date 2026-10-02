@@ -190,13 +190,20 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     params = request.query_params
     tipo = params.get("type") or params.get("topic") or ""
     payment_id = params.get("data.id") or params.get("id")
-    if not payment_id:
-        try:
-            body = await request.json()
+    # La acción («payment.created» / «payment.updated») viene en el body. Es
+    # lo que distingue un reintento del aviso original (no hace falta volver a
+    # consultar) de una ACTUALIZACIÓN del pago: una devolución o un
+    # contracargo, que antes se descartaban por «ya procesado».
+    accion = ""
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if isinstance(body, dict):
+        accion = str(body.get("action") or "")
+        if not payment_id:
             tipo = body.get("type", tipo)
             payment_id = (body.get("data") or {}).get("id")
-        except Exception:
-            payment_id = None
     if "payment" not in tipo or not payment_id:
         return {"ok": True}  # topic que no manejamos (merchant_order, etc.)
 
@@ -219,11 +226,14 @@ async def mp_webhook(slug: str, request: Request, db: DB) -> dict:
     # threadpool en UNA sola pasada. Antes las consultas a la base corrían
     # en el event loop y frenaban a todos los demás usuarios mientras
     # Postgres respondía.
-    await to_thread.run_sync(_procesar_notificacion_mp, db, slug, payment_id)
+    await to_thread.run_sync(_procesar_notificacion_mp, db, slug, payment_id, accion)
     return {"ok": True}
 
 
-def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
+ESTADOS_DEVOLUCION = {"refunded", "charged_back", "cancelled"}
+
+
+def _procesar_notificacion_mp(db, slug: str, payment_id: str, accion: str = "") -> None:
     """Valida el pago contra MP y lo registra. Corre fuera del event loop.
 
     Nunca levanta: el webhook siempre tiene que responder 200 o MP reintenta
@@ -244,6 +254,25 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
         )
     )
     if ya_procesado is not None:
+        # Reintento del aviso original: no se consulta de nuevo. Solo una
+        # ACTUALIZACIÓN del pago puede traer una devolución.
+        if accion != "payment.updated":
+            return
+        token = mp.token_de(empresa)
+        pago = mp.consultar_pago(token, str(payment_id)) if token else None
+        if pago and pago.get("status") in ESTADOS_DEVOLUCION:
+            try:
+                if svc_fin.revertir_sena(
+                    db, ya_procesado, f"Mercado Pago: {pago.get('status')}"
+                ):
+                    db.commit()
+                    log.warning(
+                        "seña devuelta en Mercado Pago: ingreso revertido",
+                        extra={"turno_id": ya_procesado.id, "payment_id": payment_id},
+                    )
+            except Exception:
+                db.rollback()
+                log.exception("no se pudo revertir la seña devuelta")
         return
 
     token = mp.token_de(empresa)
@@ -252,6 +281,16 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
 
     pago = mp.consultar_pago(token, str(payment_id))
     if not pago or pago.get("status") != "approved":
+        return
+
+    # La seña se cobra en pesos. Un pago en otra moneda no se acredita como
+    # si fueran pesos: queda en el log para revisarlo a mano.
+    moneda = pago.get("currency_id")
+    if moneda is not None and moneda != "ARS":
+        log.error(
+            "pago de seña en otra moneda: no se acredita",
+            extra={"payment_id": payment_id, "currency_id": moneda},
+        )
         return
 
     ref = pago.get("external_reference")
@@ -301,6 +340,12 @@ def _procesar_notificacion_mp(db, slug: str, payment_id: str) -> None:
     monto_pagado = float(
         pago.get("transaction_amount") or turno.sena_monto or 0
     )
+    if turno.sena_monto and abs(monto_pagado - float(turno.sena_monto)) > 0.01:
+        log.warning(
+            "el monto pagado no coincide con la seña pedida",
+            extra={"turno_id": turno.id, "pagado": monto_pagado,
+                   "pedido": float(turno.sena_monto)},
+        )
     try:
         svc_fin.registrar_sena_cobrada(
             db, turno, monto_pagado, mp_payment_id=str(pago.get("id", payment_id))

@@ -258,6 +258,7 @@ export default function GiftCardsPage() {
                 <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-2.5">Código</th>
                   <th className="px-4 py-2.5">Monto</th>
+                  <th className="px-4 py-2.5">Saldo</th>
                   <th className="px-4 py-2.5">Para</th>
                   <th className="px-4 py-2.5">Estado</th>
                   <th className="px-4 py-2.5">Vence</th>
@@ -271,6 +272,14 @@ export default function GiftCardsPage() {
                     <tr key={c.id} className="border-b last:border-0">
                       <td className="px-4 py-2.5 font-mono font-medium tracking-wider">{c.codigo}</td>
                       <td className="px-4 py-2.5 font-semibold tabular-nums" style={NUM}>{montoFmt(c.monto)}</td>
+                      <td
+                        className={`px-4 py-2.5 tabular-nums ${
+                          (c.saldo ?? c.monto) < c.monto ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+                        }`}
+                        style={NUM}
+                      >
+                        {montoFmt(c.saldo ?? c.monto)}
+                      </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{c.beneficiario ?? "—"}</td>
                       <td className="px-4 py-2.5">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${chip.cls}`}>
@@ -285,7 +294,10 @@ export default function GiftCardsPage() {
                           <Button variant="ghost" size="sm" onClick={() => setVer(c)}>
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
-                          {c.estado !== "canjeada" && c.estado !== "anulada" && (
+                          {/* Usada en parte ya no se puede anular: el servicio se prestó. */}
+                          {c.estado !== "canjeada" &&
+                            c.estado !== "anulada" &&
+                            (c.saldo ?? c.monto) >= c.monto && (
                             <Button variant="ghost" size="sm" onClick={() => setABorrar(c)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>

@@ -277,7 +277,15 @@ export default function FichaClientePage() {
                   {membresia.plan_nombre}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  vigente hasta {fechaCorta(membresia.fecha_hasta)}
+                  {fechaCorta(membresia.fecha_desde)} → {fechaCorta(membresia.fecha_hasta)}
+                  {" · "}
+                  {membresia.cupos_total != null
+                    ? `${membresia.cupos_usados} de ${membresia.cupos_total} usados (${membresia.cupos_disponibles} disponibles)`
+                    : `${membresia.cupos_usados} usados · ilimitado`}
+                  {" · "}
+                  {membresia.monto_cobrado != null
+                    ? `pagó $${membresia.monto_cobrado.toLocaleString("es-AR")}`
+                    : "cortesía (sin cobro)"}
                 </span>
                 <button
                   onClick={() => setCancelandoMembresia(true)}

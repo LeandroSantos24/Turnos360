@@ -137,7 +137,10 @@ export function cerrarCaja(datos: { saldo_real: number; observaciones?: string }
 /* ─────────── Cobro de un turno ─────────── */
 
 export interface PagoLinea {
+  /** O un método de pago… */
   metodo_pago_id: number | null;
+  /** …o una gift card: descuenta su saldo y no vuelve a entrar a caja. */
+  gift_card_codigo?: string | null;
   monto: number;
 }
 
@@ -150,6 +153,9 @@ export interface Pago {
   monto: number;
   comision_aplicada: number | null;
   fecha: string;
+  /** turno · sena · giftcard_uso · abono · giftcard */
+  origen?: string | null;
+  gift_card_id?: number | null;
 }
 
 export interface Cobro {
@@ -165,6 +171,14 @@ export function registrarCobro(turnoId: number, pagos: PagoLinea[]): Promise<Cob
 }
 export function pagosDeTurno(turnoId: number): Promise<Pago[]> {
   return api.get<Pago[]>(`/turnos/${turnoId}/pagos`);
+}
+
+/** Revierte el cobro del turno (pagos, caja y saldo de gift card). Solo dueño. */
+export function anularCobro(
+  turnoId: number,
+  motivo?: string,
+): Promise<{ turno_id: number; pagos_anulados: number; monto: number }> {
+  return api.post(`/turnos/${turnoId}/anular-cobro`, { motivo: motivo || null });
 }
 
 /* ─────────── Gastos / movimientos ─────────── */

@@ -22,7 +22,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { CobroDialog } from "./cobro-dialog";
-import { pagosDeTurno, listarMetodos, MetodoPago, Pago } from "@/lib/finanzas-api";
+import {
+  anularCobro,
+  pagosDeTurno,
+  listarMetodos,
+  MetodoPago,
+  Pago,
+} from "@/lib/finanzas-api";
+import { esDueno, useRol } from "@/lib/roles";
 import {
   Select,
   SelectContent,
@@ -74,7 +81,10 @@ export function TurnoDetalle({
   onCambio,
 }: TurnoDetalleProps) {
   const router = useRouter();
+  const rol = useRol();
   const [procesando, setProcesando] = useState(false);
+  const [confirmarAnulacion, setConfirmarAnulacion] = useState(false);
+  const [anulando, setAnulando] = useState(false);
   const [confirmar, setConfirmar] = useState<EstadoTurno | null>(null);
 
   // Reprogramar: fecha/hora nuevas y/o cambio de profesional.
@@ -130,6 +140,9 @@ export function TurnoDetalle({
   const [servicioSel, setServicioSel] = useState("");
   const [descuentoActivo, setDescuentoActivo] = useState(false);
   const [descuentoPct, setDescuentoPct] = useState("");
+  // "%" o "$": el descuento fijo en pesos no se convierte a % (el redondeo
+  // cobraba centavos de más).
+  const [descuentoModo, setDescuentoModo] = useState<"%" | "$">("%");
   const [cobrando, setCobrando] = useState(false);
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
@@ -144,8 +157,10 @@ export function TurnoDetalle({
       .then(setItems)
       .catch(() => setItems([]));
     const pct = Number(turno.descuento_pct ?? 0);
-    setDescuentoActivo(pct > 0);
-    setDescuentoPct(pct > 0 ? String(pct) : "");
+    const fijo = Number(turno.descuento_monto ?? 0);
+    setDescuentoActivo(pct > 0 || fijo > 0);
+    setDescuentoModo(fijo > 0 ? "$" : "%");
+    setDescuentoPct(fijo > 0 ? String(fijo) : pct > 0 ? String(pct) : "");
     pagosDeTurno(turno.id)
       .then(setPagos)
       .catch(() => setPagos([]));
@@ -167,20 +182,43 @@ export function TurnoDetalle({
   // Fallback: un estado nuevo deja el panel sin botones, no roto.
   const acciones = TRANSICIONES[turno.estado] ?? [];
 
-  // Total a cobrar = (servicio + adicionales) − descuento.
+  // Total a cobrar = (servicio + adicionales) − % − fijo. Misma cuenta que
+  // el backend (services/turno.py::_total_con_items).
   const subtotalItems = items.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
   const baseTurno = Number(turno.importe_previsto ?? 0) + subtotalItems;
-  const pctDescuento = descuentoActivo
-    ? Math.min(Math.max(Number(descuentoPct) || 0, 0), 100)
-    : 0;
-  const montoDescuento = baseTurno * (pctDescuento / 100);
-  const totalTurno = baseTurno - montoDescuento;
+  const valorDescuento = descuentoActivo ? Math.max(Number(descuentoPct) || 0, 0) : 0;
+  const pctDescuento = descuentoModo === "%" ? Math.min(valorDescuento, 100) : 0;
+  const fijoDescuento = descuentoModo === "$" ? Math.min(valorDescuento, baseTurno) : 0;
+  const montoDescuento =
+    Math.round((baseTurno * (pctDescuento / 100) + fijoDescuento) * 100) / 100;
+  const totalTurno = Math.max(baseTurno - montoDescuento, 0);
   const totalCobrado = pagos.reduce((acc, p) => acc + p.monto, 0);
+  const saldoTurno = Math.max(Math.round((totalTurno - totalCobrado) * 100) / 100, 0);
+  // Con cobro registrado el precio queda congelado: se anula el cobro primero.
+  const bloqueado = turno.cobrado;
 
-  function nombreMetodo(id: number | null): string {
-    if (id == null) return "Sin método";
-    const m = metodosPago.find((x) => x.id === id);
+  function nombreMetodo(p: Pago): string {
+    if (p.origen === "giftcard_uso") return "Gift card";
+    if (p.origen === "sena") return "Seña online";
+    if (p.metodo_pago_id == null) return "Sin método";
+    const m = metodosPago.find((x) => x.id === p.metodo_pago_id);
     return m ? m.nombre : "Pago";
+  }
+
+  async function ejecutarAnulacion() {
+    if (!turno) return;
+    setAnulando(true);
+    try {
+      const r = await anularCobro(turno.id);
+      toast.success(`Cobro anulado: $${r.monto.toLocaleString("es-AR")} fuera de caja`);
+      pagosDeTurno(turno.id).then(setPagos).catch(() => {});
+      onCambio();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo anular el cobro");
+    } finally {
+      setAnulando(false);
+      setConfirmarAnulacion(false);
+    }
   }
 
   async function ejecutarAccion(destino: EstadoTurno) {
@@ -253,7 +291,7 @@ export function TurnoDetalle({
     if (!on && turno) {
       setDescuentoPct("");
       try {
-        await aplicarDescuento(turno.id, 0);
+        await aplicarDescuento(turno.id, 0, 0);
       } catch {
         /* si falla, el switch ya quedó visualmente apagado */
       }
@@ -263,9 +301,12 @@ export function TurnoDetalle({
   /** Guarda el % de descuento (al salir del campo o con Enter). */
   async function guardarDescuento() {
     if (!turno) return;
-    const pct = Math.min(Math.max(Number(descuentoPct) || 0, 0), 100);
     try {
-      await aplicarDescuento(turno.id, pct);
+      if (descuentoModo === "%") {
+        await aplicarDescuento(turno.id, pctDescuento, 0);
+      } else {
+        await aplicarDescuento(turno.id, 0, fijoDescuento);
+      }
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "No se pudo aplicar el descuento",
@@ -376,13 +417,15 @@ export function TurnoDetalle({
                         <span className="font-medium tabular-nums">
                           ${(item.precio * item.cantidad).toLocaleString("es-AR")}
                         </span>
-                        <button
-                          onClick={() => quitarAdicional(item.id)}
-                          className="text-muted-foreground transition-colors hover:text-destructive"
-                          aria-label="Quitar"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        {!bloqueado && (
+                          <button
+                            onClick={() => quitarAdicional(item.id)}
+                            className="text-muted-foreground transition-colors hover:text-destructive"
+                            aria-label="Quitar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
                       </span>
                     </div>
                   ))}
@@ -390,7 +433,7 @@ export function TurnoDetalle({
               )}
 
               {/* Cargar desde el catálogo de servicios */}
-              {servicios.length > 0 && (
+              {!bloqueado && servicios.length > 0 && (
                 <Select value={servicioSel} onValueChange={elegirServicio}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Cargar desde un servicio…" />
@@ -408,6 +451,7 @@ export function TurnoDetalle({
               )}
 
               {/* Agregar uno nuevo (o ajustar lo precargado) */}
+              {!bloqueado && (
               <div className="flex gap-2">
                 <Input
                   placeholder="Concepto (ej. Perfilado)"
@@ -434,6 +478,7 @@ export function TurnoDetalle({
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
+              )}
 
             </div>
 
@@ -446,18 +491,39 @@ export function TurnoDetalle({
                     Para estudiantes, jubilados, etc.
                   </p>
                 </div>
-                <Switch checked={descuentoActivo} onCheckedChange={toggleDescuento} />
+                <Switch
+                  checked={descuentoActivo}
+                  onCheckedChange={toggleDescuento}
+                  disabled={bloqueado}
+                />
               </div>
 
-              {descuentoActivo && (
+              {descuentoActivo && !bloqueado && (
                 <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 overflow-hidden rounded-md border">
+                    {(["%", "$"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setDescuentoModo(m)}
+                        className={`h-9 w-9 text-sm font-medium transition-colors ${
+                          descuentoModo === m
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                        aria-pressed={descuentoModo === m}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                   <div className="relative flex-1">
                     <Input
                       type="number"
                       inputMode="numeric"
                       min="0"
-                      max="100"
-                      placeholder="15"
+                      max={descuentoModo === "%" ? "100" : undefined}
+                      placeholder={descuentoModo === "%" ? "15" : "2000"}
                       value={descuentoPct}
                       onChange={(e) => setDescuentoPct(e.target.value)}
                       onBlur={guardarDescuento}
@@ -465,7 +531,7 @@ export function TurnoDetalle({
                       className="pr-8"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      %
+                      {descuentoModo}
                     </span>
                   </div>
                   <Button variant="outline" size="sm" onClick={guardarDescuento}>
@@ -475,9 +541,9 @@ export function TurnoDetalle({
               )}
 
               {/* Total */}
-              {(items.length > 0 || pctDescuento > 0) && (
+              {(items.length > 0 || montoDescuento > 0) && (
                 <div className="space-y-1.5 rounded-2xl bg-muted/40 px-4 py-3">
-                  {pctDescuento > 0 && (
+                  {montoDescuento > 0 && (
                     <>
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>Subtotal</span>
@@ -486,7 +552,9 @@ export function TurnoDetalle({
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>Descuento ({pctDescuento}%)</span>
+                        <span>
+                          Descuento{pctDescuento > 0 ? ` (${pctDescuento}%)` : ""}
+                        </span>
                         <span className="tabular-nums">
                           −${montoDescuento.toLocaleString("es-AR")}
                         </span>
@@ -506,12 +574,26 @@ export function TurnoDetalle({
               )}
             </div>
 
-            {/* Cobro: estado o botón */}
-            {pagos.length > 0 ? (
-              <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            {/* Cobro: lo ya pagado (seña, parcial, gift card) + lo que falta.
+                Antes la sola existencia de un pago escondía el botón: un turno
+                con la seña pagada mostraba «Cobrado $3.000» y el saldo no se
+                cobraba nunca por el sistema. Ahora manda `turno.cobrado`. */}
+            {pagos.length > 0 && (
+              <div
+                className={`space-y-2 rounded-2xl border p-4 ${
+                  turno.cobrado
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : "bg-card"
+                }`}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    <Check className="h-4 w-4" /> Cobrado
+                  <span
+                    className={`flex items-center gap-1.5 text-sm font-semibold ${
+                      turno.cobrado ? "text-emerald-700 dark:text-emerald-400" : ""
+                    }`}
+                  >
+                    {turno.cobrado && <Check className="h-4 w-4" />}
+                    {turno.cobrado ? "Cobrado" : "Pagado hasta ahora"}
                   </span>
                   <span
                     className="font-bold tabular-nums"
@@ -526,17 +608,28 @@ export function TurnoDetalle({
                       key={p.id}
                       className="flex justify-between text-xs text-muted-foreground"
                     >
-                      <span>{nombreMetodo(p.metodo_pago_id)}</span>
+                      <span>{nombreMetodo(p)}</span>
                       <span className="tabular-nums">
                         ${p.monto.toLocaleString("es-AR")}
                       </span>
                     </div>
                   ))}
                 </div>
+                {esDueno(rol) &&
+                  pagos.some((p) => p.origen !== "sena") && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmarAnulacion(true)}
+                      className="pt-1 text-xs font-medium text-destructive hover:underline"
+                    >
+                      Anular cobro…
+                    </button>
+                  )}
               </div>
-            ) : (
+            )}
+            {!turno.cobrado && turno.estado !== "cancelado" && saldoTurno > 0 && (
               <Button className="w-full" onClick={() => setCobrando(true)}>
-                Cobrar ${totalTurno.toLocaleString("es-AR")}
+                Cobrar ${saldoTurno.toLocaleString("es-AR")}
               </Button>
             )}
 
@@ -563,7 +656,10 @@ export function TurnoDetalle({
             )}
 
             {/* Reprogramar: nueva fecha/hora y/o cambio de profesional */}
-            {(turno.estado === "pendiente" || turno.estado === "confirmado") && (
+            {/* Un turno cobrado no se reprograma: el backend lo rechaza (la
+                plata ya quedó atribuida a ese día y ese profesional). */}
+            {(turno.estado === "pendiente" || turno.estado === "confirmado") &&
+              !turno.cobrado && (
               <div className="rounded-xl border bg-card p-3">
                 {!reprogramando ? (
                   <Button
@@ -710,9 +806,9 @@ export function TurnoDetalle({
                     .
                   </p>
                   <p className="mt-1">
-                    Esa plata queda en la caja. Si el cobro fue un error, anulá
-                    el movimiento desde Caja → Movimientos. Si el cliente ya
-                    pagó y no se le devuelve, dejalo como está.
+                    {confirmar === "cancelado"
+                      ? "Para cancelarlo, primero anulá el cobro (botón «Anular cobro…» del detalle). La seña online, si la hay, queda como ingreso."
+                      : "Esa plata queda registrada. Si el cobro fue un error, usá «Anular cobro…» en el detalle del turno: saca la plata de la caja y de las estadísticas."}
                   </p>
                 </div>
               )}
@@ -738,10 +834,36 @@ export function TurnoDetalle({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Anular cobro: revierte pagos, caja y saldo de gift card. */}
+      <AlertDialog open={confirmarAnulacion} onOpenChange={setConfirmarAnulacion}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Anular el cobro de este turno?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Los pagos quedan registrados como anulados (con tu usuario y la
+              hora), salen de la caja y de las estadísticas, y si se usó una
+              gift card se le devuelve el saldo. La seña online no se toca. Si
+              la caja de ese día ya se cerró, no se puede: cargá un ajuste en
+              la caja actual.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={anulando}>No, volver</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={anulando}
+              onClick={ejecutarAnulacion}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {anulando ? "Anulando…" : "Sí, anular cobro"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <CobroDialog
         turnoId={turno.id}
         total={totalTurno}
-        senado={turno.senado ?? 0}
+        senado={totalCobrado}
         abierto={cobrando}
         onCerrar={() => setCobrando(false)}
         onCobrado={() => {

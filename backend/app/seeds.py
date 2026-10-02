@@ -73,8 +73,12 @@ CATEGORIAS = {
     ],
 }
 
-METODOS = [("Efectivo", 0), ("Débito", 1.5), ("Crédito", 4.5),
-           ("Transferencia", 0), ("Mercado Pago", 6.0), ("MODO", 2.0)]
+# Con su `clave`, igual que en el alta real (services/metodos_pago.py): sin
+# ella, la primera seña de MP sembraba un «QR Mercado Pago» aparte y la demo
+# quedaba con dos Mercado Pago y la plata repartida entre los dos.
+METODOS = [("Efectivo", 0, "efectivo"), ("Débito", 1.5, "debito"),
+           ("Crédito", 4.5, "credito"), ("Transferencia", 0, "transferencia"),
+           ("Mercado Pago", 6.0, "mp_qr"), ("MODO", 2.0, None)]
 
 # Servicios de la barbería. paso_turno_min = cada cuánto se ofrecen turnos:
 # cortes/barba cada 20 min; color y reflejos cada 60 (atención activa ~45 min,
@@ -94,8 +98,8 @@ def _base_empresa(db, empresa: Empresa) -> None:
     for tipo, nombres in CATEGORIAS.items():
         for n in nombres:
             db.add(CategoriaFinanciera(empresa_id=empresa.id, nombre=n, tipo=tipo))
-    for nombre, pct in METODOS:
-        db.add(MetodoPago(empresa_id=empresa.id, nombre=nombre, comision_pct=pct))
+    for nombre, pct, clave in METODOS:
+        db.add(MetodoPago(empresa_id=empresa.id, nombre=nombre, comision_pct=pct, clave=clave))
 
 
 def _clientes(db, empresa: Empresa, n: int, campos) -> list[Cliente]:

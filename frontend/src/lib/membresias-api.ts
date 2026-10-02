@@ -38,6 +38,9 @@ export interface Membresia {
   fecha_hasta: string;
   estado: string;
   cupos_usados: number;
+  /** null = plan ilimitado. */
+  cupos_total: number | null;
+  cupos_disponibles: number | null;
   plan_nombre: string | null;
   plan_precio: number | null;
   plan_ilimitado: boolean | null;

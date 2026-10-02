@@ -184,6 +184,7 @@ class Pago(TenantMixin, Base):
         Index("ix_pago_turno", "turno_id"),
         Index("ix_pago_empresa_cliente", "empresa_id", "cliente_id"),
         Index("ix_pago_movimiento", "movimiento_id"),
+        Index("ix_pago_gift_card", "gift_card_id"),
         # Idempotencia de la seña a nivel base. El chequeo en Python es un
         # SELECT seguido de un INSERT: dos notificaciones simultáneas de MP
         # (que llegan en paralelo, no en fila) pasaban las dos y registraban
@@ -230,6 +231,12 @@ class Pago(TenantMixin, Base):
     monto: Mapped[float] = mapped_column(Numeric(12, 2))
     comision_aplicada: Mapped[float | None] = mapped_column(Numeric(12, 2))
     movimiento_id: Mapped[int | None] = mapped_column(ForeignKey("movimiento_financiero.id"))
+    # Solo en origen 'giftcard_uso': qué tarjeta pagó. Ese pago NO tiene
+    # movimiento (la plata entró a caja al vender la tarjeta) y NO suma a la
+    # facturación: es uso de un prepago, no un ingreso nuevo.
+    gift_card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("gift_card.id", name="fk_pago_gift_card")
+    )
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Anulación (misma idea que en MovimientoFinanciero: no se borra, se

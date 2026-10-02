@@ -2,7 +2,7 @@
 
 import datetime as dt
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class GiftCardCrear(BaseModel):
@@ -35,6 +35,9 @@ class GiftCardOut(BaseModel):
     de_parte_de: str | None
     mensaje: str | None
     monto: float
+    # Lo que queda por usar. Las anteriores a la migración 0006 vienen en
+    # NULL y valen su monto.
+    saldo: float | None = None
     concepto: str | None
     estado: str
     vence: dt.date | None
@@ -43,6 +46,13 @@ class GiftCardOut(BaseModel):
     creada_en: dt.datetime
 
     model_config = {"from_attributes": True}
+
+
+    @model_validator(mode="after")
+    def _saldo_por_defecto(self):
+        if self.saldo is None:
+            self.saldo = self.monto if self.estado in ("activa", "vencida") else 0.0
+        return self
 
 
 class GiftCardVerificar(BaseModel):

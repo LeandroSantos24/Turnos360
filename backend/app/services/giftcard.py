@@ -78,6 +78,7 @@ def crear(
         empresa_id=empresa_id,
         codigo=_codigo_unico(db, empresa_id),
         monto=datos.monto,
+        saldo=datos.monto,
         beneficiario=datos.beneficiario,
         de_parte_de=datos.de_parte_de,
         mensaje=datos.mensaje,
@@ -95,7 +96,7 @@ def crear(
         # La gift card no tiene turno del cual heredar el local, así que
         # entra a la caja de quien la vende. Con un solo local, la de siempre.
         sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
-        caja = caja_abierta(db, empresa_id, sucursal_id)
+        caja = caja_abierta(db, empresa_id, sucursal_id, bloquear=True)
         mov = MovimientoFinanciero(
             empresa_id=empresa_id,
             caja_id=caja.id if caja else None,
@@ -191,6 +192,11 @@ def canjear(db: Session, empresa_id: int, codigo: str, usuario: str | None) -> d
             db.commit()
         return {"valida": False, "motivo": "vencida", "gift_card": gc}
 
+    # Canje «suelto» (sin turno): consume TODO el saldo. Para pagar un turno
+    # con la tarjeta se usa el cobro del turno, que descuenta solo lo que
+    # corresponde y lo deja atado a ese turno. Ninguno de los dos caminos
+    # genera ingreso de caja: la plata entró al venderla.
+    gc.saldo = 0
     gc.estado = EstadoGiftCard.CANJEADA
     gc.canjeada_en = dt.datetime.now(dt.timezone.utc)
     gc.canjeada_por = (usuario or "")[:120] or None
@@ -232,11 +238,13 @@ def anular(db: Session, empresa_id: int, gift_id: int, usuario_id: int) -> bool:
 
     if gc.estado == EstadoGiftCard.ANULADA:
         raise HTTPException(status.HTTP_409_CONFLICT, "Esa gift card ya está anulada.")
-    if gc.estado == EstadoGiftCard.CANJEADA:
+    usada = gc.saldo is not None and float(gc.saldo) + 0.009 < float(gc.monto)
+    if gc.estado == EstadoGiftCard.CANJEADA or usada:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Esa gift card ya fue canjeada: el servicio se prestó y la venta no "
-            "se puede revertir. Si hubo un error, cargá un egreso en la caja.",
+            "Esa gift card ya se usó (toda o en parte): el servicio se prestó y "
+            "la venta no se puede revertir. Si hubo un error, cargá un egreso "
+            "en la caja.",
         )
 
     ahora = dt.datetime.now(dt.timezone.utc)
@@ -275,5 +283,6 @@ def anular(db: Session, empresa_id: int, gift_id: int, usuario_id: int) -> bool:
             pago.motivo_anulacion = motivo
 
     gc.estado = EstadoGiftCard.ANULADA
+    gc.saldo = 0
     db.commit()
     return True

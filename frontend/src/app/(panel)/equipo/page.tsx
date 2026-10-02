@@ -191,7 +191,7 @@ function ContenidoEquipo() {
           {ordenados.map((m) => (
             <div
               key={m.id}
-              className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 ${
+              className={`grid gap-3 rounded-2xl border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
                 m.activo ? "bg-card" : "bg-muted/40 opacity-70"
               }`}
             >
@@ -222,28 +222,52 @@ function ContenidoEquipo() {
                 )}
               </div>
 
-              {m.rol !== "dueno" && (
-                <Button variant="ghost" size="sm" onClick={() => abrirEdicion(m)}>
-                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                  Editar
-                </Button>
-              )}
-              {m.rol !== "dueno" && (
-                <Button variant="ghost" size="sm" onClick={() => alternarActivo(m)}>
-                  {m.activo ? "Dar de baja" : "Reactivar"}
-                </Button>
-              )}
-              {m.rol !== "dueno" && m.activo && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => generar(m)}
-                  disabled={generandoPara === m.id}
-                >
-                  <KeyRound className="mr-1.5 h-4 w-4" />
-                  {generandoPara === m.id ? "Generando…" : "Generar link de contraseña"}
-                </Button>
-              )}
+              {/* Acciones en columnas FIJAS: Editar | Dar de baja | Generar
+                  link. Antes eran hijos sueltos de un flex con wrap y cada fila
+                  los acomodaba distinto según el largo del nombre y del email.
+                  Las celdas vacías (dueño, inactivo) se reservan igual para
+                  que la columna no se corra. */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[6.5rem_7.5rem_15rem]">
+                {m.rol === "dueno" ? (
+                  <p className="col-span-2 self-center text-xs text-muted-foreground sm:col-span-3 sm:text-right">
+                    Cuenta principal del negocio
+                  </p>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => abrirEdicion(m)}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Editar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full ${m.activo ? "text-destructive hover:text-destructive" : ""}`}
+                      onClick={() => alternarActivo(m)}
+                    >
+                      {m.activo ? "Dar de baja" : "Reactivar"}
+                    </Button>
+                    {m.activo ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="col-span-2 w-full sm:col-span-1"
+                        onClick={() => generar(m)}
+                        disabled={generandoPara === m.id}
+                      >
+                        <KeyRound className="mr-1.5 h-4 w-4" />
+                        {generandoPara === m.id ? "Generando…" : "Generar link de contraseña"}
+                      </Button>
+                    ) : (
+                      <span className="hidden sm:block" aria-hidden />
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>

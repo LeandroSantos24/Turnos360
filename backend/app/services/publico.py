@@ -592,9 +592,21 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         db.commit()
 
     # Turno creado: recién ahora se aplica el descuento y se consume el uso.
+    # Un turno cubierto por abono ya está en $0: ni cupón ni cobro anticipado.
+    # Antes, con «cobro total» activo, el abonado pagaba por Mercado Pago el
+    # servicio entero que su abono ya cubría.
+    if turno.cubierto_por_abono:
+        cupon = None
     if cupon is not None:
-        precio_serv = float(servicio.precio or 0)
-        turno.descuento_pct = svc_cupones.pct_equivalente(descuento_pesos, precio_serv)
+        # El cupón se aplica sobre el precio DEL TURNO (el del local), no el
+        # de lista. Y el de monto fijo se guarda en pesos: pasarlo a % y
+        # redondear dejaba un cupón de $5.000 sobre $15.000 en $10.000,50.
+        if cupon.tipo == "porcentaje":
+            turno.descuento_pct = float(cupon.valor)
+        else:
+            turno.descuento_monto = round(
+                min(float(cupon.valor), float(turno.importe_previsto or 0)), 2
+            )
         # Se guarda QUÉ cupón fue, no solo el porcentaje. Con el contador de
         # usos solo se sabía "este código se usó 12 veces"; con esto se puede
         # responder cuánta gente distinta lo usó, cuánto facturaron esos
@@ -610,12 +622,19 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
     pago_url: str | None = None
     monto_a_cobrar: float | None = None
     concepto = ""
-    if empresa.cobro_modo == "sena" and empresa.sena_monto:
-        monto_a_cobrar = float(empresa.sena_monto)
+    # Lo que se cobra sale del TOTAL del turno (precio del local − cupón),
+    # la misma cuenta que usa el saldo al cobrar en el mostrador. Antes salía
+    # del precio de lista: en un local con otro precio, el saldo no cerraba.
+    db.refresh(turno)
+    total_turno = turno_svc._total_con_items(turno, 0.0)
+    if total_turno <= 0:
+        pass  # $0 (abono, cupón del 100 %): no hay nada que cobrar online
+    elif empresa.cobro_modo == "sena" and empresa.sena_monto:
+        # La seña nunca puede ser mayor que el turno.
+        monto_a_cobrar = min(float(empresa.sena_monto), total_turno)
         concepto = f"Seña · {servicio.nombre} · {empresa.nombre}"
-    elif empresa.cobro_modo == "total" and servicio.precio:
-        # Si hubo cupón, se cobra el precio CON el descuento aplicado.
-        monto_a_cobrar = round(float(servicio.precio) - descuento_pesos, 2)
+    elif empresa.cobro_modo == "total":
+        monto_a_cobrar = total_turno
         concepto = f"{servicio.nombre} · {empresa.nombre}"
 
     if monto_a_cobrar:

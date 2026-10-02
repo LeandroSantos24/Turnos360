@@ -62,6 +62,9 @@ class MembresiaOut(BaseModel):
     fecha_hasta: dt.date
     estado: EstadoMembresia
     cupos_usados: int
+    # None = plan ilimitado.
+    cupos_total: int | None = None
+    cupos_disponibles: int | None = None
 
     # datos del plan resueltos (para mostrar sin otra consulta)
     plan_nombre: str | None = None

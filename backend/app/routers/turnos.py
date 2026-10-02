@@ -62,6 +62,7 @@ def sin_plata(turno) -> TurnoOut:
     salida.sena_monto = None
     salida.importe_previsto = None
     salida.descuento_pct = 0.0
+    salida.descuento_monto = 0.0
     return salida
 
 @router.get("/huecos", response_model=list[dt.datetime])
@@ -254,7 +255,9 @@ def aplicar_descuento_turno(
     turno_id: int, datos: TurnoDescuento, empresa_id: EmpresaActual, db: DB
 ) -> TurnoOut:
     """Aplica un % de descuento al turno (0-100). Parte del armado del cobro."""
-    turno = svc.aplicar_descuento(db, empresa_id, turno_id, datos.descuento_pct)
+    turno = svc.aplicar_descuento(
+        db, empresa_id, turno_id, datos.descuento_pct, datos.descuento_monto
+    )
     if turno is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turno no encontrado")
     return turno

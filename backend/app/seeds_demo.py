@@ -29,7 +29,7 @@ from sqlalchemy import select, func
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models import Cliente, Empresa, Recurso, Servicio, Turno
+from app.models import Cliente, Empresa, ItemTurno, Recurso, Servicio, Turno
 from app.models.enums import EstadoCaja, EstadoTurno, TipoMovimiento
 from app.models.finanzas import Caja, MetodoPago, MovimientoFinanciero, Pago
 
@@ -100,8 +100,15 @@ def limpiar(db, empresa_id: int) -> None:
                 select(MovimientoFinanciero).where(MovimientoFinanciero.id.in_(movs))
             ):
                 db.delete(m)
+        for it in db.scalars(select(ItemTurno).where(ItemTurno.turno_id.in_(ids))):
+            db.delete(it)
+        db.flush()
         for t in turnos:
             db.delete(t)
+        # Los turnos tienen que irse ANTES que los clientes: sin relación ORM
+        # entre los dos, la unidad de trabajo no conoce el orden y el DELETE
+        # de clientes chocaba contra la FK de turno.
+        db.flush()
     clientes = list(
         db.scalars(
             select(Cliente).where(
@@ -254,7 +261,14 @@ def generar(db, empresa_id: int, dias: int, por_dia: tuple[int, int]) -> None:
 
             # Adicionales ocasionales: sin esto todos los tickets son idénticos
             # y el "ticket promedio" queda clavado en el precio de lista.
-            monto = precio + (random.choice([1500, 2000, 3000]) if random.random() < 0.22 else 0)
+            extra = random.choice([1500, 2000, 3000]) if random.random() < 0.22 else 0
+            monto = precio + extra
+            if extra:
+                # El adicional va como ítem del turno: un cobro mayor al total
+                # del turno sería plata sin origen (la auditoría lo detecta).
+                db.add(ItemTurno(empresa_id=empresa_id, turno_id=turno.id,
+                                 descripcion="Adicional", precio=extra, cantidad=1))
+            turno.cobrado = True
             metodo = random.choice(metodos)
             comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
             # La fecha se fija a mano: es todo el punto de este script.

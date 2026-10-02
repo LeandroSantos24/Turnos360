@@ -123,7 +123,9 @@ def test_imagen_con_demasiados_pixeles_es_400_no_500(client, db, armar_empresa, 
 
 # ── CORS ─────────────────────────────────────────────────────────────────
 
-_PROD = dict(env="prod", secret_key="s" * 40, fernet_key="f" * 40)
+_PROD = dict(env="prod", secret_key="s" * 40, fernet_key="f" * 40,
+             api_base_url="https://api.turnos360.com.ar",
+             public_base_url="https://turnos360.com.ar")
 
 
 def test_produccion_no_levanta_con_cors_comodin():

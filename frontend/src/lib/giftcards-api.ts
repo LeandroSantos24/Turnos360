@@ -8,6 +8,8 @@ export interface GiftCard {
   de_parte_de: string | null;
   mensaje: string | null;
   monto: number;
+  /** Lo que queda por usar (se usa en partes desde el cobro del turno). */
+  saldo: number;
   concepto: string | null;
   estado: "activa" | "canjeada" | "vencida" | "anulada";
   vence: string | null;

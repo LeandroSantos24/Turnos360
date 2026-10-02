@@ -356,6 +356,20 @@ class Settings(BaseSettings):
                 "para poder rotar la firma de los JWT sin romper las credenciales "
                 "guardadas. Generá una FERNET_KEY propia."
             )
+        # URLs públicas: en producción no pueden apuntar a la máquina local.
+        # API_BASE_URL arma la notification_url de Mercado Pago: con localhost
+        # los avisos de pago no llegan NUNCA y las señas cobradas no entran a
+        # la caja. PUBLIC_BASE_URL arma los links de los emails.
+        for nombre, valor in (
+            ("API_BASE_URL", self.api_base_url),
+            ("PUBLIC_BASE_URL", self.public_base_url),
+        ):
+            if any(h in (valor or "") for h in ("localhost", "127.0.0.1", "0.0.0.0")):
+                raise ValueError(
+                    f"{nombre}={valor!r} apunta a la máquina local. En producción "
+                    "va la URL pública (https://…): Mercado Pago y los emails la usan."
+                )
+
         return self
 
 

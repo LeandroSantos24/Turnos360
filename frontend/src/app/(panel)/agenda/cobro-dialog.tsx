@@ -41,7 +41,7 @@ interface CobroDialogProps {
   turnoId: number | null;
   total: number;
   /**
-   * Lo que el cliente ya pagó por adelantado (seña acreditada).
+   * Lo que el cliente ya pagó de este turno (seña, cobro parcial, gift card).
    * Sin esto, el diálogo proponía cobrar el total completo de un turno
    * señado y la recepción le cobraba la seña dos veces.
    */
@@ -52,9 +52,14 @@ interface CobroDialogProps {
 }
 
 interface LineaForm {
+  /** id del método, o GIFT para pagar con saldo de una gift card. */
   metodo_pago_id: string;
+  codigo: string;
   monto: string;
 }
+
+/** Valor del desplegable para «pagar con gift card». */
+const GIFT = "gift";
 
 export function CobroDialog({
   turnoId,
@@ -81,6 +86,7 @@ export function CobroDialog({
         setLineas([
           {
             metodo_pago_id: activos[0] ? String(activos[0].id) : "",
+            codigo: "",
             monto: aCobrar > 0 ? String(aCobrar) : "",
           },
         ]);
@@ -96,6 +102,7 @@ export function CobroDialog({
       ...prev,
       {
         metodo_pago_id: metodos[0] ? String(metodos[0].id) : "",
+        codigo: "",
         monto: restante > 0 ? String(restante) : "",
       },
     ]);
@@ -115,12 +122,29 @@ export function CobroDialog({
     if (!turnoId) return;
     const pagos: PagoLinea[] = lineas
       .filter((l) => Number(l.monto) > 0)
-      .map((l) => ({
-        metodo_pago_id: l.metodo_pago_id ? Number(l.metodo_pago_id) : null,
-        monto: Number(l.monto),
-      }));
+      .map((l) =>
+        l.metodo_pago_id === GIFT
+          ? {
+              metodo_pago_id: null,
+              gift_card_codigo: l.codigo.trim().toUpperCase(),
+              monto: Number(l.monto),
+            }
+          : {
+              metodo_pago_id: l.metodo_pago_id ? Number(l.metodo_pago_id) : null,
+              monto: Number(l.monto),
+            },
+      );
     if (pagos.length === 0) {
       toast.error("Cargá al menos un pago");
+      return;
+    }
+    if (pagos.some((p) => "gift_card_codigo" in p && !p.gift_card_codigo)) {
+      toast.error("Escribí el código de la gift card");
+      return;
+    }
+    // El backend rechaza cobrar de más; acá se avisa antes de mandar.
+    if (restante < -0.01) {
+      toast.error("El cobro supera lo que falta cobrar");
       return;
     }
     setRegistrando(true);
@@ -171,7 +195,7 @@ export function CobroDialog({
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-emerald-700">
-                    Seña ya cobrada
+                    Ya pagado
                   </span>
                   <span className="text-sm tabular-nums text-emerald-700">
                     −${senado.toLocaleString("es-AR")}
@@ -193,40 +217,55 @@ export function CobroDialog({
           {/* Líneas de pago */}
           <div className="space-y-2">
             {lineas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Select
-                  value={l.metodo_pago_id}
-                  onValueChange={(v) => setLinea(i, "metodo_pago_id", v)}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {metodos.map((m) => (
-                      <SelectItem key={m.id} value={String(m.id)}>
-                        {m.nombre}
-                        {m.comision_pct > 0 && ` (${m.comision_pct}%)`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="$"
-                  value={l.monto}
-                  onChange={(e) => setLinea(i, "monto", e.target.value)}
-                  className="w-28"
-                />
-                {lineas.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => quitarLinea(i)}
-                    aria-label="Quitar"
+              <div key={i} className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={l.metodo_pago_id}
+                    onValueChange={(v) => setLinea(i, "metodo_pago_id", v)}
                   >
-                    <X className="h-4 w-4" />
-                  </Button>
+                    <SelectTrigger className="min-w-0 flex-1">
+                      <SelectValue placeholder="Método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {metodos.map((m) => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          {m.nombre}
+                          {m.comision_pct > 0 && ` (${m.comision_pct}%)`}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={GIFT}>Gift card (saldo)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="$"
+                    value={l.monto}
+                    onChange={(e) => setLinea(i, "monto", e.target.value)}
+                    className="w-28"
+                  />
+                  {lineas.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => quitarLinea(i)}
+                      aria-label="Quitar"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {/* El código va en su propia fila: al lado no entraba y el
+                    diálogo se desbordaba. */}
+                {l.metodo_pago_id === GIFT && (
+                  <Input
+                    placeholder="Código GIFT-XXXX-XXXX"
+                    value={l.codigo}
+                    onChange={(e) => setLinea(i, "codigo", e.target.value.toUpperCase())}
+                    className="font-mono text-sm tracking-wider"
+                    autoComplete="off"
+                    aria-label="Código de la gift card"
+                  />
                 )}
               </div>
             ))}
@@ -246,8 +285,15 @@ export function CobroDialog({
               }
             >
               {restante > 0
-                ? `Falta asignar $${restante.toLocaleString("es-AR")}`
-                : `Te pasaste por $${Math.abs(restante).toLocaleString("es-AR")}`}
+                ? `Faltan $${restante.toLocaleString("es-AR")}: si cobrás así, el turno queda con saldo pendiente.`
+                : `Te pasaste por $${Math.abs(restante).toLocaleString("es-AR")}. No se puede cobrar más que el saldo.`}
+            </p>
+          )}
+
+          {lineas.some((l) => l.metodo_pago_id === GIFT) && (
+            <p className="text-xs text-muted-foreground">
+              La gift card descuenta de su saldo y no vuelve a entrar a la caja:
+              esa plata ya se registró cuando se vendió.
             </p>
           )}
 
@@ -263,7 +309,7 @@ export function CobroDialog({
           <Button variant="outline" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={registrar} disabled={registrando}>
+          <Button onClick={registrar} disabled={registrando || restante < -0.01}>
             {registrando ? "Registrando…" : "Registrar cobro"}
           </Button>
         </DialogFooter>

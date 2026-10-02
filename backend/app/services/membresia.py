@@ -15,6 +15,7 @@ from app.models import Cliente, Turno
 from app.models.finanzas import MetodoPago, MovimientoFinanciero, Pago
 from app.models.modulos.fidelizacion import PlanAbono, Membresia
 from app.models.enums import EstadoMembresia, EstadoTurno, TipoMovimiento
+from app.core.reloj import hoy_de_pared
 from app.services.finanzas import caja_abierta, sucursal_de_usuario
 
 
@@ -77,20 +78,57 @@ def borrar_plan(db: Session, empresa_id: int, plan_id: int) -> None:
 
 # ===== MEMBRESÍAS =====
 
-def membresia_activa_de(db: Session, empresa_id: int, cliente_id: int) -> Membresia | None:
-    """Devuelve la membresía VIGENTE del cliente, o None si no tiene.
-
-    Vigente = estado ACTIVA y hoy dentro del rango de fechas.
-    """
-    hoy = dt.date.today()
+def membresia_vigente_en(
+    db: Session, empresa_id: int, cliente_id: int, fecha: dt.date
+) -> Membresia | None:
+    """La membresía ACTIVA del cliente cuyo período incluye `fecha`."""
     return db.scalar(
-        select(Membresia).where(
+        select(Membresia)
+        .where(
             Membresia.empresa_id == empresa_id,
             Membresia.cliente_id == cliente_id,
             Membresia.estado == EstadoMembresia.ACTIVA,
-            Membresia.fecha_desde <= hoy,
-            Membresia.fecha_hasta >= hoy,
+            Membresia.fecha_desde <= fecha,
+            Membresia.fecha_hasta >= fecha,
         )
+        .order_by(Membresia.id.desc())
+        .limit(1)
+    )
+
+
+def membresia_activa_de(db: Session, empresa_id: int, cliente_id: int) -> Membresia | None:
+    """Devuelve la membresía VIGENTE HOY del cliente, o None si no tiene.
+
+    «Hoy» es el del negocio, no el del servidor: entre las 21 y las 24 de
+    Argentina `date.today()` en UTC ya es mañana.
+    """
+    return membresia_vigente_en(db, empresa_id, cliente_id, hoy_de_pared())
+
+
+def cupos_usados(db: Session, membresia: Membresia) -> int:
+    """Turnos cubiertos por este abono dentro de su período, sin cancelados.
+
+    Se CALCULA en vez de llevar un contador: un contador hay que acordarse de
+    bajarlo al cancelar, subirlo al reabrir, corregirlo al mover… y la columna
+    `cupos_usados` nunca se había actualizado. Cancelar un turno cubierto
+    devuelve el cupo solo.
+    """
+    desde = dt.datetime.combine(membresia.fecha_desde, dt.time.min, tzinfo=dt.timezone.utc)
+    hasta = dt.datetime.combine(
+        membresia.fecha_hasta + dt.timedelta(days=1), dt.time.min, tzinfo=dt.timezone.utc
+    )
+    return int(
+        db.scalar(
+            select(func.count(Turno.id)).where(
+                Turno.empresa_id == membresia.empresa_id,
+                Turno.cliente_id == membresia.cliente_id,
+                Turno.cubierto_por_abono.is_(True),
+                Turno.estado != EstadoTurno.CANCELADO,
+                Turno.fecha_inicio >= desde,
+                Turno.fecha_inicio < hasta,
+            )
+        )
+        or 0
     )
 
 
@@ -171,7 +209,7 @@ def crear_membresia(db: Session, empresa_id: int, datos, usuario_id: int | None 
         # El abono se vende en un mostrador, no en un turno: entra a la caja
         # del local de quien lo carga.
         sucursal_id = sucursal_de_usuario(db, empresa_id, usuario_id)
-        caja = caja_abierta(db, empresa_id, sucursal_id)
+        caja = caja_abierta(db, empresa_id, sucursal_id, bloquear=True)
         comision = round(monto * float(metodo.comision_pct or 0) / 100, 2)
 
         mov = MovimientoFinanciero(
@@ -220,9 +258,16 @@ def cancelar_membresia(db: Session, empresa_id: int, membresia_id: int) -> None:
     db.commit()
 
 
-def resolver_salida(membresia: Membresia) -> dict:
+def resolver_salida(membresia: Membresia, db: Session | None = None) -> dict:
     """Arma el dict de salida con los datos del plan resueltos y si está vigente."""
-    hoy = dt.date.today()
+    hoy = hoy_de_pared()
+    plan = membresia.plan
+    usados = cupos_usados(db, membresia) if db is not None else membresia.cupos_usados
+    total_cupos = (
+        int(plan.cantidad_cupos)
+        if plan is not None and not plan.ilimitado and plan.cantidad_cupos
+        else None
+    )
     vigente = (
         membresia.estado == EstadoMembresia.ACTIVA
         and membresia.fecha_desde <= hoy <= membresia.fecha_hasta
@@ -235,7 +280,11 @@ def resolver_salida(membresia: Membresia) -> dict:
         "fecha_desde": membresia.fecha_desde,
         "fecha_hasta": membresia.fecha_hasta,
         "estado": membresia.estado,
-        "cupos_usados": membresia.cupos_usados,
+        "cupos_usados": usados,
+        "cupos_total": total_cupos,
+        "cupos_disponibles": (
+            max(total_cupos - usados, 0) if total_cupos is not None else None
+        ),
         "plan_nombre": membresia.plan.nombre if membresia.plan else None,
         "plan_precio": float(membresia.plan.precio) if membresia.plan else None,
         "plan_ilimitado": membresia.plan.ilimitado if membresia.plan else None,
@@ -255,7 +304,7 @@ def estadisticas_planes(db: Session, empresa_id: int) -> dict:
     ingreso (precio × abonados) y precio efectivo por corte (ingreso ÷ cortes).
     El "precio efectivo" es la métrica clave: cuánto te queda por corte realmente.
     """
-    hoy = dt.date.today()
+    hoy = hoy_de_pared()
     planes = listar_planes(db, empresa_id)
 
     # Membresías activas (vigentes hoy) con su plan

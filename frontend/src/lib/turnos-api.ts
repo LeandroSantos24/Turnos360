@@ -34,6 +34,9 @@ export interface Turno {
   /** total − senado: lo que falta cobrar al finalizar. */
   saldo: number | null;
   descuento_pct: number;
+  /** Descuento fijo en pesos (se aplica después del %). */
+  descuento_monto: number;
+  /** true = no queda saldo. Un cobro parcial lo deja en false. */
   cobrado: boolean;
   total: number;
   notas: string | null;
@@ -98,9 +101,11 @@ export function cambiarEstadoTurno(
 export function aplicarDescuento(
   turnoId: number,
   descuentoPct: number,
+  descuentoMonto?: number,
 ): Promise<Turno> {
   return api.patch<Turno>(`/turnos/${turnoId}/descuento`, {
     descuento_pct: descuentoPct,
+    ...(descuentoMonto != null ? { descuento_monto: descuentoMonto } : {}),
   });
 }
 

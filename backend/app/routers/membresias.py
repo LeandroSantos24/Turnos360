@@ -88,7 +88,7 @@ def crear_membresia(
     # El usuario va al movimiento de caja: en el arqueo hay que poder decir
     # quién cargó cada ingreso.
     membresia = svc.crear_membresia(db, empresa_id, datos, usuario_id=usuario.id)
-    return svc.resolver_salida(membresia)
+    return svc.resolver_salida(membresia, db)
 
 
 @router.get("/clientes/{cliente_id}/membresia", response_model=MembresiaOut | None)
@@ -99,7 +99,7 @@ def membresia_del_cliente(
     membresia = svc.membresia_activa_de(db, empresa_id, cliente_id)
     if not membresia:
         return None
-    return svc.resolver_salida(membresia)
+    return svc.resolver_salida(membresia, db)
 
 
 @router.delete(

@@ -5,7 +5,7 @@ Construido sobre las tablas que ya existen en app/models/finanzas.py.
 
 import datetime as dt
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import EstadoCaja, TipoMovimiento
 
@@ -61,10 +61,21 @@ class CategoriaOut(BaseModel):
 # ─────────────────────────── Cobro de un turno (N-52, N-54) ─────────────────
 
 class PagoLinea(BaseModel):
-    """Una porción del cobro con un método (permite pago dividido)."""
+    """Una porción del cobro con un método (permite pago dividido).
+
+    O un método de pago, o una gift card (`gift_card_codigo`): la gift card
+    descuenta su saldo y NO genera ingreso de caja (ya entró al venderla).
+    """
 
     metodo_pago_id: int | None = None
-    monto: float = Field(gt=0)
+    gift_card_codigo: str | None = Field(default=None, max_length=40)
+    monto: float = Field(gt=0, le=100_000_000)
+
+    @model_validator(mode="after")
+    def _uno_u_otro(self):
+        if self.gift_card_codigo and self.metodo_pago_id is not None:
+            raise ValueError("Una línea se paga con un método o con una gift card, no con las dos.")
+        return self
 
 
 class CobroCrear(BaseModel):
@@ -84,6 +95,9 @@ class PagoOut(BaseModel):
     monto: float
     comision_aplicada: float | None
     fecha: dt.datetime
+    # "turno" | "sena" | "giftcard_uso" | "abono" | "giftcard"
+    origen: str | None = None
+    gift_card_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -214,6 +228,16 @@ class AnularMovimientoIn(BaseModel):
 
 
 # ─────────────────────────── Historial comercial (N-62) ─────────────────────
+
+class AnularCobroIn(BaseModel):
+    motivo: str | None = Field(default=None, max_length=200)
+
+
+class AnularCobroOut(BaseModel):
+    turno_id: int
+    pagos_anulados: int
+    monto: float
+
 
 class CobradoCliente(BaseModel):
     """Total realmente cobrado a un cliente (suma de sus pagos)."""

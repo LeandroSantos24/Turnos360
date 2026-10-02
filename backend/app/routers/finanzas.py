@@ -44,6 +44,8 @@ from app.schemas.finanzas import (
     MovimientoOut,
     MovimientosPagina,
     AnularMovimientoIn,
+    AnularCobroIn,
+    AnularCobroOut,
     PagoOut,
 )
 from app.services import finanzas as svc
@@ -211,6 +213,28 @@ def registrar_cobro(
     if cobro is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Turno no encontrado")
     return cobro
+
+
+@router.post(
+    "/turnos/{turno_id}/anular-cobro",
+    response_model=AnularCobroOut,
+    dependencies=[Depends(gate_dueno)],
+)
+def anular_cobro(
+    turno_id: int,
+    datos: AnularCobroIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> AnularCobroOut:
+    """Revierte el cobro del turno: pagos, movimientos y saldo de gift card.
+
+    Solo el dueño: es plata. Rechaza si el cobro está en una caja cerrada.
+    """
+    r = svc.anular_cobro(db, empresa_id, turno_id, usuario.id, datos.motivo)
+    if r is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Turno no encontrado")
+    return r
 
 
 @router.get("/turnos/{turno_id}/pagos", response_model=list[PagoOut])
