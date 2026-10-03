@@ -1077,10 +1077,15 @@ function DialogFicha({
     contacto_nombre: empresa.contacto_nombre ?? "",
     contacto_email: empresa.contacto_email ?? "",
     contacto_telefono: empresa.contacto_telefono ?? "",
+    // SOLO el precio PACTADO. `empresa.precio_mensual` en esta fila es la
+    // cuota resuelta (pactada o de lista): precargarla y mandarla de vuelta
+    // convertía el precio de lista en pactado con solo editar un teléfono, y
+    // después una subida a Multisucursal se cobraba al precio de Pro.
+    // Vacío = usa el precio del plan.
     precio_mensual:
-      empresa.precio_mensual != null
+      empresa.precio_pactado && empresa.precio_mensual != null
         ? String(empresa.precio_mensual)
-        : String(PRECIO_MENSUAL),
+        : "",
     limite_recursos: empresa.limite_recursos != null ? String(empresa.limite_recursos) : "",
     limite_sucursales:
       empresa.limite_sucursales != null ? String(empresa.limite_sucursales) : "",
@@ -1090,8 +1095,37 @@ function DialogFicha({
   // el endpoint de suscripción, que es el que valida contra la grilla.
   const [plan, setPlan] = useState<string>(empresa.plan ?? "gratuito");
   const [guardando, setGuardando] = useState(false);
+  const confirmar = useConfirmar();
+  const precioInicial = empresa.precio_pactado && empresa.precio_mensual != null
+    ? Number(empresa.precio_mensual)
+    : null;
 
   async function guardar() {
+    const precioNuevo = f.precio_mensual.trim() ? Number(f.precio_mensual) : null;
+    const cambiaPrecio = precioNuevo !== precioInicial;
+    const cambiaPlan = plan !== empresa.plan;
+    if (cambiaPrecio || cambiaPlan) {
+      const partes = [];
+      if (cambiaPlan) {
+        const desde = PLANES.find((p) => p.codigo === empresa.plan)?.etiqueta ?? empresa.plan;
+        const hasta = PLANES.find((p) => p.codigo === plan)?.etiqueta ?? plan;
+        partes.push(`el plan pasa de ${desde} a ${hasta}`);
+      }
+      if (cambiaPrecio) {
+        partes.push(
+          precioNuevo === null
+            ? `deja de tener precio pactado (${PESOS(precioInicial)}) y paga el de su plan`
+            : `la cuota pactada pasa de ${precioInicial === null ? "la del plan" : PESOS(precioInicial)} a ${PESOS(precioNuevo)}`,
+        );
+      }
+      const ok = await confirmar({
+        titulo: `¿Cambiar lo que paga ${empresa.nombre}?`,
+        descripcion: `Al guardar, ${partes.join(" y ")}. Queda registrado en la auditoría.`,
+        textoAccion: "Sí, guardar",
+        textoCancelar: "Volver",
+      });
+      if (!ok) return;
+    }
     setGuardando(true);
     try {
       await guardarFicha(empresa.id, {
@@ -1101,7 +1135,8 @@ function DialogFicha({
         contacto_email: f.contacto_email || null,
         contacto_telefono: f.contacto_telefono || null,
         notas_admin: f.notas_admin || null,
-        precio_mensual: f.precio_mensual ? Number(f.precio_mensual) : null,
+        // Solo viaja si cambió: así guardar un teléfono no toca el precio.
+        ...(cambiaPrecio ? { precio_mensual: precioNuevo } : {}),
         limite_recursos: f.limite_recursos ? Number(f.limite_recursos) : null,
         limite_sucursales: f.limite_sucursales ? Number(f.limite_sucursales) : null,
       });
@@ -1148,7 +1183,12 @@ function DialogFicha({
             {campo("contacto_nombre", "Contacto", "Lucas Estrella")}
             {campo("contacto_telefono", "Teléfono", "2615550001")}
             {campo("contacto_email", "Email", "lucas@negocio.com", "email")}
-            {campo("precio_mensual", "Cuota mensual", String(PRECIO_MENSUAL), "number")}
+            {campo(
+              "precio_mensual",
+              "Cuota pactada",
+              `vacío = la del plan (${PESOS(PLANES.find((p) => p.codigo === plan)?.precio ?? PRECIO_MENSUAL)})`,
+              "number",
+            )}
             {campo("limite_recursos", "Tope de profesionales", "vacío = usa el plan", "number")}
             {campo("limite_sucursales", "Tope de locales", "vacío = usa el plan", "number")}
           </div>

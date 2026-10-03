@@ -259,6 +259,37 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
+    def _comentarios_son_vacios(self):
+        """Una variable que vale «# algo» es una variable VACÍA.
+
+        Docker Compose, con `VAR=   # comentario`, toma el comentario como
+        valor. Pasaba con un .env.prod armado con la plantilla vieja:
+        MP_WEBHOOK_SECRET terminaba valiendo «# MP → Tus integraciones…» y,
+        con MP_FIRMA_MODO=enforce, se rechazaban TODOS los avisos de señas;
+        COBRO_WHATSAPP le mostraba al negocio un link a «# formato wa.me…».
+
+        SECRET_KEY y FERNET_KEY no se tocan acá: en producción hacen fallar el
+        arranque con un mensaje propio (ver _exigir_secretos_en_produccion).
+        """
+        limpiadas = []
+        for nombre, campo in type(self).model_fields.items():
+            if nombre in ("secret_key", "fernet_key") or campo.annotation is not str:
+                continue
+            valor = getattr(self, nombre)
+            if isinstance(valor, str) and valor.strip().startswith("#"):
+                object.__setattr__(self, nombre, "")
+                limpiadas.append(nombre.upper())
+        if limpiadas:
+            import logging
+
+            logging.getLogger("turnos360.config").warning(
+                "Variables con un comentario como valor (se toman como vacías): %s. "
+                "Poné el comentario en su propia línea en el .env.",
+                ", ".join(limpiadas),
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validar_interruptores(self):
         """Normaliza y valida los tres interruptores de texto libre.
 

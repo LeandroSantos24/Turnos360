@@ -6,9 +6,10 @@ Base: el mismo stack del runbook de la UM (`DEPLOY_UM.md`, Parte B para instalar
 
 1. DNS: `turnos360.com.ar` y `www` → IP del VPS.
 2. Firewall: abiertos solo 22, 80 y 443.
-3. `.env.prod` completo (`cp .env.prod.example .env.prod`). Obligatorias: `POSTGRES_*`, `REDIS_PASSWORD` (solo alfanumérico), `SECRET_KEY`, `FERNET_KEY` (distintas, ≥32), `NEXT_PUBLIC_API_URL`, `PUBLIC_BASE_URL`, `API_BASE_URL`, `CORS_ORIGINS` (https y con `/api` donde corresponde, ver la plantilla).
-4. **Guardar `.env.prod` fuera del servidor** (gestor de contraseñas). Sin `FERNET_KEY` las credenciales de MP/WhatsApp guardadas en la base no se pueden descifrar aunque tengas el backup.
-5. Certificado (con el puerto 80 libre, antes del primer `up`):
+3. `.env.prod` NUEVO desde la plantilla actual (`cp .env.prod.example .env.prod`), no el de la UM: aquel tiene URLs `http://localhost` y comentarios en la misma línea que la variable. Comentarios siempre en su propia línea. Obligatorias: `POSTGRES_*`, `REDIS_PASSWORD` (solo alfanumérico), `SECRET_KEY`, `FERNET_KEY` (distintas, ≥32), `NEXT_PUBLIC_API_URL`, `PUBLIC_BASE_URL`, `API_BASE_URL`, `CORS_ORIGINS` (https y con `/api` donde corresponde, ver la plantilla).
+4. Super-admin: crearlo con `SUPERADMIN_EMAIL`/`SUPERADMIN_PASS` (clave nueva, larga). Una clave de super-admin estuvo escrita en `seeds.py` en commits viejos de este repo público: si algún entorno la usa, cambiala.
+5. **Guardar `.env.prod` fuera del servidor** (gestor de contraseñas). Sin `FERNET_KEY` las credenciales de MP/WhatsApp guardadas en la base no se pueden descifrar aunque tengas el backup.
+6. Certificado (con el puerto 80 libre, antes del primer `up`):
 
 ```
 sudo apt install -y certbot
@@ -17,7 +18,7 @@ sudo mkdir -p /var/www/certbot
 cp infra/nginx/produccion.conf.ejemplo infra/nginx/produccion.conf
 ```
 
-6. Backups fuera del servidor: clave SSH de root hacia la máquina de backup y en `sudo crontab -e`:
+7. Backups fuera del servidor: clave SSH de root hacia la máquina de backup y en `sudo crontab -e`:
 
 ```
 30 3 * * * BACKUP_REMOTO=usuario@host:/backups/turnos360/ /usr/local/bin/turnos360-backup >> /var/log/turnos360-backup.log 2>&1
@@ -35,6 +36,7 @@ git log --oneline -1
 D="docker compose --env-file .env.prod -f infra/docker-compose.prod.yml -f infra/docker-compose.https.yml"
 $D up -d --build
 $D exec backend alembic upgrade head
+$D exec backend python -m app.seeds_minimo
 $D ps
 curl -fsS https://turnos360.com.ar/api/ready
 ```
