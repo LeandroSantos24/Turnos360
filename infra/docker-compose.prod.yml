@@ -100,6 +100,13 @@ services:
       # negocio). Vacío = apagado: sin token el botón no aparece.
       MP_SAAS_ACCESS_TOKEN: ${MP_SAAS_ACCESS_TOKEN:-}
       WA_PROVEEDOR: ${WA_PROVEEDOR:-simulado}
+      # Estaban en la plantilla pero no llegaban al contenedor: con
+      # WA_PROVEEDOR=meta el webhook de estados rechazaba todo y el cobro de
+      # mensajes de servicio no se prendía nunca.
+      WA_APP_SECRET: ${WA_APP_SECRET:-}
+      WA_WEBHOOK_VERIFY_TOKEN: ${WA_WEBHOOK_VERIFY_TOKEN:-}
+      WA_COBRAR_SERVICIO: ${WA_COBRAR_SERVICIO:-false}
+      WA_PRECIO_MENSAJE_ARS: ${WA_PRECIO_MENSAJE_ARS:-73}
       MP_SAAS_WEBHOOK_SECRET: ${MP_SAAS_WEBHOOK_SECRET:-}
       SENA_MINUTOS_PARA_PAGAR: ${SENA_MINUTOS_PARA_PAGAR:-30}
       SECRET_KEY: ${SECRET_KEY}

@@ -1,0 +1,26 @@
+# Producción con HTTPS: se suma ENCIMA de docker-compose.prod.yml.
+#
+#   docker compose --env-file .env.prod \
+#     -f infra/docker-compose.prod.yml -f infra/docker-compose.https.yml up -d --build
+#
+# El prod.yml solo abre el 80 con staging.conf (sirve para la VPN de la UM).
+# En un servidor con IP pública eso manda claves y tokens en texto plano, y
+# Mercado Pago no puede notificar a un dominio sin certificado. Este archivo
+# cambia Nginx a produccion.conf (80 -> 443 + HSTS) y monta los certificados
+# de Let's Encrypt del host.
+#
+# Antes del primer `up`: copiar infra/nginx/produccion.conf.ejemplo a
+# infra/nginx/produccion.conf (ajustar el dominio si no es turnos360.com.ar)
+# y sacar el certificado con certbot. Ver DEPLOY_PRODUCCION.md.
+
+services:
+  nginx:
+    # El 80 ya lo abre el prod.yml (redirige a 443 y atiende el desafío de
+    # certbot). Acá se suma solo el 443: repetir el 80 lo duplicaría.
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/produccion.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/seguridad.conf:/etc/nginx/snippets/seguridad.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro

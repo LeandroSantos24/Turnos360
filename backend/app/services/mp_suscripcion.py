@@ -282,7 +282,11 @@ def acreditar(db: Session, payment_id: str, accion: str = "") -> PagoSuscripcion
         select(PagoSuscripcion).where(PagoSuscripcion.mp_payment_id == payment_id)
     )
     if previo is not None:
-        if accion == "payment.updated" and not previo.anulado:
+        # Ya acreditado. Un aviso «payment.updated» —o uno sin acción, como
+        # las notificaciones IPN por query string— puede ser una devolución o
+        # un contracargo: se le pregunta a MP. Un «payment.created» repetido
+        # es un reintento y no sale a la red.
+        if accion in ("payment.updated", "") and not previo.anulado:
             _revisar_devolucion(db, previo)
         return None
 

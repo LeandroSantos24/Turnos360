@@ -194,6 +194,15 @@ class AvisoPago(Base):
             "creado_en",
             postgresql_where=text("estado = 'pendiente'"),
         ),
+        # UN aviso abierto por empresa, garantizado por la base. Dos pestañas
+        # (o un doble click) creaban dos avisos, y cada uno se podía aprobar
+        # por su lado: dos cuotas y dos períodos por una sola transferencia.
+        Index(
+            "uq_aviso_abierto_por_empresa",
+            "empresa_id",
+            unique=True,
+            postgresql_where=text("estado IN ('pendiente', 'info_solicitada')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

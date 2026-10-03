@@ -248,6 +248,7 @@ def pagar_suscripcion_mp(
         plan = elegido.value
 
     _exigir_operacion(db, empresa, "pagar")
+    _exigir_compatible(db, empresa, plan)
     url = mp_sus.crear_preferencia(empresa, plan, db=db, iniciado_por=usuario.email)
     if not url:
         raise HTTPException(
@@ -306,6 +307,7 @@ def activar_debito_automatico(
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
     _exigir_operacion(db, empresa, "pagar")
+    _exigir_compatible(db, empresa, elegido.value)
 
     # A qué mail le cobra Mercado Pago. Es el del dueño que está pidiendo el
     # débito: es su tarjeta y son sus avisos de cada cobro. El email público
@@ -396,6 +398,26 @@ def _empresa_o_404(db, empresa_id: int):
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
     return empresa
+
+
+def _exigir_compatible(db, empresa, plan: str | None) -> None:
+    """409 si se quiere PAGAR un plan más chico que lo que la empresa usa.
+
+    Pagar Inicial con 3 sucursales cargadas dejaría un estado imposible. Para
+    bajar de plan está «Cambiar plan», que muestra qué reducir y lo programa.
+    """
+    from app.core import planes
+    from app.services import cobranza
+
+    if not plan or planes.plan_de(plan) is planes.plan_de(empresa.plan):
+        return
+    problemas = cobranza.incompatibilidades(db, empresa, plan)
+    if problemas:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            " ".join(p["mensaje"] for p in problemas)
+            + " Reducilo antes de pasar a ese plan.",
+        )
 
 
 def _plan_vendible(plan: str):
@@ -598,6 +620,7 @@ def avisar_pago(
     empresa = _empresa_o_404(db, empresa_id)
     _exigir_operacion(db, empresa, "avisar_pago")
     plan = _plan_vendible(datos.plan).value if datos.plan else None
+    _exigir_compatible(db, empresa, plan)
     if datos.comprobante and not ruta_comprobante(empresa_id, datos.comprobante).is_file():
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,

@@ -400,8 +400,23 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
         or 0
     )
     monto_revision = sum(float(a.monto or 0) for a in avisos)
+    # Plata que MP devolvió (refund / contracargo) este mes: la cuota se anuló
+    # pero el vencimiento NO se movió solo. Alguien tiene que decidir.
+    devueltos = int(
+        db.scalar(
+            select(func.count(AjusteSuscripcion.id)).where(
+                AjusteSuscripcion.tipo == "pago_devuelto",
+                AjusteSuscripcion.creado_en >= inicio_mes_dt,
+            )
+        )
+        or 0
+    )
 
     alertas = []
+    if devueltos:
+        alertas.append({"nivel": "rojo", "filtro": None,
+                        "texto": f"{devueltos} pago{'s' if devueltos != 1 else ''} devuelto{'s' if devueltos != 1 else ''} "
+                                 "por Mercado Pago este mes: revisá el vencimiento"})
     if avisos:
         n = len(avisos)
         alertas.append({"nivel": "rojo", "filtro": "en_revision",
@@ -438,6 +453,7 @@ def resumen_cobranza(db: Session, hoy: dt.date | None = None) -> dict:
         "cancelaciones_programadas": canceladas_prog,
         "pagos_rechazados": rechazados,
         "renovaciones_mes": renovaciones_ok,
+        "pagos_devueltos": devueltos,
         "alertas": alertas,
         "dias_aviso": DIAS_AVISO,
         "dias_prorroga": DIAS_PRORROGA,
@@ -518,8 +534,15 @@ def registrar_pago(
         clave_idempotencia=clave_idempotencia,
     )
 
+    plan_no_aplicado = None
     if renovar:
-        if plan:
+        if plan and planes.plan_de(plan) is not planes.plan_de(empresa.plan) and incompatibilidades(db, empresa, plan):
+            # Pagó un plan MÁS CHICO que lo que usa (p. ej. Inicial con 3
+            # sucursales). Aplicarlo dejaría un estado imposible: se registra
+            # la plata y se renueva, pero sigue en su plan y queda un evento
+            # para que lo resuelva una persona.
+            plan_no_aplicado = plan
+        elif plan:
             # Compró un plan concreto: se activa, sea subida o bajada. Y se
             # cancela cualquier baja programada — acaba de decidir de nuevo.
             empresa.plan = plan
@@ -580,6 +603,16 @@ def registrar_pago(
         monto=float(monto),
         aviso_id=aviso_id,
     )
+    if plan_no_aplicado:
+        evento(
+            db, empresa, "baja_postergada",
+            f"Se pagó el plan {planes.limites_de(plan_no_aplicado).etiqueta} pero usa más de lo "
+            "que permite: "
+            + " ".join(p["mensaje"] for p in incompatibilidades(db, empresa, plan_no_aplicado))
+            + f" Sigue en {planes.limites_de(empresa.plan).etiqueta}.",
+            hecho_por=registrado_por, actor_tipo=actor_tipo, pago_id=pago.id,
+            plan_antes=empresa.plan, plan_despues=empresa.plan,
+        )
     return pago
 
 
@@ -905,7 +938,13 @@ def registrar_aviso(
     crear otro. Si el super-admin había pedido información, la respuesta lo
     devuelve a «pendiente» para que vuelva a la bandeja.
     """
+    from sqlalchemy.exc import IntegrityError
+
     from app.services import mp_suscripcion as mp_sus
+
+    # Serializa los avisos de la misma empresa: el segundo de dos pedidos
+    # simultáneos espera al primero y encuentra su aviso abierto.
+    db.scalar(select(Empresa.id).where(Empresa.id == empresa.id).with_for_update())
 
     if plan is not None:
         elegido = planes.plan_de(plan)
@@ -957,7 +996,15 @@ def registrar_aviso(
         comprobante=comprobante,
     )
     db.add(aviso)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Respaldo del índice único: otro pedido creó el aviso en el medio.
+        db.rollback()
+        existente = aviso_abierto(db, empresa.id)
+        if existente is not None:
+            return existente
+        raise
     evento(
         db, empresa, "aviso",
         f"Informó una transferencia de {pesos(monto)} "

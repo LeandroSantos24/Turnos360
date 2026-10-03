@@ -243,6 +243,7 @@ class ResumenCobranzaOut(BaseModel):
     cancelaciones_programadas: int = 0
     pagos_rechazados: int = 0
     renovaciones_mes: int = 0
+    pagos_devueltos: int = 0
     alertas: list[dict] = Field(default_factory=list)
 
 

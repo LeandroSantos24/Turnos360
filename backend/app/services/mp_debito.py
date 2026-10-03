@@ -420,9 +420,27 @@ def acreditar_cobro(db: Session, authorized_payment_id: str):
     # El plan que paga esta suscripción se activa solo, igual que en el pago
     # suelto. Se lee de NUESTRA fila y no del external_reference porque la
     # fila es la que sabe por qué monto está autorizada.
+    #
+    # PERO solo si la empresa todavía no tiene un plan pago propio distinto.
+    # Si mientras tanto cambió de plan por otro medio (transferencia aprobada,
+    # checkout, admin) y no se pudo actualizar el débito, aplicar el plan
+    # viejo de la fila la devolvería en silencio al plan anterior. En ese
+    # caso se renueva su plan actual y se vuelve a sincronizar el débito.
+    #
+    # Regla: si el débito cobra un plan igual o MÁS CARO que el actual, se
+    # activa (paga más, recibe más: es el caso del que activó el débito para
+    # subir). Si cobra uno MÁS BARATO, se renueva el plan actual y se marca.
     plan_a_activar = None
+    desfasado = False
     if fila.plan and se_vende_solo(plan_de(fila.plan)):
-        plan_a_activar = plan_de(fila.plan).value
+        actual = plan_de(empresa.plan)
+        if (
+            not se_vende_solo(actual)
+            or limites_de(fila.plan).precio >= limites_de(actual.value).precio
+        ):
+            plan_a_activar = plan_de(fila.plan).value
+        else:
+            desfasado = True
 
     cuota = cobranza.registrar_pago(
         db,
@@ -453,6 +471,17 @@ def acreditar_cobro(db: Session, authorized_payment_id: str):
         # mismo cargo llegaron a la vez: el otro ya lo registró.
         db.rollback()
         return None
+
+    if desfasado:
+        cobranza.evento(
+            db, empresa, "pago_rechazado",
+            f"El débito automático cobró {cobranza.pesos(monto)} del plan "
+            f"{limites_de(fila.plan).etiqueta}, pero la empresa está en "
+            f"{limites_de(empresa.plan).etiqueta}: se renovó su plan actual. Revisá la diferencia.",
+            hecho_por="mercadopago", actor_tipo="mercadopago", monto=monto, pago_id=cuota.id,
+        )
+        db.commit()
+        ajustar_al_plan(db, empresa)
 
     log.info(
         "MP débito: cuota cobrada automáticamente",

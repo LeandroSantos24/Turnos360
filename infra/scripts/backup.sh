@@ -71,6 +71,22 @@ echo "[$(date -Is)] Fotos OK — $(du -h "$FOTOS" | cut -f1)"
 # otra máquina) es parte del deploy de producción, no opcional.
 
 # Rotación
+# ── Copia FUERA del servidor ────────────────────────────────────────────
+# Un backup que vive en el mismo disco se pierde con el servidor. Si
+# BACKUP_REMOTO está definido (formato rsync/scp: usuario@host:/ruta/), cada
+# backup se copia ahí. Si la copia falla, el script termina con error para
+# que cron lo deje en el log y se note.
+if [ -n "${BACKUP_REMOTO:-}" ]; then
+    echo "[$(date -Is)] Copiando a $BACKUP_REMOTO ..."
+    if ! rsync -a --timeout=120 "$ARCHIVO" "$FOTOS" "$BACKUP_REMOTO"; then
+        echo "ERROR: no se pudo copiar el backup fuera del servidor ($BACKUP_REMOTO)." >&2
+        exit 1
+    fi
+    echo "[$(date -Is)] Copia remota OK"
+else
+    echo "[$(date -Is)] AVISO: BACKUP_REMOTO vacío. El backup quedó SOLO en este servidor." >&2
+fi
+
 find "$DESTINO" -name 'uploads-*.tar.gz' -mtime +"$RETENCION_DIAS" -delete
 BORRADOS=$(find "$DESTINO" -name 'turnos360-*.sql.gz' -mtime +"$RETENCION_DIAS" -print -delete | wc -l)
 echo "[$(date -Is)] Rotación: $BORRADOS archivo(s) viejo(s) borrado(s). Quedan $(ls -1 "$DESTINO"/turnos360-*.sql.gz 2>/dev/null | wc -l)."

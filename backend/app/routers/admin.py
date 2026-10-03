@@ -230,7 +230,7 @@ def setear_suscripcion(
         else "cambiar_vencimiento" if datos.suscripcion_vence is not None
         else "cambiar_plan"
     )
-    return _auditado(
+    fila = _auditado(
         db, admin, request, accion, empresa, None,
         lambda: svc.setear_suscripcion(
             db,
@@ -241,6 +241,8 @@ def setear_suscripcion(
             hecho_por=admin.email,
         ),
     )
+    _sincronizar_debito(db, empresa)
+    return fila
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -431,6 +433,7 @@ def registrar_pago(
         f"{cobranza.pesos(datos.monto)} por {datos.metodo}",
         hacer,
     )
+    _sincronizar_debito(db, empresa)
     return _pago_out(pago)
 
 
@@ -492,6 +495,7 @@ def aprobar_aviso(
             hecho_por=admin.email, notas=datos.notas,
         ),
     )
+    _sincronizar_debito(db, empresa)
     return _pago_out(pago)
 
 
@@ -669,6 +673,24 @@ def _auditado(db, admin, request, accion: str, empresa, descripcion, accion_fn):
     fila.despues = auditoria.foto(db, empresa)
     db.commit()
     return resultado
+
+
+def _sincronizar_debito(db, empresa) -> None:
+    """Si el plan cambió, el débito automático tiene que cobrar el nuevo.
+
+    Sin esto, una transferencia aprobada para pasar a Multisucursal dejaba el
+    débito cobrando Pro, y el cobro del mes siguiente devolvía la empresa a
+    Pro. Nunca levanta: si MP no responde queda un evento para revisar.
+    """
+    from app.services import mp_debito
+
+    try:
+        db.refresh(empresa)
+        mp_debito.ajustar_al_plan(db, empresa)
+    except Exception:
+        logging.getLogger("turnos360.admin").exception(
+            "No se pudo sincronizar el débito (empresa %s)", empresa.id
+        )
 
 
 def _aviso_o_404(db, aviso_id: int):

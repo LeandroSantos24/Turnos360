@@ -192,6 +192,7 @@ Table aviso_pago {
   Indexes {
     empresa_id [name: 'ix_aviso_pago_empresa_id']
     creado_en [name: 'ix_aviso_pago_pendiente']
+    empresa_id [name: 'uq_aviso_abierto_por_empresa', unique]
   }
 }
 

@@ -197,6 +197,10 @@ def estado_suscripcion(
     # Superpuestos: el negocio ya hizo su parte y estamos esperando. Con `db`
     # se consulta; sin `db` se usan los flags que pasa quien ya los calculó en
     # lote (el listado de cobranza, para no hacer una consulta por empresa).
+    # Un aviso en revisión NO es plata: sostiene la web abierta como máximo
+    # DIAS_REVISION días y nunca si hace poco se le rechazó otro. Sin este
+    # tope, avisar una transferencia falsa reabría las reservas para siempre.
+    revision_sostiene = en_revision is True
     if estado in (E.GRACE_PERIOD, E.PAST_DUE, E.EXPIRED):
         aviso_estado = None
         if db is not None:
@@ -204,6 +208,7 @@ def estado_suscripcion(
 
             aviso = cobranza.aviso_abierto(db, empresa.id)
             aviso_estado = aviso.estado if aviso is not None else None
+            revision_sostiene = aviso is not None and _revision_sostiene(db, empresa.id, aviso)
             if pago_pendiente is None:
                 pago_pendiente = _pago_mp_en_curso(db, empresa.id, hoy)
         elif en_revision:
@@ -223,7 +228,7 @@ def estado_suscripcion(
     # en revisión NO se cortan: el negocio ya hizo su parte.
     cerrada = base in (E.CANCELED, E.SUSPENDED) or (
         base in (E.PAST_DUE, E.EXPIRED) and corte is not None and hoy > corte
-        and estado not in (E.PAYMENT_REVIEW,)
+        and not (estado is E.PAYMENT_REVIEW and revision_sostiene)
     )
 
     etiqueta, tono = ETIQUETAS[estado]
@@ -244,6 +249,28 @@ def estado_suscripcion(
         "dias_hasta_corte": (corte - hoy).days if corte else None,
         "reservas_abiertas": not cerrada,
     }
+
+
+DIAS_REVISION = 3
+
+
+def _revision_sostiene(db, empresa_id: int, aviso) -> bool:
+    """¿Este aviso en revisión todavía mantiene abiertas las reservas web?"""
+    from sqlalchemy import select
+
+    from app.models.saas import AvisoPago
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    if aviso.creado_en is None or aviso.creado_en < ahora - dt.timedelta(days=DIAS_REVISION):
+        return False
+    rechazo = db.scalar(
+        select(AvisoPago.id).where(
+            AvisoPago.empresa_id == empresa_id,
+            AvisoPago.estado == "rechazada",
+            AvisoPago.resuelto_en >= ahora - dt.timedelta(days=30),
+        ).limit(1)
+    )
+    return rechazo is None
 
 
 def _pago_mp_en_curso(db, empresa_id: int, hoy: dt.date) -> bool:
