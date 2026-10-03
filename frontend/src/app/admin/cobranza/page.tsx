@@ -15,7 +15,18 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CalendarPlus, DollarSign, Search, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  CalendarPlus,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  RefreshCw,
+  Search,
+  UserMinus,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useConfirmar } from "@/components/confirmar";
 import { AvisosDePago } from "./avisos-de-pago";
@@ -24,6 +35,7 @@ import { HistorialAvisos } from "./historial-avisos";
 import {
   AvisoPago,
   EmpresaCobranza,
+  FiltroCobranza,
   VerificacionMP,
   PagoSuscripcion,
   ResumenCobranza,
@@ -59,20 +71,47 @@ const COLORES: Record<SemaforoColor, { punto: string; chip: string; label: strin
   azul: { punto: "bg-sky-500", chip: "bg-sky-500/10 text-sky-700 dark:text-sky-400", label: "En prueba" },
 };
 
-const FILTROS: { valor: SemaforoColor | ""; label: string }[] = [
+// Los filtros usan el ESTADO centralizado del servidor (el mismo que ve el
+// negocio), no el color del semáforo: «En revisión» o «Canceladas» no son
+// colores.
+const FILTROS: { valor: FiltroCobranza; label: string }[] = [
   { valor: "", label: "Todas" },
-  { valor: "rojo", label: "Vencidas" },
-  { valor: "amarillo", label: "Por vencer" },
-  { valor: "verde", label: "Al día" },
-  { valor: "azul", label: "En prueba" },
-  { valor: "gris", label: "Sin vencimiento" },
+  { valor: "en_revision", label: "En revisión" },
+  { valor: "por_vencer", label: "Por vencer" },
+  { valor: "vencidas", label: "Vencidas" },
+  { valor: "al_dia", label: "Al día" },
+  { valor: "en_prueba", label: "En prueba" },
+  { valor: "canceladas", label: "Canceladas" },
+  { valor: "sin_vencimiento", label: "Sin vencimiento" },
 ];
+
+const TONO_BADGE: Record<string, string> = {
+  ok: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  info: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
+  aviso: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  error: "bg-red-500/10 text-red-700 dark:text-red-400",
+  neutro: "bg-muted text-muted-foreground",
+};
+
+const ALERTA: Record<string, { clase: string; punto: string }> = {
+  rojo: { clase: "border-red-500/40 bg-red-500/5", punto: "bg-red-500" },
+  naranja: { clase: "border-orange-500/40 bg-orange-500/5", punto: "bg-orange-500" },
+  ambar: { clase: "border-amber-500/40 bg-amber-500/5", punto: "bg-amber-500" },
+  verde: { clase: "border-emerald-500/40 bg-emerald-500/5", punto: "bg-emerald-500" },
+};
+
+/** "2026-10-14" -> "14/10/2026" sin pasar por Date (evita el corrimiento de zona). */
+const FECHA = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
+};
 
 export default function CobranzaPage() {
   const confirmar = useConfirmar();
   const [empresas, setEmpresas] = useState<EmpresaCobranza[]>([]);
   const [resumen, setResumen] = useState<ResumenCobranza | null>(null);
-  const [color, setColor] = useState<SemaforoColor | "">("");
+  const [filtro, setFiltro] = useState<FiltroCobranza>("");
   const [buscar, setBuscar] = useState("");
   const [cargando, setCargando] = useState(true);
   const [cobrando, setCobrando] = useState<EmpresaCobranza | null>(null);
@@ -87,7 +126,7 @@ export default function CobranzaPage() {
     setCargando(true);
     try {
       const [lista, res] = await Promise.all([
-        listarCobranza({ buscar: buscar || undefined, color: color || undefined }),
+        listarCobranza({ buscar: buscar || undefined, filtro: filtro || undefined }),
         resumenCobranza(),
       ]);
       setEmpresas(lista);
@@ -97,7 +136,7 @@ export default function CobranzaPage() {
     } finally {
       setCargando(false);
     }
-  }, [buscar, color]);
+  }, [buscar, filtro]);
 
   useEffect(() => {
     const t = setTimeout(cargar, buscar ? 350 : 0); // debounce de la búsqueda
@@ -107,13 +146,22 @@ export default function CobranzaPage() {
   async function prorroga(e: EmpresaCobranza, dias: number) {
     // Es ACUMULATIVA: el backend hace vence = base + dias. Tres clicks son
     // treinta días regalados, y no hay "quitar prórroga" en el panel.
+    const nuevo = (() => {
+      if (!e.suscripcion_vence) return null;
+      const [a, m, d] = e.suscripcion_vence.split("-").map(Number);
+      const f = new Date(a, m - 1, d + dias);
+      return `${String(f.getDate()).padStart(2, "0")}/${String(f.getMonth() + 1).padStart(2, "0")}/${f.getFullYear()}`;
+    })();
     if (
       !(await confirmar({
         titulo: `¿Darle ${dias} días de gracia a ${e.nombre}?`,
         descripcion:
-          "Se le mueve el vencimiento sin registrar ningún pago. Es acumulativa: " +
-          "si la clickeás dos veces, son el doble de días. Desde el panel no se puede quitar.",
+          (nuevo
+            ? `El vencimiento pasa del ${FECHA(e.suscripcion_vence)} al ${nuevo}, sin registrar ningún pago. `
+            : "Se extiende la prueba sin registrar ningún pago. ") +
+          "Es acumulativa y queda en la auditoría. Se puede deshacer desde la ficha de la empresa.",
         textoAccion: `Sí, +${dias} días`,
+        textoCancelar: "Volver",
       }))
     )
       return;
@@ -137,26 +185,41 @@ export default function CobranzaPage() {
         </p>
       </div>
 
+      {/* Alertas: qué hay que mirar hoy. Cada una filtra la lista. */}
+      {resumen && resumen.alertas.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {resumen.alertas.map((a, i) => {
+            const st = ALERTA[a.nivel] ?? ALERTA.ambar;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  if (a.filtro) setFiltro(a.filtro);
+                  if (a.filtro === "en_revision")
+                    document.getElementById("pagos-pendientes")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${st.clase} ${
+                  a.filtro ? "hover:opacity-80" : "cursor-default"
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${st.punto}`} />
+                {a.texto}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Lo primero: quién dice que ya pagó y hay que confirmar en el banco. */}
-      <AvisosDePago
-        recargar={refrescoAvisos}
-        onCobrar={(empresaId, aviso) => {
-          const emp = empresas.find((e) => e.id === empresaId);
-          if (emp) {
-            setAvisoActivo(aviso);
-            setCobrando(emp);
-          } else {
-            toast.error("Buscá el negocio en la lista para registrar el cobro");
-          }
-        }}
-      />
+      <AvisosDePago recargar={refrescoAvisos} onCambio={cargar} />
 
       {/* Progreso de la cobranza del mes */}
       {resumen && <ProgresoDeCobros resumen={resumen} />}
 
-      {/* Balance rápido */}
+      {/* KPIs */}
       {resumen && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <Tarjeta
             titulo="Cobrado este mes"
             valor={PESOS(resumen.cobrado_mes)}
@@ -164,9 +227,7 @@ export default function CobranzaPage() {
             tono="emerald"
             pie={
               resumen.por_metodo.length > 0
-                ? resumen.por_metodo
-                    .map((m) => `${m.metodo}: ${PESOS(m.total)}`)
-                    .join(" · ")
+                ? resumen.por_metodo.map((m) => `${m.metodo}: ${PESOS(m.total)}`).join(" · ")
                 : "Sin pagos registrados"
             }
           />
@@ -177,10 +238,15 @@ export default function CobranzaPage() {
             tono="amber"
             pie={
               `${resumen.empresas_por_vencer} empresa${resumen.empresas_por_vencer === 1 ? "" : "s"}` +
-              (resumen.por_vencer_sin_precio > 0
-                ? ` · ${resumen.por_vencer_sin_precio} sin precio cargado`
-                : "")
+              (resumen.por_vencer_sin_precio > 0 ? ` · ${resumen.por_vencer_sin_precio} sin precio cargado` : "")
             }
+          />
+          <Tarjeta
+            titulo="En revisión"
+            valor={PESOS(resumen.monto_en_revision)}
+            icono={<Clock className="h-4 w-4" />}
+            tono="sky"
+            pie={`${resumen.pagos_en_revision} transferencia${resumen.pagos_en_revision === 1 ? "" : "s"} por verificar`}
           />
           <Tarjeta
             titulo="Deuda vencida"
@@ -194,7 +260,28 @@ export default function CobranzaPage() {
             valor={PESOS(resumen.mrr)}
             icono={<Users className="h-4 w-4" />}
             tono="sky"
-            pie="Suma de precios pactados activos"
+            pie="Cuotas de las suscripciones vivas"
+          />
+          <Tarjeta
+            titulo="Suscripciones activas"
+            valor={String(resumen.suscripciones_activas)}
+            icono={<CheckCircle2 className="h-4 w-4" />}
+            tono="emerald"
+            pie={`${resumen.empresas_en_prueba} en prueba`}
+          />
+          <Tarjeta
+            titulo="Cancelaciones"
+            valor={String(resumen.cancelaciones_mes)}
+            icono={<UserMinus className="h-4 w-4" />}
+            tono="red"
+            pie={`este mes · ${resumen.cancelaciones_programadas} programada${resumen.cancelaciones_programadas === 1 ? "" : "s"}`}
+          />
+          <Tarjeta
+            titulo="Renovaciones próximas"
+            valor={String(resumen.empresas_por_vencer)}
+            icono={<RefreshCw className="h-4 w-4" />}
+            tono="amber"
+            pie={`${resumen.renovaciones_mes} pago${resumen.renovaciones_mes === 1 ? "" : "s"} acreditado${resumen.renovaciones_mes === 1 ? "" : "s"} este mes`}
           />
         </div>
       )}
@@ -204,9 +291,9 @@ export default function CobranzaPage() {
         {FILTROS.map((f) => (
           <button
             key={f.valor || "todas"}
-            onClick={() => setColor(f.valor)}
+            onClick={() => setFiltro(f.valor)}
             className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-              color === f.valor
+              filtro === f.valor
                 ? "bg-primary text-primary-foreground"
                 : "border hover:bg-muted/50"
             }`}
@@ -263,12 +350,12 @@ export default function CobranzaPage() {
                       <div className="flex items-center gap-2.5">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${c.punto}`} />
                         <div className="min-w-0">
-                          <button
-                            onClick={() => setFicha(e)}
+                          <a
+                            href={`/admin/empresas/${e.id}`}
                             className="truncate font-medium hover:underline"
                           >
                             {e.nombre}
-                          </button>
+                          </a>
                           <p className="truncate text-xs text-muted-foreground">
                             {e.contacto_telefono || e.contacto_email || `/${e.slug}`}
                             {!e.activa && " · PAUSADA"}
@@ -277,15 +364,19 @@ export default function CobranzaPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${c.chip}`}>
-                        {c.label}
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                          TONO_BADGE[e.estado_tono] ?? c.chip
+                        }`}
+                      >
+                        {e.estado_etiqueta ?? c.label}
                       </span>
-                      {e.semaforo_en_prorroga && (
-                        <span className="ml-1 text-xs text-muted-foreground">en gracia</span>
+                      {e.plan_programado && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">baja programada</p>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="tabular-nums">{e.suscripcion_vence ?? "—"}</span>
+                      <span className="tabular-nums">{FECHA(e.suscripcion_vence)}</span>
                       <p className="text-xs text-muted-foreground">{e.semaforo_detalle}</p>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
@@ -344,6 +435,9 @@ export default function CobranzaPage() {
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => prorroga(e, 10)}>
                           +10d
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setFicha(e)}>
+                          Ficha
                         </Button>
                       </div>
                     </td>
@@ -502,17 +596,17 @@ function Tarjeta({
     sky: "bg-sky-500/10 text-sky-600",
   }[tono];
   return (
-    <div className="rounded-2xl border p-4">
+    <div className="min-w-0 rounded-2xl border p-3 sm:p-4">
       <div className="flex items-center gap-2">
         <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${fondos}`}>
           {icono}
         </span>
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="min-w-0 text-[11px] font-medium uppercase leading-tight tracking-wide text-muted-foreground sm:text-xs">
           {titulo}
         </span>
       </div>
       <p
-        className="mt-2 text-2xl font-bold tabular-nums"
+        className="mt-2 truncate text-xl font-bold tabular-nums sm:text-2xl"
         style={{ fontFamily: "var(--fuente-titulos)" }}
       >
         {valor}
@@ -683,6 +777,14 @@ function DialogCobro({
   const [renovar, setRenovar] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [historial, setHistorial] = useState<PagoSuscripcion[]>([]);
+  const confirmar = useConfirmar();
+  // UNA clave por apertura del diálogo: un doble click o un reintento por red
+  // devuelven el mismo pago en vez de registrar dos cuotas y regalar un mes.
+  const [clave] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now()}${Math.random().toString(36).slice(2)}`,
+  );
 
   useEffect(() => {
     historialPagos(empresa.id).then(setHistorial).catch(() => setHistorial([]));
@@ -698,14 +800,24 @@ function DialogCobro({
   // para que nadie confirme a ciegas.
   const venceDespues = (() => {
     if (!renovar) return empresa.suscripcion_vence;
-    const hoy = new Date();
+    // Mismo cálculo que el backend: si todavía está dentro de los días de
+    // gracia se cuenta desde el vencimiento; si no, desde hoy. Todo en fecha
+    // LOCAL (toISOString pasaría a UTC y de noche correría un día).
+    const ahora = new Date();
+    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    const limite = new Date(hoy);
+    limite.setDate(limite.getDate() - 3);
     const actual = empresa.suscripcion_vence
-      ? new Date(`${empresa.suscripcion_vence}T00:00:00`)
+      ? (() => {
+          const [a, m, d] = empresa.suscripcion_vence.split("-").map(Number);
+          return new Date(a, m - 1, d);
+        })()
       : null;
-    const base = actual && actual > hoy ? actual : hoy;
+    const base = actual && actual >= limite ? actual : hoy;
     const d = new Date(base);
     d.setDate(d.getDate() + 30);
-    return d.toISOString().slice(0, 10);
+    const fin = actual && actual > d ? actual : d;
+    return `${fin.getFullYear()}-${String(fin.getMonth() + 1).padStart(2, "0")}-${String(fin.getDate()).padStart(2, "0")}`;
   })();
 
   async function guardar() {
@@ -713,6 +825,19 @@ function DialogCobro({
       toast.error("Ingresá un monto válido");
       return;
     }
+    const ok = await confirmar({
+      titulo: `¿Registrar ${PESOS(valor)} de ${empresa.nombre}?`,
+      descripcion:
+        `Entra por ${metodo}` +
+        (cambiaPlan ? `, pasa a ${planElegido?.etiqueta ?? plan}` : "") +
+        (renovar
+          ? ` y el vencimiento pasa del ${FECHA(empresa.suscripcion_vence)} al ${FECHA(venceDespues)}.`
+          : " sin mover el vencimiento.") +
+        (difiere ? ` Ojo: lo esperado es ${PESOS(esperado)}.` : ""),
+      textoAccion: "Sí, registrar pago",
+      textoCancelar: "Volver",
+    });
+    if (!ok) return;
     setGuardando(true);
     try {
       await registrarPago(empresa.id, {
@@ -721,6 +846,7 @@ function DialogCobro({
         notas: notas || undefined,
         renovar,
         plan,
+        clave_idempotencia: clave,
       });
       toast.success(
         cambiaPlan
@@ -902,10 +1028,8 @@ function DialogCobro({
               </li>
               <li>
                 Vence{" "}
-                <span className="tabular-nums">
-                  {empresa.suscripcion_vence ?? "—"}
-                </span>{" "}
-                → <span className="font-semibold tabular-nums">{venceDespues ?? "—"}</span>
+                <span className="tabular-nums">{FECHA(empresa.suscripcion_vence)}</span>{" "}
+                → <span className="font-semibold tabular-nums">{FECHA(venceDespues)}</span>
                 {!renovar && " (sin cambio)"}
               </li>
               {aviso && <li>El aviso sale de la bandeja.</li>}

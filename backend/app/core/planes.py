@@ -281,7 +281,13 @@ def plan_de(valor: str | None) -> Plan:
 
     `"basico"` se mapea a INICIAL: es el nombre viejo del mismo plan, y las
     empresas que lo tengan escrito en la base no se enteran del cambio.
+
+    Si ya es un `Plan`, se devuelve tal cual. Antes `str(Plan.PRO)` daba
+    "Plan.PRO", no se reconocía y caía a GRATUITO: la ficha del admin mostraba
+    4 usuarios de tope para una empresa Pro (que tiene 11).
     """
+    if isinstance(valor, Plan):
+        return valor
     crudo = str(valor or "").strip().lower()
     if crudo == "basico":
         return Plan.INICIAL

@@ -270,7 +270,8 @@ class AutomatizacionesConfig(BaseModel):
 
 class SuscripcionOut(BaseModel):
     plan: str
-    estado: str  # prueba | activa | prorroga | vencida | sin_vencimiento
+    # Uno de core/estados_suscripcion.py::EstadoSuscripcion (en castellano).
+    estado: str
     vence: str | None
     dias_restantes: int | None
     en_prorroga: bool
@@ -278,6 +279,12 @@ class SuscripcionOut(BaseModel):
     # Hasta cuándo puede pagar sin que se corte el servicio (vencimiento + gracia).
     corte: str | None = None
     dias_hasta_corte: int | None = None
+    # El estado sin superponer pagos en curso, la etiqueta para el cliente y
+    # el tono semántico del badge (ok · info · aviso · error · neutro).
+    estado_base: str | None = None
+    etiqueta: str | None = None
+    tono: str | None = None
+    reservas_abiertas: bool = True
 
 
 class PagoSuscripcionOut(BaseModel):
@@ -292,6 +299,11 @@ class PagoSuscripcionOut(BaseModel):
     metodo: str
     periodo_desde: str | None = None
     periodo_hasta: str | None = None
+    # alta · renovacion · cambio_plan · reactivacion · manual
+    tipo: str | None = None
+    tipo_etiqueta: str | None = None
+    plan_etiqueta: str | None = None
+    estado: str = "aprobado"
 
 
 class DatosCobro(BaseModel):
@@ -361,12 +373,42 @@ class MiSuscripcionOut(SuscripcionOut):
     # donde acordarse de agregar un campo.
     debito: dict | None = None
     debito_disponible: bool = False
+    # Método con el que paga hoy, separado de CÓMO está el pago.
+    metodo_pago: str | None = None
+    metodo_pago_etiqueta: str | None = None
+    estado_pago: str = "al_dia"  # al_dia · en_revision · info_solicitada · rechazado · pendiente · adeuda
+    proxima_renovacion: str | None = None
+    renovacion_automatica: bool = False
+    ultimo_pago: dict | None = None
+    uso: dict = {}
+    topes: dict = {}
+    aviso: dict | None = None
+    aviso_rechazado: dict | None = None
+    ultimo_intento: dict | None = None
+    cancelacion: dict | None = None
+    actividad: list[dict] = []
+    referencia_transferencia: str | None = None
+    fecha_limite_pago: str | None = None
 
 
 class CambioPlanIn(BaseModel):
-    """El dueño elige a qué plan pasar desde «Mi suscripción»."""
+    """El dueño elige a qué plan pasar desde «Mi suscripción».
+
+    `confirmo` es la segunda confirmación: sin ella el servidor no ejecuta el
+    cambio (la pantalla la manda recién después del modal de confirmación).
+    """
 
     plan: str = Field(min_length=1, max_length=20)
+    confirmo: bool = False
+
+
+class CancelarSuscripcionIn(BaseModel):
+    motivo: str | None = Field(default=None, max_length=300)
+    confirmo: bool = False
+
+
+class ConfirmacionIn(BaseModel):
+    confirmo: bool = False
 
 
 class ReglasReservaConfig(BaseModel):
@@ -450,9 +492,15 @@ class SeguimientoConfig(BaseModel):
 
 
 class AvisoPagoIn(BaseModel):
-    """El dueño avisa que ya pagó la cuota (transferencia)."""
+    """El dueño avisa que ya pagó la cuota (transferencia).
+
+    `plan` es el que está comprando; el servidor lo valida y decide el monto
+    esperado. `comprobante` es el id que devolvió la subida privada.
+    """
 
     monto: float | None = Field(default=None, ge=0, le=100_000_000)
+    plan: str | None = Field(default=None, max_length=20)
+    comprobante: str | None = Field(default=None, max_length=80, pattern=r"^[a-f0-9]{32}\.webp$")
     # Número de operación, banco, lo que quiera aclarar. Es lo que Leandro va a
     # tener a la vista cuando lo busque en el resumen del banco.
     referencia: str | None = Field(default=None, max_length=300)

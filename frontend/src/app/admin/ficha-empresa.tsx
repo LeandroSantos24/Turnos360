@@ -225,7 +225,7 @@ export function Ficha({ empresaId }: { empresaId: number }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Dato
           titulo="Estado"
-          valor={s.detalle}
+          valor={s.etiqueta ?? s.detalle}
           tono={TONO[s.color]}
           pie={s.vence ? `Vence ${FECHA(s.vence)}` : "Sin vencimiento"}
         />

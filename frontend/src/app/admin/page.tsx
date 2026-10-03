@@ -179,9 +179,10 @@ export default function AdminEmpresasPage() {
       !(await confirmar({
         titulo: emp.activa ? `¿Pausar ${emp.nombre}?` : `¿Reactivar ${emp.nombre}?`,
         descripcion: emp.activa
-          ? "Sus usuarios no van a poder entrar al panel y su página pública deja de tomar reservas."
+          ? "Sus usuarios no van a poder entrar al panel y su página pública deja de tomar reservas. Los datos no se tocan y queda en la auditoría."
           : "Vuelve a tener acceso al panel y su página pública vuelve a tomar reservas.",
         textoAccion: emp.activa ? "Sí, pausar" : "Sí, reactivar",
+        textoCancelar: "Volver",
         destructivo: emp.activa,
       }))
     )
@@ -201,9 +202,11 @@ export default function AdminEmpresasPage() {
       !(await confirmar({
         titulo: `¿Renovar 30 días a ${emp.nombre}?`,
         descripcion:
-          "Le mueve el vencimiento un mes hacia adelante SIN registrar un pago. " +
+          `El vencimiento${emp.suscripcion_vence ? ` (hoy ${emp.suscripcion_vence.split("-").reverse().join("/")})` : ""} ` +
+          "pasa a dentro de 30 días SIN registrar un pago. Queda en la auditoría. " +
           "Si lo que querés es anotar una cuota cobrada, hacelo desde Cobranza.",
         textoAccion: "Sí, renovar 30 días",
+        textoCancelar: "Volver",
       }))
     )
       return;
@@ -487,15 +490,21 @@ function ChipSuscripcion({ estado, plan }: { estado: string; plan: string }) {
       </span>
     );
   }
+  // Todos los estados de core/estados_suscripcion.py. El fallback es GRIS:
+  // un estado nuevo nunca se pinta de verde «Activa» por defecto.
   const map: Record<string, { txt: string; color: string }> = {
-    // "prueba" tiene que estar: sin ella el fallback de abajo pinta de
-    // verde "Activa" a una empresa que está en prueba y no pagó nada.
     prueba: { txt: "En prueba", color: "#0ea5e9" },
     activa: { txt: "Activa", color: "#10b981" },
-    prorroga: { txt: "En prórroga", color: "#f59e0b" },
+    pendiente_pago: { txt: "Pago pendiente", color: "#f59e0b" },
+    en_revision: { txt: "Pago en revisión", color: "#0ea5e9" },
+    prorroga: { txt: "En gracia", color: "#f59e0b" },
     vencida: { txt: "Vencida", color: "#ef4444" },
+    cancelacion_programada: { txt: "Cancelación programada", color: "#f59e0b" },
+    cancelada: { txt: "Cancelada", color: "#6b7280" },
+    suspendida: { txt: "Suspendida", color: "#ef4444" },
+    prueba_vencida: { txt: "Prueba terminada", color: "#ef4444" },
   };
-  const s = map[estado] ?? map.activa;
+  const s = map[estado] ?? { txt: estado, color: "#6b7280" };
   return (
     <span
       className="rounded-full px-2 py-0.5 text-xs font-semibold"

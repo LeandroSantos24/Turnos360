@@ -6,7 +6,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
-from app.schemas.empresa import AvisoPagoIn, CambioPlanIn, MiSuscripcionOut, SuscripcionOut, AutomatizacionesConfig, EmpresaActualOut, LandingConfig, ReglasReservaConfig, SeguimientoConfig, SenasConfigIn, SenasConfigOut
+from app.schemas.empresa import (
+    AutomatizacionesConfig,
+    AvisoPagoIn,
+    CambioPlanIn,
+    CancelarSuscripcionIn,
+    ConfirmacionIn,
+    EmpresaActualOut,
+    LandingConfig,
+    MiSuscripcionOut,
+    ReglasReservaConfig,
+    SeguimientoConfig,
+    SenasConfigIn,
+    SenasConfigOut,
+    SuscripcionOut,
+)
 from app.services import empresa as svc
 from app.services import mercadopago as mp
 from app.services import mp_debito
@@ -193,6 +207,7 @@ def leer_mi_suscripcion(empresa_id: EmpresaActual, db: DB) -> MiSuscripcionOut:
 def pagar_suscripcion_mp(
     request: Request,
     empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
     db: DB,
     plan: str | None = None,
 ) -> dict:
@@ -232,7 +247,8 @@ def pagar_suscripcion_mp(
             )
         plan = elegido.value
 
-    url = mp_sus.crear_preferencia(empresa, plan)
+    _exigir_operacion(db, empresa, "pagar")
+    url = mp_sus.crear_preferencia(empresa, plan, db=db, iniciado_por=usuario.email)
     if not url:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
@@ -289,6 +305,7 @@ def activar_debito_automatico(
     empresa = db.get(Empresa, empresa_id)
     if empresa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    _exigir_operacion(db, empresa, "pagar")
 
     # A qué mail le cobra Mercado Pago. Es el del dueño que está pidiendo el
     # débito: es su tarjeta y son sus avisos de cada cobro. El email público
@@ -362,6 +379,48 @@ def cancelar_debito_automatico(
     return {"ok": True}
 
 
+def _exigir_operacion(db, empresa, operacion: str) -> str:
+    """409 si la operación no se puede hacer desde el estado actual."""
+    from app.core import estados_suscripcion as est_sus
+    from app.services.suscripcion import estado_suscripcion
+
+    estado = estado_suscripcion(empresa, db)["estado"]
+    est_sus.exigir(estado, operacion)
+    return estado
+
+
+def _empresa_o_404(db, empresa_id: int):
+    from app.models.organizacion import Empresa
+
+    empresa = db.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    return empresa
+
+
+def _plan_vendible(plan: str):
+    from app.core import planes
+
+    destino = planes.plan_de(plan)
+    if not planes.se_vende_solo(destino):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ese plan no se contrata online. Escribinos y lo armamos con vos.",
+        )
+    return destino
+
+
+@router.get("/suscripcion/cambio-plan", dependencies=[Depends(gate_dueno)])
+def ver_cambio_de_plan(plan: str, empresa_id: EmpresaActual, db: DB) -> dict:
+    """Resumen del cambio ANTES de confirmarlo: precio, desde cuándo, qué
+    gana, qué pierde y qué tendría que reducir. Lo calcula el servidor."""
+    from app.services import cobranza
+
+    empresa = _empresa_o_404(db, empresa_id)
+    destino = _plan_vendible(plan)
+    return cobranza.vista_previa_cambio(db, empresa, destino.value)
+
+
 @router.post("/suscripcion/cambiar-plan", dependencies=[Depends(gate_dueno)])
 @limiter.limit("10/minute")
 def cambiar_plan(
@@ -379,24 +438,20 @@ def cambiar_plan(
     quedaría con el plan gratis.
 
     BAJAR se anota: el ciclo actual ya está pagado y se usa entero. Al vencer,
-    el barrido diario aplica la baja.
+    el barrido diario aplica la baja (si lo que usa entra en el plan nuevo).
+
+    `confirmo` es la segunda confirmación de la pantalla: sin ella no se
+    ejecuta nada. El precio y el plan los decide el servidor.
     """
     from app.core import planes
-    from app.models.organizacion import Empresa
     from app.services import cobranza
 
-    empresa = db.get(Empresa, empresa_id)
-    if empresa is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
-
-    destino = planes.plan_de(datos.plan)
-    if not planes.se_vende_solo(destino):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Ese plan no se contrata online. Escribinos y lo armamos con vos.",
-        )
-
+    empresa = _empresa_o_404(db, empresa_id)
+    destino = _plan_vendible(datos.plan)
     movimiento = cobranza.cambio_de_plan(empresa, destino.value)
+
+    if (movimiento != "mismo" or empresa.plan_programado) and not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar el cambio de plan.")
 
     if movimiento == "mismo":
         # Puede ser el que quiere CANCELAR una baja: eligió de nuevo el plan
@@ -412,25 +467,33 @@ def cambiar_plan(
         return {"accion": "ninguna", "detalle": "Ya estás en ese plan."}
 
     if movimiento == "baja":
+        _exigir_operacion(db, empresa, "bajar_plan")
         cuando = cobranza.programar_baja(db, empresa, destino.value, hecho_por=usuario.email)
         db.commit()
         if cuando is None:
+            from app.services import mp_debito
+
+            mp_debito.ajustar_al_plan(db, empresa)
             return {
                 "accion": "aplicada",
                 "detalle": f"Pasaste a {planes.limites_de(destino.value).etiqueta}.",
             }
+        pendientes = cobranza.incompatibilidades(db, empresa, destino.value)
         return {
             "accion": "programada",
             "desde": cuando.isoformat(),
+            "incompatibilidades": pendientes,
             "detalle": (
                 f"El mes que ya pagaste lo usás entero: seguís en "
                 f"{planes.limites_de(empresa.plan).etiqueta} hasta el "
                 f"{cuando.strftime('%d/%m/%Y')} y ahí pasás a "
                 f"{planes.limites_de(destino.value).etiqueta}."
+                + (" Antes de esa fecha tenés que reducir lo que se indica." if pendientes else "")
             ),
         }
 
     # Sube: hay que pagar.
+    _exigir_operacion(db, empresa, "subir_plan")
     if not mp_sus.esta_activo():
         return {
             "accion": "pagar_transferencia",
@@ -441,7 +504,7 @@ def cambiar_plan(
             ),
         }
 
-    url = mp_sus.crear_preferencia(empresa, destino.value)
+    url = mp_sus.crear_preferencia(empresa, destino.value, db=db, iniciado_por=usuario.email)
     if not url:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
@@ -449,6 +512,65 @@ def cambiar_plan(
             "pagá por transferencia.",
         )
     return {"accion": "pagar", "url": url}
+
+
+@router.post("/suscripcion/cancelar", dependencies=[Depends(gate_dueno)])
+@limiter.limit("5/minute")
+def cancelar_suscripcion(
+    request: Request,
+    datos: CancelarSuscripcionIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> dict:
+    """El negocio cancela. Sigue activo hasta el vencimiento; no se borra nada."""
+    from app.services import cobranza
+
+    if not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar la cancelación.")
+    empresa = _empresa_o_404(db, empresa_id)
+    r = cobranza.cancelar_suscripcion(
+        db, empresa, motivo=datos.motivo, hecho_por=usuario.email or "dueño", actor_tipo="dueno"
+    )
+    if r["activa_hasta"]:
+        fecha = r["activa_hasta"]
+        r["detalle"] = (
+            "Listo. Tu suscripción queda activa hasta el "
+            f"{fecha[8:10]}/{fecha[5:7]}/{fecha[:4]} y después no se renueva. "
+            "Tus datos no se borran: podés reactivarla cuando quieras."
+        )
+    else:
+        r["detalle"] = (
+            "Tu suscripción quedó cancelada. Tus datos no se borran: podés "
+            "reactivarla cuando quieras."
+        )
+    return r
+
+
+@router.post("/suscripcion/reactivar", dependencies=[Depends(gate_dueno)])
+@limiter.limit("5/minute")
+def reactivar_suscripcion(
+    request: Request,
+    datos: ConfirmacionIn,
+    empresa_id: EmpresaActual,
+    usuario: UsuarioActual,
+    db: DB,
+) -> dict:
+    """Deshace la cancelación (antes o después de que se haga efectiva)."""
+    from app.services import cobranza
+
+    if not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar la reactivación.")
+    empresa = _empresa_o_404(db, empresa_id)
+    r = cobranza.reactivar_suscripcion(
+        db, empresa, hecho_por=usuario.email or "dueño", actor_tipo="dueno"
+    )
+    r["detalle"] = (
+        "¡Bienvenido de vuelta! Tu suscripción sigue normalmente."
+        if r["estado"] in ("activa", "prueba", "sin_vencimiento")
+        else "Listo, se deshizo la cancelación. Para seguir usando todo, pagá la cuota."
+    )
+    return r
 
 
 @router.post("/suscripcion/aviso-pago", dependencies=[Depends(gate_dueno)])
@@ -460,18 +582,27 @@ def avisar_pago(
     usuario: UsuarioActual,
     db: DB,
 ) -> dict:
-    """El dueño avisa que transfirió. Queda pendiente de confirmación.
+    """El dueño avisa que transfirió. Queda en revisión.
 
     NO mueve el vencimiento: una transferencia tarda en verse en la cuenta y
     dar por cobrado lo que alguien dice que pagó convierte la cobranza en un
     número de buena fe. Lo confirma Leandro contra el banco.
+
+    El servidor decide qué se está pagando (plan, tipo y monto esperado). El
+    comprobante tiene que haberse subido antes por /subidas/comprobante y
+    pertenecer a esta empresa.
     """
-    from app.models.organizacion import Empresa
+    from app.routers.subidas import ruta_comprobante
     from app.services import cobranza
 
-    empresa = db.get(Empresa, empresa_id)
-    if empresa is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Empresa no encontrada")
+    empresa = _empresa_o_404(db, empresa_id)
+    _exigir_operacion(db, empresa, "avisar_pago")
+    plan = _plan_vendible(datos.plan).value if datos.plan else None
+    if datos.comprobante and not ruta_comprobante(empresa_id, datos.comprobante).is_file():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No encontramos el comprobante. Volvé a adjuntarlo.",
+        )
 
     cobranza.registrar_aviso(
         db,
@@ -480,6 +611,8 @@ def avisar_pago(
         monto=datos.monto,
         referencia=datos.referencia,
         avisado_por=usuario.email,
+        plan=plan,
+        comprobante=datos.comprobante,
     )
 
     # Este es el aviso MÁS urgente de los dos: es el único que necesita que
@@ -501,24 +634,27 @@ def avisar_pago(
         log.exception("No se pudo avisar la transferencia (empresa %s)", empresa_id)
 
     return {
+        "estado": "en_revision",
         "detalle": (
-            "¡Gracias! Tu pago quedó en proceso. Lo confirmamos dentro de las "
+            "¡Gracias! Tu pago quedó en revisión. Lo confirmamos dentro de las "
             "próximas 24 horas hábiles y vas a ver el vencimiento actualizado "
             "en esta misma pantalla."
-        )
+        ),
     }
 
 
 @router.get("/suscripcion/aviso-pago", dependencies=[Depends(gate_dueno)])
 def leer_aviso_pago(empresa_id: EmpresaActual, db: DB) -> dict:
-    """¿Hay un aviso de pago esperando confirmación? Para no repetir el cartel."""
+    """¿Hay un aviso de pago abierto? Para no repetir el cartel."""
     from app.services import cobranza
 
-    aviso = cobranza.aviso_pendiente(db, empresa_id)
+    aviso = cobranza.aviso_abierto(db, empresa_id)
     if aviso is None:
         return {"pendiente": False}
     return {
         "pendiente": True,
+        "estado": aviso.estado,
+        "mensaje_admin": aviso.mensaje_admin,
         "creado_en": aviso.creado_en.isoformat() if aviso.creado_en else None,
         "monto": float(aviso.monto) if aviso.monto is not None else None,
     }
@@ -533,4 +669,4 @@ def leer_suscripcion(empresa_id: EmpresaActual, db: DB) -> SuscripcionOut:
     empresa = db.get(Empresa, empresa_id)
     if empresa is None:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
-    return SuscripcionOut(**estado_suscripcion(empresa))
+    return SuscripcionOut(**estado_suscripcion(empresa, db))

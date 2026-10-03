@@ -1,8 +1,11 @@
 "use client";
 
 /**
- * Gestión de usuarios de una empresa (/admin/empresas/[id]).
- * Lista los usuarios, permite crear uno nuevo con su rol y activar/desactivar.
+ * Ficha de una empresa (/admin/empresas/[id]).
+ *
+ * Arriba la suscripción con sus acciones críticas (cancelar, reactivar,
+ * suspender), después datos · uso · cobranza · actividad (la ficha), los
+ * usuarios, los movimientos de la suscripción y la auditoría del admin.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -40,6 +43,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MovimientosSuscripcion } from "./movimientos-suscripcion";
+import { AuditoriaEmpresa, GestionSuscripcion } from "./gestion-suscripcion";
+import { Ficha } from "../../ficha-empresa";
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
@@ -70,6 +75,8 @@ export default function AdminUsuariosPage() {
   const [email, setEmail] = useState("");
   const [clave, setClave] = useState("");
   const [rol, setRol] = useState<RolUsuario | "">("");
+  // Sube cuando una acción cambia la suscripción: las secciones se recargan.
+  const [version, setVersion] = useState(0);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -156,10 +163,9 @@ export default function AdminUsuariosPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold" style={SYNE}>
-            Usuarios
+            {nombreEmpresa || "Empresa"}
           </h1>
           <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-            {nombreEmpresa || "Empresa"}
             {slugEmpresa && (
               <button
                 type="button"
@@ -171,6 +177,21 @@ export default function AdminUsuariosPage() {
             )}
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 space-y-4">
+        <GestionSuscripcion
+          empresaId={empresaId}
+          version={version}
+          onCambio={() => setVersion((v) => v + 1)}
+        />
+        <div className="overflow-hidden rounded-2xl border">
+          <Ficha key={version} empresaId={empresaId} />
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Usuarios</h2>
         <Dialog
           open={abierto}
           onOpenChange={(o) => {
@@ -269,8 +290,17 @@ export default function AdminUsuariosPage() {
         </div>
       )}
 
-      <div className="pt-4">
-        <MovimientosSuscripcion empresaId={empresaId} nombre={nombreEmpresa} />
+      <div className="pt-6">
+        <MovimientosSuscripcion
+          key={`m${version}`}
+          empresaId={empresaId}
+          nombre={nombreEmpresa}
+          onCambio={() => setVersion((v) => v + 1)}
+        />
+      </div>
+
+      <div className="pt-6">
+        <AuditoriaEmpresa empresaId={empresaId} version={version} />
       </div>
     </div>
   );

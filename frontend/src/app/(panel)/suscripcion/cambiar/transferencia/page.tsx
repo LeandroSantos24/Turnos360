@@ -21,6 +21,8 @@ import {
   FilaCopiable,
   PasoLayout,
   SYNE,
+  fechaLarga,
+  montoDe,
   pesos,
   planDeLaUrl,
   useSuscripcion,
@@ -35,7 +37,7 @@ function Transferencia() {
   if (cargando || !datos) return <Cargando />;
 
   const destino = planDeLaUrl(datos, codigo);
-  const monto = destino?.precio ?? datos.cuota;
+  const monto = montoDe(datos, destino);
   const c = datos.cobro;
   const hayTransferencia = Boolean(c.cbu || c.alias);
 
@@ -72,6 +74,12 @@ function Transferencia() {
         {destino && (
           <p className="mt-1 text-sm text-muted-foreground">{destino.resumen}</p>
         )}
+        {datos.fecha_limite_pago && datos.estado !== "prueba" && (
+          <p className="mt-2 text-sm">
+            Fecha límite para que no se corte nada:{" "}
+            <b>{fechaLarga(datos.fecha_limite_pago)}</b>
+          </p>
+        )}
       </section>
 
       <section className="rounded-2xl border bg-card p-5 md:p-6">
@@ -79,6 +87,10 @@ function Transferencia() {
           A esta cuenta
         </h2>
         <div className="mt-3 divide-y rounded-xl border px-3.5">
+          {monto !== null && <FilaCopiable etiqueta="Importe" valor={String(monto)} />}
+          {/* El concepto es lo que permite encontrar la transferencia en el
+              resumen del banco sin adivinar de quién es. */}
+          <FilaCopiable etiqueta="Concepto / referencia" valor={datos.referencia_transferencia} />
           {c.alias && <FilaCopiable etiqueta="Alias" valor={c.alias} />}
           {c.cbu && <FilaCopiable etiqueta="CBU" valor={c.cbu} />}
           {c.titular && (
@@ -112,10 +124,10 @@ function Transferencia() {
           <ol className="mt-1.5 space-y-1 pl-4 text-sm text-muted-foreground">
             <li className="list-decimal">
               Transferís {monto ? <b>{pesos(monto)}</b> : "el importe"} a los
-              datos de arriba.
+              datos de arriba, con el concepto <b>{datos.referencia_transferencia}</b>.
             </li>
             <li className="list-decimal">
-              Volvés acá y nos avisás en el paso siguiente.
+              Volvés acá y nos avisás en el paso siguiente (podés adjuntar el comprobante).
             </li>
             <li className="list-decimal">
               Lo confirmamos contra el banco: tu vencimiento se corre 30 días.

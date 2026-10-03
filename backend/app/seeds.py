@@ -155,7 +155,9 @@ def _credenciales_superadmin() -> tuple[str, str, bool]:
     imprime UNA vez: sigue siendo cómodo para desarrollo, pero deja de ser
     una clave que cualquiera puede leer en internet.
     """
-    email = (os.environ.get("SUPERADMIN_EMAIL") or "admin@turnos360.local").strip()
+    # «.local» es un dominio reservado: el login (EmailStr) lo rechaza y el
+    # super-admin del seed no podía entrar nunca.
+    email = (os.environ.get("SUPERADMIN_EMAIL") or "admin@turnos360.com").strip()
     clave = (os.environ.get("SUPERADMIN_PASS") or "").strip()
     if clave:
         return email, clave, False

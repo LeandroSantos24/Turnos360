@@ -412,7 +412,7 @@ def _llamadas(monkeypatch):
 
     monkeypatch.setattr(
         router_publico.mp_sus, "acreditar",
-        lambda db, ident: vistas.append(("pago_suelto", ident)),
+        lambda db, ident, accion="": vistas.append(("pago_suelto", ident)),
     )
     monkeypatch.setattr(
         router_publico.mp_debito, "acreditar_cobro",

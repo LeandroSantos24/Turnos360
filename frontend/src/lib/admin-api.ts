@@ -4,6 +4,7 @@
  */
 
 import { ApiError } from "./api";
+import type { EstadoSuscripcion, TonoEstado } from "./empresa-api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ADMIN_TOKEN_KEY = "turnos360_admin_token";
@@ -60,6 +61,7 @@ const adminApi = {
 };
 
 // ---------- Tipos ----------
+export type { EstadoSuscripcion, TonoEstado };
 export interface RubroAdmin {
   id: number;
   codigo: string;
@@ -74,13 +76,8 @@ export interface EmpresaAdmin {
   cantidad_usuarios: number;
   plan: string;
   suscripcion_vence: string | null;
-  /** Sale de estado_suscripcion(): incluye "prueba". */
-  estado_suscripcion:
-    | "prueba"
-    | "activa"
-    | "prorroga"
-    | "vencida"
-    | "sin_vencimiento";
+  /** Sale de estado_suscripcion() (core/estados_suscripcion.py). */
+  estado_suscripcion: EstadoSuscripcion;
 }
 export type RolUsuario = "dueno" | "admin" | "recepcion" | "profesional";
 export interface UsuarioAdmin {
@@ -133,8 +130,12 @@ export function crearEmpresa(datos: {
 }): Promise<EmpresaAdmin> {
   return adminApi.post<EmpresaAdmin>("/admin/empresas", datos);
 }
-export function pausarEmpresa(id: number, activa: boolean): Promise<EmpresaAdmin> {
-  return adminApi.patch<EmpresaAdmin>(`/admin/empresas/${id}`, { activa });
+export function pausarEmpresa(
+  id: number,
+  activa: boolean,
+  motivo?: string | null,
+): Promise<EmpresaAdmin> {
+  return adminApi.patch<EmpresaAdmin>(`/admin/empresas/${id}`, { activa, motivo: motivo || null });
 }
 
 export function setearSuscripcion(
@@ -203,6 +204,29 @@ export interface EmpresaCobranza {
   semaforo_fin_prorroga: string | null;
   semaforo_en_prorroga: boolean;
   semaforo_detalle: string;
+  /** Estado centralizado, con su etiqueta y tono (los mismos que ve el negocio). */
+  estado: EstadoSuscripcion;
+  estado_etiqueta: string;
+  estado_tono: TonoEstado;
+  cancela_al_vencer: boolean;
+  plan_programado: string | null;
+}
+
+/** Chips de filtro del panel de cobranza. "" = todas. */
+export type FiltroCobranza =
+  | ""
+  | "en_revision"
+  | "por_vencer"
+  | "vencidas"
+  | "al_dia"
+  | "en_prueba"
+  | "canceladas"
+  | "sin_vencimiento";
+
+export interface AlertaCobranza {
+  nivel: "rojo" | "naranja" | "ambar" | "verde";
+  filtro: FiltroCobranza | null;
+  texto: string;
 }
 
 export interface ResumenCobranza {
@@ -217,6 +241,15 @@ export interface ResumenCobranza {
   dias_aviso: number;
   /** Días de gracia después del vencimiento. Lo define el backend. */
   dias_prorroga: number;
+  empresas_en_prueba: number;
+  suscripciones_activas: number;
+  pagos_en_revision: number;
+  monto_en_revision: number;
+  cancelaciones_mes: number;
+  cancelaciones_programadas: number;
+  pagos_rechazados: number;
+  renovaciones_mes: number;
+  alertas: AlertaCobranza[];
 }
 
 export interface PagoSuscripcion {
@@ -267,9 +300,11 @@ export function listarCobranza(filtros: {
   buscar?: string;
   color?: SemaforoColor | "";
   plan?: string;
+  filtro?: FiltroCobranza;
 } = {}): Promise<EmpresaCobranza[]> {
   const p = new URLSearchParams();
   if (filtros.buscar) p.set("buscar", filtros.buscar);
+  if (filtros.filtro) p.set("filtro", filtros.filtro);
   if (filtros.color) p.set("color", filtros.color);
   if (filtros.plan) p.set("plan", filtros.plan);
   const qs = p.toString();
@@ -300,6 +335,11 @@ export function registrarPago(
      * que compró. El plan viaja con el pago porque es parte del pago.
      */
     plan?: string;
+    /**
+     * Un id por apertura del diálogo. Un doble click o un reintento por red
+     * devuelven el MISMO pago en vez de registrar dos cuotas.
+     */
+    clave_idempotencia?: string;
   },
 ): Promise<PagoSuscripcion> {
   return adminRequest<PagoSuscripcion>(`/admin/empresas/${empresaId}/pagos`, {
@@ -311,7 +351,14 @@ export function registrarPago(
 /** Un movimiento del vencimiento de la suscripción (quién, cuándo, de qué fecha a cuál). */
 export interface AjusteSuscripcion {
   id: number;
-  tipo: "pago" | "renovacion" | "prorroga" | "manual" | "reversion";
+  /** pago | renovacion | prorroga | manual | reversion | plan | cancelacion | … */
+  tipo: string;
+  actor_tipo?: string | null;
+  estado_antes?: string | null;
+  estado_despues?: string | null;
+  plan_antes?: string | null;
+  plan_despues?: string | null;
+  monto?: number | null;
   vence_antes: string | null;
   vence_despues: string | null;
   dias: number | null;
@@ -342,8 +389,8 @@ export interface AvisoPago {
   /** Quién avisó, desde el panel del negocio. */
   avisado_por: string | null;
   creado_en: string | null;
-  /** pendiente | confirmada | rechazada. */
-  estado: "pendiente" | "confirmada" | "rechazada";
+  /** pendiente | info_solicitada | confirmada | rechazada. */
+  estado: "pendiente" | "info_solicitada" | "confirmada" | "rechazada";
   /** Por qué se rechazó. Solo viene en las rechazadas. */
   motivo: string | null;
   resuelto: boolean;
@@ -354,6 +401,75 @@ export interface AvisoPago {
   vence: string | null;
   /** Avisó exactamente lo esperado. */
   coincide: boolean;
+  /** El plan que tiene HOY (el del aviso es el que está comprando). */
+  plan_actual_etiqueta: string;
+  /** alta | renovacion | cambio_plan | reactivacion */
+  tipo: string;
+  tiene_comprobante: boolean;
+  mensaje_admin: string | null;
+  pago_id: number | null;
+  resuelto_por: string | null;
+  resuelto_en: string | null;
+}
+
+/** Aprueba la transferencia: registra la cuota UNA vez y cierra el aviso. */
+export function aprobarAvisoPago(
+  avisoId: number,
+  datos: { monto?: number | null; fecha?: string | null; notas?: string | null },
+): Promise<PagoSuscripcion> {
+  return adminApi.post<PagoSuscripcion>(`/admin/cobranza/avisos/${avisoId}/aprobar`, {
+    ...datos,
+    confirmo: true,
+  });
+}
+
+/** Le pide al negocio un dato más. El aviso sigue abierto. */
+export function solicitarInfoAviso(avisoId: number, mensaje: string): Promise<{ ok: boolean }> {
+  return adminApi.post(`/admin/cobranza/avisos/${avisoId}/solicitar-info`, { mensaje });
+}
+
+/**
+ * El comprobante es privado: se pide con el token del admin y se muestra
+ * como blob (no hay URL pública que se pueda compartir).
+ */
+export async function verComprobante(avisoId: number): Promise<string> {
+  const token = getAdminToken();
+  const res = await fetch(`${API_URL}/admin/cobranza/avisos/${avisoId}/comprobante`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, "No se pudo abrir el comprobante");
+  return URL.createObjectURL(await res.blob());
+}
+
+export function cancelarSuscripcionAdmin(
+  empresaId: number,
+  motivo: string | null,
+): Promise<{ estado: string; activa_hasta: string | null }> {
+  return adminApi.post(`/admin/empresas/${empresaId}/cancelar`, { motivo, confirmo: true });
+}
+
+export function reactivarSuscripcionAdmin(empresaId: number): Promise<{ estado: string }> {
+  return adminApi.post(`/admin/empresas/${empresaId}/reactivar`, { confirmo: true });
+}
+
+export interface FilaAuditoria {
+  id: number;
+  creado_en: string | null;
+  admin_email: string;
+  accion: string;
+  accion_etiqueta: string;
+  empresa_id: number | null;
+  empresa_nombre: string | null;
+  descripcion: string | null;
+  antes: Record<string, unknown> | null;
+  despues: Record<string, unknown> | null;
+  ip: string | null;
+}
+
+export function listarAuditoria(empresaId?: number, limite = 100): Promise<FilaAuditoria[]> {
+  const q = new URLSearchParams({ limite: String(limite) });
+  if (empresaId) q.set("empresa_id", String(empresaId));
+  return adminApi.get<FilaAuditoria[]>(`/admin/auditoria?${q}`);
 }
 
 export function listarAvisosPago(soloPendientes = true): Promise<AvisoPago[]> {
@@ -451,6 +567,14 @@ export interface FichaEmpresa {
     detalle: string;
     dias_restantes: number | null;
     en_prorroga: boolean;
+    estado_base: EstadoSuscripcion;
+    etiqueta: string;
+    tono: TonoEstado;
+    reservas_abiertas: boolean;
+    plan_programado: string | null;
+    cancela_al_vencer: boolean;
+    cancelacion_motivo: string | null;
+    cancelacion_solicitada_en: string | null;
   };
   cobranza: {
     pagos: number;

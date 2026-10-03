@@ -22,7 +22,7 @@ import { CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Cargando,
-  ESTILO_ESTADO,
+  estiloDe,
   PasoLayout,
   SYNE,
   fechaLarga,
@@ -39,7 +39,7 @@ function Listo() {
 
   if (cargando || !datos) return <Cargando />;
 
-  const est = ESTILO_ESTADO[datos.estado] ?? ESTILO_ESTADO.sin_vencimiento;
+  const est = estiloDe(datos.tono);
 
   return (
     <PasoLayout

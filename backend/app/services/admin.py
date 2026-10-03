@@ -84,16 +84,29 @@ def setear_suscripcion(
     from app.services import cobranza
 
     empresa = _empresa_o_404(db, empresa_id)
+    from app.core.reloj import hoy_de_pared
+
     if plan is not None:
         # Llega como enum Plan; en la columna va el string.
-        empresa.plan = getattr(plan, "value", plan)
+        nuevo_plan = getattr(plan, "value", plan)
+        if nuevo_plan != empresa.plan:
+            plan_antes = empresa.plan
+            empresa.plan = nuevo_plan
+            # Un cambio de plan a mano también es un evento de la suscripción.
+            cobranza.evento(
+                db, empresa, "plan",
+                f"Plan cambiado por administración: {planes.limites_de(plan_antes).etiqueta} → "
+                f"{planes.limites_de(nuevo_plan).etiqueta}",
+                hecho_por=hecho_por, actor_tipo="admin",
+                plan_antes=plan_antes, plan_despues=nuevo_plan,
+            )
 
     # Mover el vencimiento a mano queda anotado. Antes no dejaba ningún rastro:
     # "Renovar 30 días" regalaba un mes con un click y no había cómo saber
     # después que había pasado, ni cuál era la fecha anterior.
     antes = empresa.suscripcion_vence
     if renovar_30:
-        empresa.suscripcion_vence = _dt.date.today() + _dt.timedelta(days=30)
+        empresa.suscripcion_vence = hoy_de_pared() + _dt.timedelta(days=30)
         # Antes esto saltaba directo a "pro", que es el plan del medio: una
         # renovación de cortesía terminaba regalando el cupo de 10
         # profesionales. Ahora pasa al plan de ENTRADA, y si querés otro se
@@ -123,15 +136,34 @@ def setear_suscripcion(
         )
     db.commit()
     db.refresh(empresa)
-    # recalcular para la respuesta
+    return _fila_admin(db, empresa)
+
+
+def _fila_admin(db: Session, empresa: Empresa) -> dict:
+    """La fila de EmpresaAdminOut SIN tocar el objeto ORM.
+
+    Antes se pisaban `suscripcion_vence` y `prueba_hasta` con texto sobre la
+    misma instancia de la sesión: cualquier flush posterior (una auditoría,
+    un evento) habría intentado guardar esos textos en columnas de fecha.
+    """
     from app.services.suscripcion import estado_suscripcion
 
-    est = estado_suscripcion(empresa)
-    empresa.estado_suscripcion = est["estado"]
-    empresa.prueba_hasta = str(empresa.prueba_hasta) if empresa.prueba_hasta else None
-    empresa.suscripcion_vence = est["vence"]
-    empresa.cantidad_usuarios = 0
-    return empresa
+    est = estado_suscripcion(empresa, db)
+    rubro = db.get(Rubro, empresa.rubro_id)
+    return {
+        "id": empresa.id,
+        "nombre": empresa.nombre,
+        "slug": empresa.slug,
+        "rubro_nombre": rubro.nombre if rubro else None,
+        "activa": empresa.activa,
+        "cantidad_usuarios": db.scalar(
+            select(func.count(Usuario.id)).where(Usuario.empresa_id == empresa.id)
+        ) or 0,
+        "plan": empresa.plan or "gratuito",
+        "suscripcion_vence": est["vence"],
+        "estado_suscripcion": est["estado"],
+        "prueba_hasta": str(empresa.prueba_hasta) if empresa.prueba_hasta else None,
+    }
 
 
 def _empresa_o_404(db: Session, empresa_id: int) -> Empresa:
@@ -166,7 +198,9 @@ def crear_empresa(db: Session, datos) -> Empresa:
     # días: así "faltan 3 días" se calcula siempre contra el calendario y no
     # depende de cuándo se corra ningún proceso.
     dias = int(getattr(datos, "dias_prueba", 0) or 0)
-    prueba_hasta = dt.date.today() + dt.timedelta(days=dias) if dias > 0 else None
+    from app.core.reloj import hoy_de_pared
+
+    prueba_hasta = hoy_de_pared() + dt.timedelta(days=dias) if dias > 0 else None
 
     # `precio_mensual` nace en NULL y eso YA NO significa "cuenta bonificada":
     # significa "sin trato especial", y el precio sale de la grilla del plan
@@ -226,18 +260,22 @@ def crear_empresa(db: Session, datos) -> Empresa:
     return empresa
 
 
-def pausar_empresa(db: Session, empresa_id: int, activa: bool) -> Empresa:
+def pausar_empresa(
+    db: Session, empresa_id: int, activa: bool, hecho_por: str = "admin", motivo: str | None = None
+) -> dict:
+    """Suspende o reanuda la cuenta. Corta el acceso, no borra datos.
+
+    Pausar una cuenta ya pausada (o reanudar una activa) no hace nada: no es
+    un error, es un doble click.
+    """
+    from app.services import cobranza
+
     empresa = _empresa_o_404(db, empresa_id)
-    empresa.activa = activa
+    if bool(empresa.activa) != bool(activa):
+        cobranza.suspender(db, empresa, activa=activa, hecho_por=hecho_por, motivo=motivo)
     db.commit()
     db.refresh(empresa)
-    rubro = db.get(Rubro, empresa.rubro_id)
-    empresa.rubro_nombre = rubro.nombre if rubro else None
-    empresa.cantidad_usuarios = (
-        db.scalar(select(func.count(Usuario.id)).where(Usuario.empresa_id == empresa_id))
-        or 0
-    )
-    return empresa
+    return _fila_admin(db, empresa)
 
 
 def listar_usuarios(db: Session, empresa_id: int) -> list[Usuario]:

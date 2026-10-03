@@ -124,23 +124,16 @@ function TarjetaSuscripcion() {
 
   if (!sus) return null;
 
-  // Tiene que cubrir los CINCO estados que devuelve estado_suscripcion()
-  // en el backend, "prueba" incluido: es el primero que evalúa allá, así
-  // que es el que ve toda empresa recién creada con período de prueba.
-  const ESTILOS: Record<
-    string,
-    { color: string; bg: string; Icono: typeof Crown; chip: string }
-  > = {
-    prueba: { color: "#0ea5e9", bg: "#0ea5e915", Icono: Crown, chip: "En prueba" },
-    activa: { color: "#10b981", bg: "#10b98115", Icono: CheckCircle2, chip: "Activa" },
-    prorroga: { color: "#f59e0b", bg: "#f59e0b15", Icono: AlertTriangle, chip: "En prórroga" },
-    vencida: { color: "#ef4444", bg: "#ef444415", Icono: AlertTriangle, chip: "Vencida" },
-    sin_vencimiento: { color: "#6b7280", bg: "#6b728015", Icono: Crown, chip: "—" },
+  // El color sale del TONO que manda el servidor (core/estados_suscripcion.py)
+  // y no de una tabla por estado: así un estado nuevo nunca sale sin pintar.
+  const TONOS: Record<string, { color: string; bg: string; Icono: typeof Crown }> = {
+    info: { color: "#0ea5e9", bg: "#0ea5e915", Icono: Crown },
+    ok: { color: "#10b981", bg: "#10b98115", Icono: CheckCircle2 },
+    aviso: { color: "#f59e0b", bg: "#f59e0b15", Icono: AlertTriangle },
+    error: { color: "#ef4444", bg: "#ef444415", Icono: AlertTriangle },
+    neutro: { color: "#6b7280", bg: "#6b728015", Icono: Crown },
   };
-
-  // Red de seguridad: si mañana aparece un estado nuevo, la tarjeta sale
-  // en gris en vez de tirar abajo toda la pantalla de Mi cuenta.
-  const estilo = ESTILOS[sus.estado] ?? ESTILOS.sin_vencimiento;
+  const estilo = { ...(TONOS[sus.tono ?? "neutro"] ?? TONOS.neutro), chip: sus.etiqueta ?? "—" };
 
   // Antes esto era un ternario con dos casos y un "si no, mostrá el código
   // crudo". Por eso el plan multi aparecía como «multi» en minúscula.
@@ -176,10 +169,10 @@ function TarjetaSuscripcion() {
         )}
       </div>
 
-      {(sus.estado === "prorroga" || sus.estado === "vencida") && (
+      {(sus.estado_base === "prorroga" || sus.estado_base === "vencida" || sus.estado_base === "prueba_vencida") && sus.estado !== "en_revision" && (
         <p className="mt-3 text-xs text-muted-foreground">
           Para seguir usando Turnos360 sin interrupciones, regularizá tu
-          suscripción. Escribinos y lo resolvemos al toque.
+          suscripción desde «Mi suscripción».
         </p>
       )}
     </div>

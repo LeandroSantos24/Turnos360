@@ -78,14 +78,16 @@ def _es_id_de_suscripcion(ident: str) -> bool:
 # en la cuenta de Mercado Pago, y acá las suscripciones se crean sin plan
 # asociado (ver services/mp_debito.py). Si algún día llega uno, se ignora.
 _TIPOS_DE_AVISO = {
-    "payment": (_es_id_numerico, lambda db, ident: mp_sus.acreditar(db, ident)),
+    # `accion` («payment.updated») es lo que distingue un reintento del aviso
+    # original de una DEVOLUCIÓN o un contracargo de una cuota ya acreditada.
+    "payment": (_es_id_numerico, lambda db, ident, accion: mp_sus.acreditar(db, ident, accion)),
     "subscription_authorized_payment": (
         _es_id_numerico,
-        lambda db, ident: mp_debito.acreditar_cobro(db, ident),
+        lambda db, ident, accion: mp_debito.acreditar_cobro(db, ident),
     ),
     "subscription_preapproval": (
         _es_id_de_suscripcion,
-        lambda db, ident: mp_debito.sincronizar(db, ident),
+        lambda db, ident, accion: mp_debito.sincronizar(db, ident),
     ),
 }
 
@@ -149,13 +151,16 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
     params = request.query_params
     tipo = params.get("type") or params.get("topic") or ""
     recurso_id = params.get("data.id") or params.get("id")
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
+    except Exception:
+        body = {}
     if not recurso_id:
-        try:
-            body = await request.json()
-            tipo = body.get("type", tipo) or body.get("topic", tipo)
-            recurso_id = (body.get("data") or {}).get("id")
-        except Exception:
-            recurso_id = None
+        tipo = body.get("type", tipo) or body.get("topic", tipo)
+        recurso_id = (body.get("data") or {}).get("id") if isinstance(body.get("data"), dict) else None
+    accion = str(body.get("action") or "")[:40]
 
     tipo = str(tipo or "").strip()
     if not recurso_id or tipo not in _TIPOS_DE_AVISO:
@@ -174,7 +179,7 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
     if not firma_mp.acepta(request, recurso_id, settings.mp_saas_webhook_secret):
         return {"ok": True}
 
-    await to_thread.run_sync(manejar, db, recurso_id)
+    await to_thread.run_sync(manejar, db, recurso_id, accion)
     return {"ok": True}
 
 

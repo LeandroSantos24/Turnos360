@@ -65,8 +65,72 @@ type Aviso = {
  * cuando cambia la regla de negocio (la prórroga bajó de 10 días a 3).
  */
 export function avisoDe(d: MiSuscripcion): Aviso | null {
-  // En prueba no se avisa de vencimientos: no hay ninguno.
-  if (d.estado === "prueba") return null;
+  // En prueba no se avisa de vencimientos: no hay ninguno. Quien canceló ya
+  // eligió irse y lo ve en «Mi suscripción»: no se le insiste en cada pantalla.
+  if (d.estado === "prueba" || d.estado === "cancelacion_programada") return null;
+
+  if (d.estado === "suspendida") {
+    return {
+      tono: "rojo",
+      texto: (
+        <>
+          <b>Tu cuenta está suspendida.</b> Escribinos para reactivarla. Tus datos
+          están intactos.
+        </>
+      ),
+      accion: "Ver detalle",
+    };
+  }
+
+  if (d.estado === "cancelada") {
+    return {
+      tono: "ambar",
+      texto: (
+        <>
+          <b>Tu suscripción está cancelada.</b> Tu página no toma reservas nuevas.
+          Tus datos siguen guardados.
+        </>
+      ),
+      accion: "Reactivar",
+    };
+  }
+
+  // El negocio ya hizo su parte: no se le dice «pagá» mientras lo revisamos.
+  if (d.estado === "en_revision") {
+    if (d.estado_pago === "info_solicitada") {
+      return {
+        tono: "ambar",
+        texto: (
+          <>
+            <b>Necesitamos un dato para confirmar tu pago.</b>{" "}
+            {d.aviso?.mensaje_admin ?? ""}
+          </>
+        ),
+        accion: "Responder",
+      };
+    }
+    return null;
+  }
+  if (d.estado === "pendiente_pago") return null;
+
+  if (d.estado === "prueba_vencida") {
+    return {
+      tono: d.reservas_abiertas ? "ambar" : "rojo",
+      texto: d.reservas_abiertas ? (
+        <>
+          <b>Terminó tu prueba.</b> Elegí un plan antes del{" "}
+          {d.corte ? d.corte.split("-").reverse().join("/") : "corte"} para que tu
+          página siga tomando reservas.
+        </>
+      ) : (
+        <>
+          <b>Terminó tu prueba.</b> Tu página dejó de tomar reservas nuevas. Elegí
+          un plan y se reactiva al instante.
+        </>
+      ),
+      accion: "Elegir plan",
+    };
+  }
 
   const deb = d.debito;
   const cobroRebotado = Boolean(deb && deb.cobros_fallidos > 0);

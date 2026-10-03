@@ -30,6 +30,7 @@ import {
   Cargando,
   PasoLayout,
   SYNE,
+  montoDe,
   pesos,
   planDeLaUrl,
   useSuscripcion,
@@ -92,7 +93,7 @@ function ElegirPago() {
   if (cargando || !datos) return <Cargando />;
 
   const destino = planDeLaUrl(datos, codigo);
-  const monto = destino?.precio ?? datos.cuota;
+  const monto = montoDe(datos, destino);
   const c = datos.cobro;
   const hayTransferencia = Boolean(c.cbu || c.alias);
   const hayMercadoPago = Boolean(c.mp_checkout || c.mp_link);

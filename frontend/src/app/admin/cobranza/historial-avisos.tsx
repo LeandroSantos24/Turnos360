@@ -46,7 +46,7 @@ export function HistorialAvisos({ recargar = 0 }: { recargar?: number }) {
       // Se piden TODOS y se filtran los pendientes acá: esos ya están arriba
       // en la bandeja, y repetirlos haría dudar de si son dos cosas distintas.
       const todos = await listarAvisosPago(false);
-      setAvisos(todos.filter((a) => a.estado !== "pendiente"));
+      setAvisos(todos.filter((a) => a.estado === "confirmada" || a.estado === "rechazada"));
     } catch {
       setAvisos([]);
     } finally {

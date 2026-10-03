@@ -130,9 +130,65 @@ export function guardarReglasReserva(datos: ReglasReserva): Promise<ReglasReserv
 export interface PagoSuscripcion {
   fecha: string | null;
   monto: number;
+  /** Etiqueta del método («Transferencia bancaria», «Mercado Pago»…). */
   metodo: string;
   periodo_desde: string | null;
   periodo_hasta: string | null;
+  /** alta | renovacion | cambio_plan | reactivacion | manual */
+  tipo?: string | null;
+  tipo_etiqueta?: string;
+  plan_etiqueta?: string | null;
+  estado?: string;
+}
+
+/**
+ * Los estados de la suscripción (backend: app/core/estados_suscripcion.py).
+ * El servidor manda además `etiqueta` y `tono`: la pantalla pinta con eso y
+ * no vuelve a decidir qué significa cada estado.
+ */
+export type EstadoSuscripcion =
+  | "prueba"
+  | "activa"
+  | "pendiente_pago"
+  | "en_revision"
+  | "prorroga"
+  | "vencida"
+  | "cancelacion_programada"
+  | "cancelada"
+  | "suspendida"
+  | "prueba_vencida"
+  | "sin_vencimiento";
+
+export type TonoEstado = "ok" | "info" | "aviso" | "error" | "neutro";
+
+/** Estado del PAGO, separado del método (no es lo mismo «transferencia» que «en revisión»). */
+export type EstadoPago =
+  | "al_dia"
+  | "en_revision"
+  | "info_solicitada"
+  | "rechazado"
+  | "pendiente"
+  | "adeuda";
+
+export interface EventoSuscripcion {
+  tipo: string;
+  titulo: string;
+  detalle: string | null;
+  fecha: string | null;
+  quien: string;
+  monto: number | null;
+}
+
+export interface UsoDelPlan {
+  profesionales: number;
+  usuarios: number;
+  sucursales: number;
+}
+
+export interface TopesDelPlan {
+  profesionales: number | null;
+  usuarios: number | null;
+  sucursales: number | null;
 }
 
 export interface DatosCobro {
@@ -149,8 +205,12 @@ export interface DatosCobro {
 
 export interface MiSuscripcion {
   plan: string;
-  /** activa | prorroga | vencida | sin_vencimiento */
-  estado: string;
+  estado: EstadoSuscripcion;
+  /** El estado del ciclo sin superponer «en revisión» / «pendiente». */
+  estado_base: EstadoSuscripcion;
+  etiqueta: string;
+  tono: TonoEstado;
+  reservas_abiertas: boolean;
   vence: string | null;
   dias_restantes: number | null;
   en_prorroga: boolean;
@@ -197,6 +257,85 @@ export interface MiSuscripcion {
   debito: DebitoAutomatico | null;
   /** ¿Se puede activar el débito automático en este entorno? */
   debito_disponible: boolean;
+  uso: UsoDelPlan;
+  topes: TopesDelPlan;
+  metodo_pago: string | null;
+  metodo_pago_etiqueta: string | null;
+  estado_pago: EstadoPago;
+  proxima_renovacion: string | null;
+  renovacion_automatica: boolean;
+  ultimo_pago: { fecha: string | null; monto: number; metodo: string; tipo: string } | null;
+  aviso: {
+    estado: "pendiente" | "info_solicitada";
+    monto: number | null;
+    monto_esperado: number | null;
+    plan_etiqueta: string | null;
+    creado_en: string | null;
+    mensaje_admin: string | null;
+    referencia: string | null;
+    tiene_comprobante: boolean;
+  } | null;
+  aviso_rechazado: { motivo: string | null; fecha: string | null; monto: number | null } | null;
+  ultimo_intento: {
+    estado: "rechazado" | "pendiente";
+    monto: number;
+    plan_etiqueta: string | null;
+    fecha: string | null;
+  } | null;
+  cancelacion: {
+    efectiva: boolean;
+    solicitada_en: string | null;
+    activa_hasta: string | null;
+    motivo: string | null;
+  } | null;
+  actividad: EventoSuscripcion[];
+  /** Concepto sugerido para la transferencia (T360-<id>). */
+  referencia_transferencia: string;
+  /** Hasta cuándo puede pagar sin que se corte nada. */
+  fecha_limite_pago: string | null;
+}
+
+/** El resumen de un cambio de plan, calculado por el servidor. */
+export interface VistaCambioPlan {
+  movimiento: "sube" | "baja" | "mismo";
+  plan_actual: string;
+  plan_actual_etiqueta: string;
+  plan_nuevo: string;
+  plan_nuevo_etiqueta: string;
+  precio_actual: number | null;
+  precio_nuevo: number | null;
+  diferencia_mensual: number | null;
+  a_pagar_hoy: number | null;
+  aplica_desde: string | null;
+  vence_actual: string | null;
+  vence_nuevo: string | null;
+  inmediato: boolean;
+  ganas: string[];
+  perdes: string[];
+  topes_actuales: TopesDelPlan;
+  topes_nuevos: TopesDelPlan;
+  uso: UsoDelPlan;
+  incompatibilidades: { recurso: string; usados: number; tope: number; mensaje: string }[];
+  metodo_pago: string | null;
+  estado: EstadoSuscripcion;
+  se_vende_online: boolean;
+}
+
+export function verCambioPlan(plan: string): Promise<VistaCambioPlan> {
+  return api.get<VistaCambioPlan>(
+    `/empresa/suscripcion/cambio-plan?plan=${encodeURIComponent(plan)}`,
+  );
+}
+
+/** Cancela la suscripción: sigue activa hasta el vencimiento, no se borra nada. */
+export function cancelarSuscripcion(
+  motivo: string | null,
+): Promise<{ estado: string; activa_hasta: string | null; detalle: string }> {
+  return api.post("/empresa/suscripcion/cancelar", { motivo, confirmo: true });
+}
+
+export function reactivarSuscripcion(): Promise<{ estado: string; detalle: string }> {
+  return api.post("/empresa/suscripcion/reactivar", { confirmo: true });
 }
 
 /**
@@ -259,6 +398,7 @@ export interface CambioDePlan {
   url?: string;
   desde?: string;
   detalle?: string;
+  incompatibilidades?: { recurso: string; usados: number; tope: number; mensaje: string }[];
 }
 
 /**
@@ -270,7 +410,12 @@ export interface CambioDePlan {
  * quedaría con el plan gratis.
  */
 export function cambiarPlan(plan: string): Promise<CambioDePlan> {
-  return api.post<CambioDePlan>("/empresa/suscripcion/cambiar-plan", { plan });
+  // `confirmo` = la segunda confirmación (el modal «¿Confirmás el cambio de
+  // plan?»). Solo se llama después de que la persona la aceptó.
+  return api.post<CambioDePlan>("/empresa/suscripcion/cambiar-plan", {
+    plan,
+    confirmo: true,
+  });
 }
 
 export function leerMiSuscripcion(): Promise<MiSuscripcion> {
@@ -315,12 +460,18 @@ export function cancelarDebitoAutomatico(): Promise<{ ok: boolean }> {
 export function avisarPagoSuscripcion(datos: {
   monto?: number | null;
   referencia?: string | null;
-}): Promise<{ detalle: string }> {
+  /** El plan que se está comprando. El servidor calcula el monto esperado. */
+  plan?: string | null;
+  /** Id que devolvió `subirComprobante`. */
+  comprobante?: string | null;
+}): Promise<{ detalle: string; estado?: string }> {
   return api.post<{ detalle: string }>("/empresa/suscripcion/aviso-pago", datos);
 }
 
 export function leerAvisoPago(): Promise<{
   pendiente: boolean;
+  estado?: "pendiente" | "info_solicitada";
+  mensaje_admin?: string | null;
   creado_en?: string | null;
   monto?: number | null;
 }> {
@@ -474,13 +625,13 @@ export function probarCampana(tipo: string): Promise<{ detalle: string }> {
 
 export interface Suscripcion {
   plan: string;
-  /**
-   * Los CINCO estados que devuelve `estado_suscripcion()` en el backend.
-   * "prueba" se evalúa PRIMERO allá (services/suscripcion.py). Si falta en
-   * este union, TypeScript no avisa cuando una pantalla no lo contempla y
-   * el error aparece recién en runtime.
-   */
-  estado: "prueba" | "activa" | "prorroga" | "vencida" | "sin_vencimiento";
+  /** Ver `EstadoSuscripcion`: el union completo, para que TypeScript avise
+   *  cuando una pantalla no contempla un estado. */
+  estado: EstadoSuscripcion;
+  estado_base?: EstadoSuscripcion;
+  etiqueta?: string;
+  tono?: TonoEstado;
+  reservas_abiertas?: boolean;
   vence: string | null;
   dias_restantes: number | null;
   en_prorroga: boolean;

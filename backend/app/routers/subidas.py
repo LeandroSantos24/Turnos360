@@ -81,30 +81,10 @@ def _carpeta_de(empresa_id: int) -> Path:
     return carpeta
 
 
-@router.post("/imagen", dependencies=[Depends(gate_dueno)])
-async def subir_imagen(
-    empresa_id: EmpresaActual,
-    db: DB,
-    archivo: UploadFile = File(...),
-    proposito: str = Form(default="galeria"),
-) -> dict:
-    """Recibe una imagen, la re-escribe como webp y devuelve su URL pública.
-
-    `proposito` dice para qué es (avatar, logo, portada, galeria) y con eso el
-    servidor elige a cuánto reducirla. Es el servidor el que decide, no el
-    navegador: un tamaño que viniera del cliente sería un número que cualquiera
-    puede cambiar para guardar imágenes gigantes y llenar el disco.
-    """
-    if proposito not in LADOS:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"No sé para qué es «{proposito}».",
-        )
+async def _leer_con_tope(archivo: UploadFile) -> bytes:
     tope = settings.upload_max_mb * 1024 * 1024
-
     # Se lee con tope: sin esto, un archivo enorme se carga entero en memoria
-    # antes de que nadie pueda rechazarlo, y con dos o tres alcanza para
-    # voltear el proceso.
+    # antes de que nadie pueda rechazarlo.
     crudo = await archivo.read(tope + 1)
     if len(crudo) > tope:
         raise HTTPException(
@@ -114,7 +94,11 @@ async def subir_imagen(
         )
     if not crudo:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El archivo está vacío.")
+    return crudo
 
+
+def _reescribir(crudo: bytes) -> Image.Image:
+    """Abre, verifica y devuelve una imagen NUEVA hecha de los píxeles."""
     try:
         img = Image.open(BytesIO(crudo))
         # Pillow entre 1x y 2x del tope solo AVISA: el corte explícito va acá,
@@ -148,6 +132,32 @@ async def subir_imagen(
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGBA" if "A" in img.mode else "RGB")
 
+
+    return img
+
+
+@router.post("/imagen", dependencies=[Depends(gate_dueno)])
+async def subir_imagen(
+    empresa_id: EmpresaActual,
+    db: DB,
+    archivo: UploadFile = File(...),
+    proposito: str = Form(default="galeria"),
+) -> dict:
+    """Recibe una imagen, la re-escribe como webp y devuelve su URL pública.
+
+    `proposito` dice para qué es (avatar, logo, portada, galeria) y con eso el
+    servidor elige a cuánto reducirla. Es el servidor el que decide, no el
+    navegador: un tamaño que viniera del cliente sería un número que cualquiera
+    puede cambiar para guardar imágenes gigantes y llenar el disco.
+    """
+    if proposito not in LADOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"No sé para qué es «{proposito}».",
+        )
+    crudo = await _leer_con_tope(archivo)
+    img = _reescribir(crudo)
+
     # Achicar según el uso. Una foto de celular son 12 megapíxeles; un avatar
     # se muestra en 44 y hasta la galería se ve bien con 1600.
     lado = LADOS[proposito]
@@ -171,3 +181,37 @@ async def subir_imagen(
         },
     )
     return {"url": url}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Comprobantes de pago: PRIVADOS
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Un comprobante de transferencia tiene nombre, CBU y montos: no puede vivir
+# en /uploads, que se sirve sin login. Se guarda en `_privado/` (que el
+# montaje estático de main.py se niega a servir) y solo lo descarga el
+# super-admin por un endpoint autenticado.
+
+CARPETA_PRIVADA = "_privado"
+
+
+def ruta_comprobante(empresa_id: int, nombre: str) -> Path:
+    return Path(settings.uploads_dir) / CARPETA_PRIVADA / "comprobantes" / str(empresa_id) / nombre
+
+
+@router.post("/comprobante", dependencies=[Depends(gate_dueno)])
+async def subir_comprobante(
+    empresa_id: EmpresaActual,
+    archivo: UploadFile = File(...),
+) -> dict:
+    """Comprobante de una transferencia (captura o foto). Devuelve su id."""
+    crudo = await _leer_con_tope(archivo)
+    img = _reescribir(crudo)
+    if max(img.size) > 2000:
+        img.thumbnail((2000, 2000), Image.LANCZOS)
+    nombre = f"{uuid.uuid4().hex}.webp"
+    destino = ruta_comprobante(empresa_id, nombre)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    img.save(destino, format="WEBP", quality=85, method=4)
+    log.info("comprobante subido", extra={"empresa_id": empresa_id, "archivo": nombre})
+    return {"id": nombre}

@@ -23,3 +23,14 @@ export async function subirImagen(
   // menciona el boundary por ningún lado.
   return api.postForm<{ url: string }>("/subidas/imagen", form);
 }
+
+/**
+ * Comprobante de una transferencia. Es PRIVADO: no devuelve una URL pública,
+ * solo un id que se manda con el aviso de pago. Lo ve únicamente el equipo
+ * de Turnos360 desde el panel de cobranza.
+ */
+export async function subirComprobante(archivo: File): Promise<{ id: string }> {
+  const form = new FormData();
+  form.append("archivo", archivo);
+  return api.postForm<{ id: string }>("/subidas/comprobante", form);
+}

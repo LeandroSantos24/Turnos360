@@ -27,6 +27,7 @@ llegan nunca. Un cobro que entra y que nadie acredita es peor que no ofrecer
 el botón.
 """
 
+import datetime as dt
 import logging
 import re
 
@@ -56,16 +57,26 @@ TIMEOUT = 15
 # El plan es OPCIONAL en la expresión para que las notificaciones viejas
 # ("sus:12", de antes de este cambio) se sigan acreditando. Sin ese `?`, un
 # pago hecho ayer y reintentado hoy por Mercado Pago quedaría sin acreditar.
-_REF = re.compile(r"^sus:(\d+)(?::([a-z]+))?$")
+_REF = re.compile(r"^sus:(\d+)(?::([a-z]+))?(?::i(\d+))?$")
 
 
 def esta_activo() -> bool:
     return bool(settings.mp_saas_access_token)
 
 
-def referencia_de(empresa_id: int, plan: str | None = None) -> str:
-    """La referencia que viaja con el pago y vuelve en la notificación."""
-    return f"sus:{empresa_id}:{plan}" if plan else f"sus:{empresa_id}"
+def referencia_de(empresa_id: int, plan: str | None = None, intento_id: int | None = None) -> str:
+    """La referencia que viaja con el pago y vuelve en la notificación.
+
+    `i<id>` es el intento de pago: con él el webhook sabe cuánto se pidió
+    cobrar y puede comparar contra lo que MP cobró.
+    """
+    ref = f"sus:{empresa_id}:{plan}" if plan else f"sus:{empresa_id}"
+    return f"{ref}:i{intento_id}" if intento_id and plan else ref
+
+
+def intento_de_referencia(ref: str | None) -> int | None:
+    m = _REF.match((ref or "").strip())
+    return int(m.group(3)) if m and m.group(3) else None
 
 
 def empresa_de_referencia(ref: str | None) -> int | None:
@@ -112,7 +123,13 @@ def precio_de(empresa: Empresa, plan: str | None = None) -> float:
     return float(settings.precio_vigente)
 
 
-def crear_preferencia(empresa: Empresa, plan: str | None = None) -> str | None:
+def crear_preferencia(
+    empresa: Empresa,
+    plan: str | None = None,
+    *,
+    db: Session | None = None,
+    iniciado_por: str | None = None,
+) -> str | None:
     """Preferencia de Checkout Pro para la cuota (o el cambio de plan).
 
     `plan` es el que el dueño eligió en «Mi suscripción». Viaja en el
@@ -131,6 +148,28 @@ def crear_preferencia(empresa: Empresa, plan: str | None = None) -> str | None:
         # Una cuenta bonificada no tiene nada que pagar.
         return None
 
+    # El intento queda registrado ANTES de salir a Mercado Pago: si el dueño
+    # abandona el checkout, igual hay rastro de que lo intentó y por cuánto.
+    intento = None
+    if db is not None:
+        from app.models import IntentoPago
+        from app.services.cobranza import tipo_de_cobro
+
+        plan_intento = plan or plan_de(empresa.plan).value
+        intento = IntentoPago(
+            empresa_id=empresa.id,
+            tipo=tipo_de_cobro(empresa, plan_intento),
+            plan=plan_intento,
+            monto=monto,
+            metodo="mercadopago",
+            iniciado_por=(iniciado_por or "")[:160] or None,
+        )
+        db.add(intento)
+        db.commit()
+        db.refresh(intento)
+        if plan is None:
+            plan = plan_intento
+
     panel = f"{settings.public_base_url}/suscripcion"
     payload = {
         "items": [
@@ -145,7 +184,7 @@ def crear_preferencia(empresa: Empresa, plan: str | None = None) -> str | None:
                 "unit_price": monto,
             }
         ],
-        "external_reference": referencia_de(empresa.id, plan),
+        "external_reference": referencia_de(empresa.id, plan, intento.id if intento else None),
         "back_urls": {
             "success": f"{panel}?pago=aprobado",
             "pending": f"{panel}?pago=pendiente",
@@ -166,6 +205,10 @@ def crear_preferencia(empresa: Empresa, plan: str | None = None) -> str | None:
         return r.json().get("init_point")
     except Exception:
         log.exception("MP SaaS: falló crear la preferencia (empresa %s)", empresa.id)
+        if intento is not None:
+            intento.estado = "cancelado"
+            intento.detalle = "No se pudo generar el link de pago"
+            db.commit()
         return None
 
 
@@ -203,25 +246,55 @@ def ya_acreditado(db: Session, payment_id: str) -> bool:
     )
 
 
-def acreditar(db: Session, payment_id: str) -> PagoSuscripcion | None:
+_ESTADO_INTENTO = {
+    "approved": "aprobado",
+    "pending": "pendiente",
+    "in_process": "pendiente",
+    "authorized": "pendiente",
+    "rejected": "rechazado",
+    "cancelled": "cancelado",
+    "refunded": "devuelto",
+    "charged_back": "devuelto",
+}
+_DEVOLUCION = {"refunded", "charged_back"}
+
+
+def acreditar(db: Session, payment_id: str, accion: str = "") -> PagoSuscripcion | None:
     """Procesa una notificación de pago de cuota. Nunca levanta.
 
     El orden importa: primero se corta por idempotencia (sin salir a la red),
     después se verifica contra la API, y recién ahí se toca la base.
+
+    · approved  → registra la cuota UNA vez (índice único por payment_id) y,
+                  si el monto coincide con lo pedido, activa el plan.
+    · pending / rejected / cancelled → no hay plata: se actualiza el intento
+                  para que el negocio y el panel vean qué pasó.
+    · payment.updated de un pago ya acreditado que MP devolvió → se anula la
+                  cuota y queda una alerta para revisar el vencimiento.
     """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models import IntentoPago
     from app.services import cobranza
 
     payment_id = str(payment_id)
-    if ya_acreditado(db, payment_id):
+    previo = db.scalar(
+        select(PagoSuscripcion).where(PagoSuscripcion.mp_payment_id == payment_id)
+    )
+    if previo is not None:
+        if accion == "payment.updated" and not previo.anulado:
+            _revisar_devolucion(db, previo)
         return None
 
     datos = consultar_pago(payment_id)
-    if not datos or datos.get("status") != "approved":
+    if not datos:
         return None
 
     referencia = datos.get("external_reference")
     empresa_id = empresa_de_referencia(referencia)
     plan_comprado = plan_de_referencia(referencia)
+    intento_id = intento_de_referencia(referencia)
+    estado_mp = str(datos.get("status") or "")
     if empresa_id is None:
         log.warning(
             "MP SaaS: pago %s sin external_reference de suscripción (%r)",
@@ -235,18 +308,35 @@ def acreditar(db: Session, payment_id: str) -> PagoSuscripcion | None:
         log.warning("MP SaaS: pago %s apunta a una empresa que no existe", payment_id)
         return None
 
-    # El monto que se registra es el que MP confirmó, no el que esperábamos:
-    # si el dueño pagó de menos, la cuota tiene que reflejar lo que entró.
-    monto = float(datos.get("transaction_amount") or 0)
+    intento = db.get(IntentoPago, intento_id) if intento_id else None
+    if intento is not None and intento.empresa_id != empresa.id:
+        intento = None
 
-    # El plan que se compró se activa acá, sin que nadie lo toque. Es el punto
-    # entero de este archivo: antes el pago entraba, el vencimiento se corría
-    # 30 días y el plan quedaba como estaba, así que un upgrade a Pro cobraba
-    # Pro y dejaba al negocio en Inicial hasta que alguien lo arreglara a mano.
-    #
-    # Se valida contra `se_vende_solo`: una referencia con un plan que no está
-    # a la venta (o inventada) se ignora y el pago se acredita igual. Nunca al
-    # revés — perder un pago acreditado es peor que no cambiar un plan.
+    if estado_mp != "approved":
+        if intento is not None:
+            nuevo = _ESTADO_INTENTO.get(estado_mp, "pendiente")
+            if intento.estado != nuevo:
+                intento.estado = nuevo
+                intento.mp_payment_id = payment_id
+                intento.detalle = str(datos.get("status_detail") or estado_mp)[:200]
+                intento.actualizado_en = dt.datetime.now(dt.timezone.utc)
+                if nuevo == "rechazado":
+                    cobranza.evento(
+                        db, empresa, "pago_rechazado",
+                        f"Mercado Pago rechazó el pago ({intento.detalle})",
+                        hecho_por="mercadopago", actor_tipo="mercadopago",
+                        monto=float(intento.monto),
+                    )
+                db.commit()
+        return None
+
+    # El monto que se registra es el que MP confirmó, no el que esperábamos.
+    monto = float(datos.get("transaction_amount") or 0)
+    moneda = datos.get("currency_id")
+    if moneda is not None and moneda != "ARS":
+        log.error("MP SaaS: pago %s en %s, no se acredita", payment_id, moneda)
+        return None
+
     plan_a_activar = None
     if plan_comprado:
         candidato = plan_de(plan_comprado)
@@ -259,30 +349,57 @@ def acreditar(db: Session, payment_id: str) -> PagoSuscripcion | None:
                 plan_comprado,
             )
 
-    pago = cobranza.registrar_pago(
-        db,
-        empresa,
-        monto=monto,
-        metodo="mercadopago",
-        notas=f"Acreditado por Mercado Pago (pago {payment_id})",
-        registrado_por="mercadopago",
-        renovar=True,
-        plan=plan_a_activar,
-    )
-    pago.mp_payment_id = payment_id
-    db.commit()
+    # EL MONTO TIENE QUE SER EL QUE SE PIDIÓ. La preferencia la arma el
+    # backend, pero si por cualquier motivo entra menos plata (otro precio,
+    # un pago manipulado), se registra lo que entró y NO se activa el plan ni
+    # se renueva: queda para que lo mire una persona.
+    # Sin intento (preferencias viejas, «sus:<id>») se compara contra el
+    # precio que corresponde HOY a ese plan: tampoco se renueva con menos.
+    esperado = float(intento.monto) if intento is not None else float(precio_de(empresa, plan_a_activar))
+    corto = esperado > 0 and monto + 1 < esperado
+    try:
+        pago = cobranza.registrar_pago(
+            db,
+            empresa,
+            monto=monto,
+            metodo="mercadopago",
+            notas=f"Acreditado por Mercado Pago (pago {payment_id})"
+            + (f" · se esperaban {cobranza.pesos(esperado)}" if corto else ""),
+            registrado_por="mercadopago",
+            renovar=not corto,
+            plan=None if corto else plan_a_activar,
+            actor_tipo="mercadopago",
+            intento_id=intento.id if intento else None,
+        )
+        pago.mp_payment_id = payment_id
+        if intento is not None:
+            intento.estado = "aprobado"
+            intento.mp_payment_id = payment_id
+            intento.pago_id = pago.id
+            intento.actualizado_en = dt.datetime.now(dt.timezone.utc)
+        if corto:
+            cobranza.evento(
+                db, empresa, "pago_rechazado",
+                f"Pago de {cobranza.pesos(monto)} menor al pedido ({cobranza.pesos(esperado)}): "
+                "se registró la plata pero no se renovó ni se cambió el plan",
+                hecho_por="mercadopago", actor_tipo="mercadopago", monto=monto, pago_id=pago.id,
+            )
+        db.commit()
+    except IntegrityError:
+        # Dos avisos del mismo pago en paralelo: el otro ya lo registró.
+        db.rollback()
+        log.info("MP SaaS: pago %s ya acreditado por un aviso paralelo", payment_id)
+        return None
     log.info(
         "MP SaaS: cuota acreditada",
         extra={"empresa_id": empresa.id, "payment_id": payment_id, "monto": monto},
     )
 
-    # El aviso a la casilla oficial. Con el cobro automatizado, un pago entra,
-    # activa el plan y corre el vencimiento sin que nadie mire nada — que es el
-    # punto del autoservicio, pero también significa poder pasar una semana sin
-    # enterarse de si se cobró.
-    #
-    # Nunca puede tumbar la acreditación: la plata ya entró y el pago ya está
-    # guardado. Si el mail falla, falla el mail.
+    if plan_a_activar and not corto:
+        from app.services import mp_debito
+
+        mp_debito.ajustar_al_plan(db, empresa)
+
     try:
         from app.core.cola import encolar
         from app.tasks.emails import avisar_pago_recibido
@@ -300,6 +417,33 @@ def acreditar(db: Session, payment_id: str) -> PagoSuscripcion | None:
         log.exception("No se pudo avisar el pago %s", payment_id)
 
     return pago
+
+
+def _revisar_devolucion(db: Session, pago: PagoSuscripcion) -> None:
+    """MP avisó un cambio en una cuota ya acreditada: ¿se devolvió?
+
+    Si se devolvió (o hubo contracargo) la cuota se anula —deja de contar como
+    cobrada— y queda un evento para el panel. El vencimiento NO se mueve solo:
+    cortarle el servicio a alguien por una consulta HTTP es una decisión que
+    toma una persona, con el botón «Deshacer» del movimiento.
+    """
+    from app.services import cobranza
+
+    datos = consultar_pago(pago.mp_payment_id)
+    if not datos or str(datos.get("status") or "") not in _DEVOLUCION:
+        return
+    pago.anulado = True
+    pago.anulado_en = dt.datetime.now(dt.timezone.utc)
+    pago.anulado_por = "mercadopago"
+    empresa = db.get(Empresa, pago.empresa_id)
+    cobranza.evento(
+        db, empresa, "pago_devuelto",
+        f"Mercado Pago informó {datos.get('status')} del pago {pago.mp_payment_id}: "
+        "la cuota se anuló. Revisá el vencimiento.",
+        hecho_por="mercadopago", actor_tipo="mercadopago",
+        monto=float(pago.monto), pago_id=pago.id,
+    )
+    db.commit()
 
 
 # Qué significa cada estado de Mercado Pago, en castellano y sin ambigüedad.

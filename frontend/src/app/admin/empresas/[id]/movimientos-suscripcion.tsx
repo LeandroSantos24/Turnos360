@@ -31,12 +31,32 @@ const TIPO: Record<AjusteSuscripcion["tipo"], { txt: string; cls: string }> = {
   prorroga: { txt: "Prórroga", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
   manual: { txt: "Fecha a mano", cls: "bg-muted text-muted-foreground" },
   reversion: { txt: "Deshecho", cls: "bg-destructive/10 text-destructive" },
+  plan: { txt: "Plan", cls: "bg-violet-400/15 text-violet-600 dark:text-violet-400" },
+  precio: { txt: "Precio", cls: "bg-violet-400/15 text-violet-600 dark:text-violet-400" },
+  cancelacion: { txt: "Cancelación", cls: "bg-destructive/10 text-destructive" },
+  cancelada: { txt: "Cancelada", cls: "bg-destructive/10 text-destructive" },
+  reactivacion: { txt: "Reactivación", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
+  suspension: { txt: "Suspensión", cls: "bg-destructive/10 text-destructive" },
+  reanudacion: { txt: "Reanudación", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
+  aviso: { txt: "Transferencia informada", cls: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
+  aviso_rechazado: { txt: "Transferencia rechazada", cls: "bg-destructive/10 text-destructive" },
+  info_solicitada: { txt: "Info pedida", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
+  pago_rechazado: { txt: "Pago rechazado", cls: "bg-destructive/10 text-destructive" },
+  pago_devuelto: { txt: "Pago devuelto", cls: "bg-destructive/10 text-destructive" },
+  baja_postergada: { txt: "Baja postergada", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
 };
 
+/**
+ * "2026-10-14" -> "14/10/2026".
+ *
+ * NO pasa por `new Date(iso)`: una fecha sola se interpreta como medianoche
+ * UTC, que en Argentina es el día ANTERIOR a las 21 hs. El panel mostraba
+ * «vence 13/10» para algo que vence el 14.
+ */
 function fecha(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return d && m && a ? `${d}/${m}/${a}` : "—";
 }
 
 function fechaHora(iso: string | null): string {
@@ -102,9 +122,10 @@ export function MovimientosSuscripcion({
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-lg font-semibold">Movimientos de la suscripción</h2>
+        <h2 className="text-lg font-semibold">Actividad de la suscripción</h2>
         <p className="text-sm text-muted-foreground">
-          Cada vez que se movió el vencimiento, quién lo hizo y cómo volver atrás.
+          Pagos, cambios de plan, cancelaciones y movimientos del vencimiento: quién
+          lo hizo y, si se puede, cómo volver atrás.
         </p>
       </div>
 
@@ -112,7 +133,7 @@ export function MovimientosSuscripcion({
         <p className="text-sm text-muted-foreground">Cargando movimientos…</p>
       ) : movs.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Todavía no se movió el vencimiento de esta empresa.
+          Todavía no hay movimientos en esta suscripción.
         </div>
       ) : (
         <div className="space-y-2">
@@ -130,9 +151,11 @@ export function MovimientosSuscripcion({
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chip.cls}`}>
                       {chip.txt}
                     </span>
-                    <span className="text-sm tabular-nums">
-                      {fecha(a.vence_antes)} → {fecha(a.vence_despues)}
-                    </span>
+                    {(a.vence_antes || a.vence_despues) && a.vence_antes !== a.vence_despues && (
+                      <span className="text-sm tabular-nums">
+                        {fecha(a.vence_antes)} → {fecha(a.vence_despues)}
+                      </span>
+                    )}
                     {a.revertido && (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                         deshecho

@@ -127,13 +127,20 @@ Table ajuste_global {
 Table ajuste_suscripcion {
   id integer [pk]
   empresa_id integer [ref: > empresa.id, not null]
-  tipo varchar(20) [not null]
+  tipo varchar(30) [not null]
   vence_antes date
   vence_despues date
   dias integer
   detalle text
   pago_id integer [ref: > pago_suscripcion.id]
   hecho_por varchar(160)
+  actor_tipo varchar(20)
+  estado_antes varchar(30)
+  estado_despues varchar(30)
+  plan_antes varchar(20)
+  plan_despues varchar(20)
+  monto numeric(12, 2)
+  aviso_id integer [ref: > aviso_pago.id]
   creado_en timestamp with time zone [not null]
   revertido boolean [not null]
   revertido_en timestamp with time zone
@@ -142,6 +149,24 @@ Table ajuste_suscripcion {
   Indexes {
     (empresa_id, creado_en) [name: 'ix_ajuste_suscripcion_empresa']
     empresa_id [name: 'ix_ajuste_suscripcion_empresa_id']
+  }
+}
+
+Table auditoria_admin {
+  id integer [pk]
+  admin_id integer
+  admin_email varchar(160) [not null]
+  accion varchar(40) [not null]
+  empresa_id integer [ref: > empresa.id]
+  descripcion varchar(300)
+  antes jsonb
+  despues jsonb
+  ip varchar(45)
+  creado_en timestamp with time zone [not null]
+
+  Indexes {
+    (empresa_id, creado_en) [name: 'ix_auditoria_admin_empresa']
+    creado_en [name: 'ix_auditoria_admin_fecha']
   }
 }
 
@@ -158,6 +183,11 @@ Table aviso_pago {
   resuelto_en timestamp with time zone
   resuelto_por varchar(160)
   pago_id integer [ref: > pago_suscripcion.id]
+  plan varchar(20)
+  tipo varchar(20)
+  monto_esperado numeric(12, 2)
+  comprobante varchar(200)
+  mensaje_admin varchar(300)
 
   Indexes {
     empresa_id [name: 'ix_aviso_pago_empresa_id']
@@ -342,6 +372,10 @@ Table empresa {
   plan varchar(20) [not null]
   plan_programado varchar(20)
   suscripcion_vence date
+  cancela_al_vencer boolean [not null]
+  cancelacion_solicitada_en timestamp with time zone
+  cancelacion_motivo varchar(300)
+  cancelada_en timestamp with time zone
   prueba_hasta date
   razon_social varchar(160)
   cuit varchar(20)
@@ -501,6 +535,27 @@ Table horario_recurso {
   Indexes {
     (empresa_id, recurso_id, dia_semana) [name: 'ix_horario_empresa_recurso_dia']
     empresa_id [name: 'ix_horario_recurso_empresa_id']
+  }
+}
+
+Table intento_pago {
+  id integer [pk]
+  empresa_id integer [ref: > empresa.id, not null]
+  tipo varchar(20) [not null]
+  plan varchar(20)
+  monto numeric(12, 2) [not null]
+  metodo varchar(20) [not null]
+  estado varchar(20) [not null]
+  detalle varchar(200)
+  mp_payment_id varchar(40)
+  pago_id integer
+  iniciado_por varchar(160)
+  creado_en timestamp with time zone [not null]
+  actualizado_en timestamp with time zone
+
+  Indexes {
+    (empresa_id, creado_en) [name: 'ix_intento_pago_empresa']
+    empresa_id [name: 'ix_intento_pago_empresa_id']
   }
 }
 
@@ -724,6 +779,10 @@ Table pago_suscripcion {
   notas text
   registrado_por varchar(160)
   creado_en timestamp with time zone [not null]
+  tipo varchar(20)
+  plan varchar(20)
+  intento_id integer [ref: > intento_pago.id]
+  clave_idempotencia varchar(64)
   mp_payment_id varchar(40)
   anulado boolean [not null]
   anulado_en timestamp with time zone
@@ -733,6 +792,7 @@ Table pago_suscripcion {
     (empresa_id, fecha) [name: 'ix_pago_suscripcion_empresa_fecha']
     empresa_id [name: 'ix_pago_suscripcion_empresa_id']
     fecha [name: 'ix_pago_suscripcion_fecha']
+    clave_idempotencia [name: 'uq_pago_suscripcion_idem', unique]
     mp_payment_id [name: 'uq_pago_suscripcion_mp', unique]
   }
 }

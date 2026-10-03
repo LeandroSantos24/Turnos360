@@ -9,28 +9,33 @@ from fastapi import APIRouter, HTTPException, Request, status
 from app.api.deps import DB, SuperAdminActual
 from app.core.rate_limit import limiter
 from app.core.seguridad import crear_token_superadmin
+from app.models import Empresa
 from app.schemas.admin import (
     AdminLogin,
     AdminToken,
+    AprobarAvisoIn,
+    CancelarAdminIn,
+    ConfirmarIn,
     EmpresaAdminOut,
+    EmpresaCobranzaOut,
     EmpresaCrear,
     EmpresaPausar,
+    FichaComercialIn,
+    MarcaIn,
+    PagoSuscripcionIn,
+    PagoSuscripcionOut,
+    ProrrogaIn,
+    RechazoAvisoIn,
+    ResumenCobranzaOut,
     RubroOut,
+    SolicitarInfoIn,
+    SuscripcionAdminIn,
     UsuarioActualizar,
     UsuarioAdminOut,
     UsuarioCrear,
-    SuscripcionAdminIn,
-    EmpresaCobranzaOut,
-    ResumenCobranzaOut,
-    PagoSuscripcionIn,
-    RechazoAvisoIn,
-    PagoSuscripcionOut,
-    ProrrogaIn,
-    FichaComercialIn,
-    MarcaIn,
 )
-from app.models import Empresa
 from app.services import admin as svc
+from app.services import auditoria_admin as auditoria
 from app.services import cobranza
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -173,9 +178,17 @@ def crear_empresa(datos: EmpresaCrear, admin: SuperAdminActual, db: DB):
 
 @router.patch("/empresas/{empresa_id}", response_model=EmpresaAdminOut)
 def pausar_empresa(
-    empresa_id: int, datos: EmpresaPausar, admin: SuperAdminActual, db: DB
+    empresa_id: int, datos: EmpresaPausar, admin: SuperAdminActual, db: DB, request: Request
 ):
-    return svc.pausar_empresa(db, empresa_id, datos.activa)
+    """Suspende o reanuda la cuenta (corta el acceso, no borra datos)."""
+    empresa = _empresa_o_404(db, empresa_id)
+    return _auditado(
+        db, admin, request, "reanudar" if datos.activa else "suspender", empresa,
+        datos.motivo,
+        lambda: svc.pausar_empresa(
+            db, empresa_id, datos.activa, hecho_por=admin.email, motivo=datos.motivo
+        ),
+    )
 
 
 @router.get(
@@ -208,15 +221,25 @@ def setear_suscripcion(
     datos: SuscripcionAdminIn,
     admin: SuperAdminActual,
     db: DB,
+    request: Request,
 ):
     """Setea el plan y/o el vencimiento de la suscripción (solo super-admin)."""
-    return svc.setear_suscripcion(
-        db,
-        empresa_id,
-        datos.plan,
-        datos.suscripcion_vence,
-        datos.renovar_30,
-        hecho_por=admin.email,
+    empresa = _empresa_o_404(db, empresa_id)
+    accion = (
+        "renovar_manual" if datos.renovar_30
+        else "cambiar_vencimiento" if datos.suscripcion_vence is not None
+        else "cambiar_plan"
+    )
+    return _auditado(
+        db, admin, request, accion, empresa, None,
+        lambda: svc.setear_suscripcion(
+            db,
+            empresa_id,
+            datos.plan,
+            datos.suscripcion_vence,
+            datos.renovar_30,
+            hecho_por=admin.email,
+        ),
     )
 
 
@@ -233,13 +256,21 @@ def cobranza_empresas(
     color: str | None = None,
     plan: str | None = None,
     activa: bool | None = None,
+    filtro: str | None = None,
 ):
     """Listado con semáforo de cobranza.
 
     color: verde (al día) · amarillo (vence en <=7 días) · rojo (vencida,
     incluye prórroga) · gris (sin vencimiento).
+
+    filtro: en_revision · por_vencer · vencidas · al_dia · en_prueba ·
+    canceladas · sin_vencimiento.
     """
-    return cobranza.listar_empresas(db, buscar=buscar, color=color, plan=plan, activa=activa)
+    if filtro and filtro not in cobranza.FILTROS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Filtro desconocido.")
+    return cobranza.listar_empresas(
+        db, buscar=buscar, color=color, plan=plan, activa=activa, filtro=filtro
+    )
 
 
 @router.get("/cobranza/resumen", response_model=ResumenCobranzaOut)
@@ -326,17 +357,35 @@ def verificar_pago_mp(pago_id: int, admin: SuperAdminActual, db: DB) -> dict:
     status_code=status.HTTP_201_CREATED,
 )
 def registrar_pago(
-    empresa_id: int, datos: PagoSuscripcionIn, admin: SuperAdminActual, db: DB
+    empresa_id: int, datos: PagoSuscripcionIn, admin: SuperAdminActual, db: DB, request: Request
 ):
     """Registra una cuota cobrada. Por defecto empuja el vencimiento 30 días.
 
     `plan` activa el plan comprado, igual que hace el webhook de Mercado Pago
     con el que viene en su external_reference. Es lo que permite que una
     transferencia también sirva para cambiar de plan sin tocar la base a mano.
+
+    `clave_idempotencia` (la genera la pantalla al abrir el diálogo): un doble
+    click o un reintento devuelven el MISMO pago en vez de registrar dos
+    cuotas y regalar un mes.
     """
+    from sqlalchemy import select
+
     from app.core import planes
+    from app.models import PagoSuscripcion
 
     empresa = _empresa_o_404(db, empresa_id)
+
+    if datos.clave_idempotencia:
+        previo = db.scalar(
+            select(PagoSuscripcion).where(
+                PagoSuscripcion.clave_idempotencia == datos.clave_idempotencia
+            )
+        )
+        if previo is not None:
+            if previo.empresa_id != empresa_id:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Esa operación ya se usó.")
+            return _pago_out(previo)
 
     plan = None
     if datos.plan:
@@ -355,25 +404,37 @@ def registrar_pago(
             )
         plan = elegido.value
 
-    pago = cobranza.registrar_pago(
-        db,
-        empresa,
-        monto=datos.monto,
-        metodo=datos.metodo,
-        fecha=datos.fecha,
-        notas=datos.notas,
-        registrado_por=admin.email,
-        renovar=datos.renovar,
-        plan=plan,
-    )
-    # Si el negocio había avisado "ya te transferí", ese aviso queda atendido:
-    # es exactamente lo que Leandro estaba yendo a confirmar.
-    aviso = cobranza.aviso_pendiente(db, empresa_id)
-    db.commit()
-    if aviso is not None:
-        cobranza.resolver_aviso(
-            db, aviso.id, pago_id=pago.id, resuelto_por=admin.email
+    def hacer():
+        pago = cobranza.registrar_pago(
+            db,
+            empresa,
+            monto=datos.monto,
+            metodo=datos.metodo,
+            fecha=datos.fecha,
+            notas=datos.notas,
+            registrado_por=admin.email,
+            renovar=datos.renovar,
+            plan=plan,
+            actor_tipo="admin",
+            clave_idempotencia=datos.clave_idempotencia,
         )
+        # Si el negocio había avisado "ya te transferí", ese aviso queda
+        # atendido: es exactamente lo que Leandro estaba yendo a confirmar.
+        aviso = cobranza.aviso_abierto(db, empresa_id)
+        db.commit()
+        if aviso is not None:
+            cobranza.resolver_aviso(db, aviso.id, pago_id=pago.id, resuelto_por=admin.email)
+        return pago
+
+    pago = _auditado(
+        db, admin, request, "registrar_pago", empresa,
+        f"{cobranza.pesos(datos.monto)} por {datos.metodo}",
+        hacer,
+    )
+    return _pago_out(pago)
+
+
+def _pago_out(pago) -> dict:
     return {
         "id": pago.id,
         "fecha": str(pago.fecha),
@@ -387,12 +448,16 @@ def registrar_pago(
 
 @router.post("/empresas/{empresa_id}/prorroga", response_model=EmpresaCobranzaOut)
 def dar_prorroga(
-    empresa_id: int, datos: ProrrogaIn, admin: SuperAdminActual, db: DB
+    empresa_id: int, datos: ProrrogaIn, admin: SuperAdminActual, db: DB, request: Request
 ):
     """Suma días de gracia al vencimiento (o extiende una prueba)."""
     empresa = _empresa_o_404(db, empresa_id)
-    cobranza.prorrogar(db, empresa, datos.dias, hecho_por=admin.email)
-    db.commit()
+
+    def hacer():
+        cobranza.prorrogar(db, empresa, datos.dias, hecho_por=admin.email)
+        db.commit()
+
+    _auditado(db, admin, request, "prorroga", empresa, f"+{datos.dias} días", hacer)
     return _fila_de(db, empresa_id)
 
 
@@ -405,9 +470,76 @@ def avisos_de_pago(admin: SuperAdminActual, db: DB, pendientes: bool = True) -> 
     return cobranza.listar_avisos(db, solo_pendientes=pendientes)
 
 
+@router.post("/cobranza/avisos/{aviso_id}/aprobar", response_model=PagoSuscripcionOut)
+def aprobar_aviso(
+    aviso_id: int, datos: AprobarAvisoIn, admin: SuperAdminActual, db: DB, request: Request
+):
+    """Aprueba la transferencia: registra la cuota (una sola vez) y cierra el aviso.
+
+    El plan que se activa es el que el servidor fijó al recibir el aviso; el
+    monto, el que el super-admin vio en el banco. Dos aprobaciones simultáneas
+    del mismo aviso: la segunda recibe 409.
+    """
+    if not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar la aprobación.")
+    aviso = _aviso_o_404(db, aviso_id)
+    empresa = _empresa_o_404(db, aviso.empresa_id)
+    pago = _auditado(
+        db, admin, request, "aprobar_pago", empresa,
+        f"Aviso #{aviso_id}",
+        lambda: cobranza.aprobar_aviso(
+            db, aviso_id, monto=datos.monto, fecha=datos.fecha,
+            hecho_por=admin.email, notas=datos.notas,
+        ),
+    )
+    return _pago_out(pago)
+
+
+@router.post("/cobranza/avisos/{aviso_id}/solicitar-info")
+def solicitar_info_aviso(
+    aviso_id: int, datos: SolicitarInfoIn, admin: SuperAdminActual, db: DB, request: Request
+) -> dict:
+    """Le pide al negocio un dato más. El aviso sigue abierto."""
+    aviso = _aviso_o_404(db, aviso_id)
+    empresa = _empresa_o_404(db, aviso.empresa_id)
+    _auditado(
+        db, admin, request, "solicitar_info", empresa, datos.mensaje,
+        lambda: cobranza.solicitar_info(db, aviso_id, datos.mensaje, admin.email),
+    )
+    return {"ok": True, "estado": "info_solicitada"}
+
+
+@router.get("/cobranza/avisos/{aviso_id}/comprobante")
+def ver_comprobante(aviso_id: int, admin: SuperAdminActual, db: DB, request: Request):
+    """El comprobante adjunto al aviso. Privado: solo el super-admin lo ve."""
+    from fastapi.responses import FileResponse
+
+    from app.routers.subidas import ruta_comprobante
+
+    aviso = _aviso_o_404(db, aviso_id)
+    if not aviso.comprobante:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese aviso no tiene comprobante.")
+    ruta = ruta_comprobante(aviso.empresa_id, aviso.comprobante)
+    if not ruta.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No encontramos el archivo del comprobante.")
+    auditoria.auditar(
+        db, admin, "ver_comprobante", empresa_id=aviso.empresa_id,
+        descripcion=f"Aviso #{aviso_id}", request=request,
+    )
+    db.commit()
+    return FileResponse(
+        ruta, media_type="image/webp",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.post("/cobranza/avisos/{aviso_id}/descartar")
 def descartar_aviso(
-    aviso_id: int, admin: SuperAdminActual, db: DB, datos: RechazoAvisoIn | None = None
+    aviso_id: int,
+    admin: SuperAdminActual,
+    db: DB,
+    request: Request,
+    datos: RechazoAvisoIn | None = None,
 ) -> dict:
     """Rechaza el aviso: sale de la bandeja SIN registrar cuota, y con motivo.
 
@@ -416,15 +548,57 @@ def descartar_aviso(
     acreditaron el mes, no había con qué contestarle: ni quién lo descartó, ni
     cuándo, ni por qué. Ahora queda en el historial y se le puede contestar.
     """
-    cobranza.resolver_aviso(
-        db,
-        aviso_id,
-        pago_id=None,
-        resuelto_por=admin.email,
-        motivo=(datos.motivo if datos else None),
+    aviso = _aviso_o_404(db, aviso_id)
+    empresa = _empresa_o_404(db, aviso.empresa_id)
+    motivo = datos.motivo if datos else None
+    _auditado(
+        db, admin, request, "rechazar_pago", empresa,
+        f"Aviso #{aviso_id}" + (f" · {motivo}" if motivo else ""),
+        lambda: cobranza.resolver_aviso(
+            db, aviso_id, pago_id=None, resuelto_por=admin.email, motivo=motivo
+        ),
     )
-    db.commit()
     return {"ok": True}
+
+
+@router.post("/empresas/{empresa_id}/cancelar")
+def cancelar_suscripcion_admin(
+    empresa_id: int, datos: CancelarAdminIn, admin: SuperAdminActual, db: DB, request: Request
+) -> dict:
+    """Cancela la suscripción en nombre del negocio (sigue hasta el vencimiento)."""
+    if not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar la cancelación.")
+    empresa = _empresa_o_404(db, empresa_id)
+    return _auditado(
+        db, admin, request, "cancelar", empresa, datos.motivo,
+        lambda: cobranza.cancelar_suscripcion(
+            db, empresa, motivo=datos.motivo, hecho_por=admin.email, actor_tipo="admin"
+        ),
+    )
+
+
+@router.post("/empresas/{empresa_id}/reactivar")
+def reactivar_suscripcion_admin(
+    empresa_id: int, datos: ConfirmarIn, admin: SuperAdminActual, db: DB, request: Request
+) -> dict:
+    """Deshace la cancelación de la suscripción."""
+    if not datos.confirmo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta confirmar la reactivación.")
+    empresa = _empresa_o_404(db, empresa_id)
+    return _auditado(
+        db, admin, request, "reactivar", empresa, None,
+        lambda: cobranza.reactivar_suscripcion(
+            db, empresa, hecho_por=admin.email, actor_tipo="admin"
+        ),
+    )
+
+
+@router.get("/auditoria")
+def ver_auditoria(
+    admin: SuperAdminActual, db: DB, empresa_id: int | None = None, limite: int = 100
+) -> list[dict]:
+    """Qué hizo cada super-admin. Solo lectura: no hay forma de editarla."""
+    return auditoria.listar(db, empresa_id=empresa_id, limite=limite)
 
 
 @router.get("/empresas/{empresa_id}/ajustes")
@@ -436,23 +610,74 @@ def historial_ajustes(empresa_id: int, admin: SuperAdminActual, db: DB) -> list[
 
 @router.post("/empresas/{empresa_id}/ajustes/{ajuste_id}/revertir")
 def revertir_ajuste(
-    empresa_id: int, ajuste_id: int, admin: SuperAdminActual, db: DB
+    empresa_id: int, ajuste_id: int, admin: SuperAdminActual, db: DB, request: Request
 ) -> dict:
     """Deshace un movimiento del vencimiento (el arreglo del click equivocado)."""
-    _empresa_o_404(db, empresa_id)
-    return cobranza.revertir_ajuste(db, empresa_id, ajuste_id, hecho_por=admin.email)
+    empresa = _empresa_o_404(db, empresa_id)
+    return _auditado(
+        db, admin, request, "revertir", empresa, f"Movimiento #{ajuste_id}",
+        lambda: cobranza.revertir_ajuste(db, empresa_id, ajuste_id, hecho_por=admin.email),
+    )
 
 
 @router.put("/empresas/{empresa_id}/ficha", response_model=EmpresaCobranzaOut)
 def guardar_ficha(
-    empresa_id: int, datos: FichaComercialIn, admin: SuperAdminActual, db: DB
+    empresa_id: int, datos: FichaComercialIn, admin: SuperAdminActual, db: DB, request: Request
 ):
     """Guarda los datos comerciales (razón social, CUIT, contacto, precio)."""
     empresa = _empresa_o_404(db, empresa_id)
-    for campo, valor in datos.model_dump(exclude_unset=True).items():
-        setattr(empresa, campo, valor)
-    db.commit()
+    cambios = datos.model_dump(exclude_unset=True)
+
+    def hacer():
+        precio_antes = empresa.precio_mensual
+        for campo, valor in cambios.items():
+            setattr(empresa, campo, valor)
+        # El precio pactado cambia lo que se le cobra: es un evento de la
+        # suscripción, no solo un dato de ficha.
+        if "precio_mensual" in cambios and (
+            (precio_antes is None) != (cambios["precio_mensual"] is None)
+            or (precio_antes is not None and float(precio_antes) != float(cambios["precio_mensual"]))
+        ):
+            nuevo = cambios["precio_mensual"]
+            cobranza.evento(
+                db, empresa, "precio",
+                "Precio pactado: "
+                + (cobranza.pesos(nuevo) if nuevo is not None else "vuelve al de lista"),
+                hecho_por=admin.email, actor_tipo="admin",
+                monto=float(nuevo) if nuevo is not None else None,
+            )
+        db.commit()
+
+    _auditado(db, admin, request, "ficha", empresa, ", ".join(sorted(cambios)) or None, hacer)
     return _fila_de(db, empresa_id)
+
+
+def _auditado(db, admin, request, accion: str, empresa, descripcion, accion_fn):
+    """Ejecuta una acción del admin y deja la auditoría con antes y después.
+
+    La fila se agrega a la sesión ANTES de ejecutar: si la acción hace commit,
+    la auditoría entra en la misma transacción; si falla (409, 404…), la
+    sesión se descarta y no queda registrada una acción que no ocurrió.
+    """
+    antes = auditoria.foto(db, empresa)
+    fila = auditoria.auditar(
+        db, admin, accion, empresa_id=empresa.id, descripcion=descripcion,
+        antes=antes, request=request,
+    )
+    resultado = accion_fn()
+    db.refresh(empresa)
+    fila.despues = auditoria.foto(db, empresa)
+    db.commit()
+    return resultado
+
+
+def _aviso_o_404(db, aviso_id: int):
+    from app.models import AvisoPago
+
+    aviso = db.get(AvisoPago, aviso_id)
+    if aviso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese aviso no existe.")
+    return aviso
 
 
 def _empresa_o_404(db, empresa_id: int) -> Empresa:

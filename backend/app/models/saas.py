@@ -23,6 +23,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -47,6 +48,16 @@ class PagoSuscripcion(Base):
             unique=True,
             postgresql_where=text("mp_payment_id is not null"),
         ),
+        # Idempotencia del registro MANUAL: el diálogo del super-admin manda
+        # una clave por apertura. Un doble click o un reintento de red con la
+        # misma clave no puede anotar dos cuotas ni correr el vencimiento dos
+        # veces.
+        Index(
+            "uq_pago_suscripcion_idem",
+            "clave_idempotencia",
+            unique=True,
+            postgresql_where=text("clave_idempotencia is not null"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -69,6 +80,14 @@ class PagoSuscripcion(Base):
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    # QUÉ fue este pago: "alta" (primer pago), "renovacion", "cambio_plan",
+    # "reactivacion" o "manual". Y el plan que pagó. Antes había que deducirlo
+    # de las notas.
+    tipo: Mapped[str | None] = mapped_column(String(20))
+    plan: Mapped[str | None] = mapped_column(String(20))
+    intento_id: Mapped[int | None] = mapped_column(ForeignKey("intento_pago.id"))
+    clave_idempotencia: Mapped[str | None] = mapped_column(String(64))
 
     # Id del pago en Mercado Pago, cuando la cuota entró por ahí. Único: es la
     # idempotencia del webhook. Mercado Pago reintenta la misma notificación
@@ -113,8 +132,12 @@ class AjusteSuscripcion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     empresa_id: Mapped[int] = mapped_column(ForeignKey("empresa.id"), index=True)
 
-    # "pago" | "renovacion" | "prorroga" | "manual" | "reversion"
-    tipo: Mapped[str] = mapped_column(String(20))
+    # Es el REGISTRO DE EVENTOS de la suscripción, no solo de fechas:
+    # "pago" | "renovacion" | "prorroga" | "manual" | "reversion" | "plan" |
+    # "cancelacion" | "reactivacion" | "cancelada" | "suspension" |
+    # "reanudacion" | "aviso" | "aviso_rechazado" | "info_solicitada" |
+    # "pago_rechazado" | "pago_devuelto" | "baja_postergada" | "precio"
+    tipo: Mapped[str] = mapped_column(String(30))
     vence_antes: Mapped[dt.date | None] = mapped_column(Date)
     vence_despues: Mapped[dt.date | None] = mapped_column(Date)
     dias: Mapped[int | None] = mapped_column(Integer)
@@ -125,6 +148,15 @@ class AjusteSuscripcion(Base):
     pago_id: Mapped[int | None] = mapped_column(ForeignKey("pago_suscripcion.id"))
 
     hecho_por: Mapped[str | None] = mapped_column(String(160))
+    # Quién lo hizo, por tipo: "dueno" | "admin" | "sistema" | "mercadopago".
+    actor_tipo: Mapped[str | None] = mapped_column(String(20))
+    # El antes y el después de lo que cambió además de la fecha.
+    estado_antes: Mapped[str | None] = mapped_column(String(30))
+    estado_despues: Mapped[str | None] = mapped_column(String(30))
+    plan_antes: Mapped[str | None] = mapped_column(String(20))
+    plan_despues: Mapped[str | None] = mapped_column(String(20))
+    monto: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    aviso_id: Mapped[int | None] = mapped_column(ForeignKey("aviso_pago.id"))
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -186,9 +218,10 @@ class AvisoPago(Base):
     # bandeja sin explicación, así que si el negocio reclamaba a la semana no
     # había nada que mirar.
     #
-    #   pendiente  → hay que ir a buscarla al banco
-    #   confirmada → la plata está y se registró la cuota (pago_id la señala)
-    #   rechazada  → no apareció, o no era lo que decía (motivo lo explica)
+    #   pendiente        → hay que ir a buscarla al banco
+    #   info_solicitada  → falta un dato; el negocio lo ve y puede responder
+    #   confirmada       → la plata está y se registró la cuota (pago_id la señala)
+    #   rechazada        → no apareció, o no era lo que decía (motivo lo explica)
     estado: Mapped[str] = mapped_column(
         String(20), default="pendiente", server_default=text("'pendiente'")
     )
@@ -200,10 +233,22 @@ class AvisoPago(Base):
     # Si se confirmó, la cuota que se registró a partir de este aviso.
     pago_id: Mapped[int | None] = mapped_column(ForeignKey("pago_suscripcion.id"))
 
+    # LO QUE SE ESTÁ PAGANDO, decidido por el servidor al recibir el aviso.
+    # Antes el aviso no sabía de qué plan era: al confirmarlo había que
+    # adivinar por el monto si era una renovación o una subida a Pro.
+    plan: Mapped[str | None] = mapped_column(String(20))
+    tipo: Mapped[str | None] = mapped_column(String(20))
+    monto_esperado: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    # Comprobante: ruta PRIVADA (no se sirve por /uploads). Solo el
+    # super-admin lo descarga, por un endpoint autenticado.
+    comprobante: Mapped[str | None] = mapped_column(String(200))
+    # Cuando el super-admin pide más información, el texto que ve el negocio.
+    mensaje_admin: Mapped[str | None] = mapped_column(String(300))
+
     @property
     def resuelto(self) -> bool:
         """Ya no está esperando. Se deriva: no es una columna."""
-        return self.estado != "pendiente"
+        return self.estado not in ("pendiente", "info_solicitada")
 
     empresa: Mapped["Empresa"] = relationship()  # noqa: F821
 
@@ -389,3 +434,69 @@ class AjusteGlobal(Base):
 
     actualizado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     actualizado_por: Mapped[str | None] = mapped_column(String(160))
+
+
+class IntentoPago(Base):
+    """Cada vez que un negocio arranca un pago por Mercado Pago.
+
+    Es lo que faltaba para la conciliación: antes un checkout abandonado o un
+    pago rechazado no dejaban rastro, así que el negocio decía «pagué» y no
+    había nada que mirar. Ahora cada intento queda con su estado
+    (iniciado → aprobado | rechazado | pendiente | cancelado), el monto que el
+    SERVIDOR decidió cobrar y el pago que generó si se aprobó.
+
+    El id del intento viaja en el external_reference (`sus:<empresa>:<plan>:i<id>`)
+    y vuelve en el webhook: con eso se compara lo que MP cobró contra lo que se
+    pidió, y un monto distinto no activa el plan.
+    """
+
+    __tablename__ = "intento_pago"
+    __table_args__ = (Index("ix_intento_pago_empresa", "empresa_id", "creado_en"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresa.id"), index=True)
+    # "alta" | "renovacion" | "cambio_plan" | "reactivacion"
+    tipo: Mapped[str] = mapped_column(String(20))
+    plan: Mapped[str | None] = mapped_column(String(20))
+    monto: Mapped[float] = mapped_column(Numeric(12, 2))
+    metodo: Mapped[str] = mapped_column(String(20), default="mercadopago")
+    # "iniciado" | "pendiente" | "aprobado" | "rechazado" | "cancelado"
+    estado: Mapped[str] = mapped_column(
+        String(20), default="iniciado", server_default=text("'iniciado'")
+    )
+    detalle: Mapped[str | None] = mapped_column(String(200))
+    mp_payment_id: Mapped[str | None] = mapped_column(String(40))
+    pago_id: Mapped[int | None] = mapped_column(Integer)
+    iniciado_por: Mapped[str | None] = mapped_column(String(160))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    actualizado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuditoriaAdmin(Base):
+    """Qué hizo cada super-admin, sobre qué empresa, y qué cambió.
+
+    Toda acción administrativa que toca plata, acceso o una suscripción deja
+    acá una fila con el estado ANTES y DESPUÉS. Es append-only: no hay
+    endpoint que la modifique ni la borre.
+    """
+
+    __tablename__ = "auditoria_admin"
+    __table_args__ = (
+        Index("ix_auditoria_admin_empresa", "empresa_id", "creado_en"),
+        Index("ix_auditoria_admin_fecha", "creado_en"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_id: Mapped[int | None] = mapped_column(Integer)
+    admin_email: Mapped[str] = mapped_column(String(160))
+    accion: Mapped[str] = mapped_column(String(40))
+    empresa_id: Mapped[int | None] = mapped_column(ForeignKey("empresa.id"))
+    descripcion: Mapped[str | None] = mapped_column(String(300))
+    antes: Mapped[dict | None] = mapped_column(JSONB)
+    despues: Mapped[dict | None] = mapped_column(JSONB)
+    ip: Mapped[str | None] = mapped_column(String(45))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -28,6 +28,7 @@ import {
   leerMiSuscripcion,
   type MiSuscripcion,
   type PlanDeLaGrilla,
+  type TonoEstado,
 } from "@/lib/empresa-api";
 
 export const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
@@ -54,43 +55,91 @@ export function fechaLarga(iso: string | null): string {
   return isValid(d) ? format(d, "d 'de' MMMM 'de' yyyy", { locale: es }) : "—";
 }
 
+/** Fecha y hora de un evento (ISO con zona) en hora local. */
+export function fechaHora(iso: string | null): string {
+  if (!iso) return "—";
+  const d = parseISO(iso);
+  return isValid(d) ? format(d, "d MMM yyyy, HH:mm", { locale: es }) : "—";
+}
+
 export function fechaCorta(iso: string | null): string {
   if (!iso) return "—";
   const d = parseISO(iso);
   return isValid(d) ? format(d, "d MMM yyyy", { locale: es }) : "—";
 }
 
-/** Colores del cartel de estado. */
-export const ESTILO_ESTADO: Record<
-  string,
-  { fondo: string; borde: string; texto: string }
-> = {
-  activa: {
+type Estilo = { fondo: string; borde: string; texto: string; punto: string };
+
+/**
+ * Colores por TONO, no por estado. El tono lo decide el servidor
+ * (core/estados_suscripcion.py) junto con la etiqueta: la pantalla no vuelve
+ * a interpretar qué significa cada estado, solo lo pinta.
+ */
+export const ESTILO_TONO: Record<TonoEstado, Estilo> = {
+  ok: {
     fondo: "bg-emerald-500/10",
     borde: "border-emerald-500/30",
     texto: "text-emerald-700 dark:text-emerald-400",
+    punto: "bg-emerald-500",
   },
-  prorroga: {
-    fondo: "bg-amber-500/10",
-    borde: "border-amber-500/30",
-    texto: "text-amber-700 dark:text-amber-400",
-  },
-  vencida: {
-    fondo: "bg-red-500/10",
-    borde: "border-red-500/30",
-    texto: "text-red-700 dark:text-red-400",
-  },
-  sin_vencimiento: {
-    fondo: "bg-muted",
-    borde: "border-border",
-    texto: "text-muted-foreground",
-  },
-  prueba: {
+  info: {
     fondo: "bg-sky-500/10",
     borde: "border-sky-500/30",
     texto: "text-sky-700 dark:text-sky-400",
+    punto: "bg-sky-500",
+  },
+  aviso: {
+    fondo: "bg-amber-500/10",
+    borde: "border-amber-500/30",
+    texto: "text-amber-700 dark:text-amber-400",
+    punto: "bg-amber-500",
+  },
+  error: {
+    fondo: "bg-red-500/10",
+    borde: "border-red-500/30",
+    texto: "text-red-700 dark:text-red-400",
+    punto: "bg-red-500",
+  },
+  neutro: {
+    fondo: "bg-muted",
+    borde: "border-border",
+    texto: "text-muted-foreground",
+    punto: "bg-muted-foreground",
   },
 };
+
+export function estiloDe(tono: TonoEstado | string | null | undefined): Estilo {
+  return ESTILO_TONO[(tono as TonoEstado) ?? "neutro"] ?? ESTILO_TONO.neutro;
+}
+
+/** Badge del estado, con la etiqueta que manda el servidor. */
+export function BadgeEstado({
+  etiqueta,
+  tono,
+}: {
+  etiqueta: string;
+  tono: TonoEstado | string;
+}) {
+  const e = estiloDe(tono);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${e.fondo} ${e.borde} ${e.texto}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${e.punto}`} />
+      {etiqueta}
+    </span>
+  );
+}
+
+/**
+ * Cuánto se paga por `destino`: el precio pactado si lo hay, si no el del
+ * plan. Es la MISMA regla que `mp_suscripcion.precio_de` en el servidor, que
+ * es el que igual decide lo que se espera cobrar.
+ */
+export function montoDe(datos: MiSuscripcion, destino?: PlanDeLaGrilla): number | null {
+  if (datos.precio_pactado) return datos.cuota;
+  return destino?.precio ?? datos.cuota;
+}
 
 /**
  * Trae la suscripción y el aviso de pago pendiente.
@@ -103,6 +152,11 @@ export const ESTILO_ESTADO: Record<
 export function useSuscripcion() {
   const [datos, setDatos] = useState<MiSuscripcion | null>(null);
   const [avisoPendiente, setAvisoPendiente] = useState(false);
+  // El aviso puede estar esperando que lo revisemos ("pendiente") o esperando
+  // un dato del negocio ("info_solicitada"). Solo en el primer caso no tiene
+  // sentido volver a avisar.
+  const [avisoEstado, setAvisoEstado] = useState<string | null>(null);
+  const [mensajeAdmin, setMensajeAdmin] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
   const cargar = useCallback(async () => {
@@ -110,10 +164,14 @@ export function useSuscripcion() {
     try {
       const [sus, aviso] = await Promise.all([
         leerMiSuscripcion(),
-        leerAvisoPago().catch(() => ({ pendiente: false })),
+        leerAvisoPago().catch(
+          () => ({ pendiente: false }) as Awaited<ReturnType<typeof leerAvisoPago>>,
+        ),
       ]);
       setDatos(sus);
-      setAvisoPendiente(Boolean(aviso.pendiente));
+      setAvisoPendiente(Boolean(aviso.pendiente) && aviso.estado !== "info_solicitada");
+      setAvisoEstado(aviso.pendiente ? (aviso.estado ?? "pendiente") : null);
+      setMensajeAdmin(aviso.mensaje_admin ?? null);
     } catch {
       toast.error("No se pudo cargar tu suscripción");
     } finally {
@@ -125,7 +183,15 @@ export function useSuscripcion() {
     cargar();
   }, [cargar]);
 
-  return { datos, avisoPendiente, setAvisoPendiente, cargando, cargar };
+  return {
+    datos,
+    avisoPendiente,
+    avisoEstado,
+    mensajeAdmin,
+    setAvisoPendiente,
+    cargando,
+    cargar,
+  };
 }
 
 /**

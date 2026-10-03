@@ -210,6 +210,18 @@ class Empresa(Base):
     # Se limpia solo en cuanto paga: si pagó, volvió a elegir.
     plan_programado: Mapped[str | None] = mapped_column(String(20))
     suscripcion_vence: Mapped[dt.date | None] = mapped_column(Date)
+    # CANCELACIÓN PEDIDA POR EL NEGOCIO. No corta nada en el momento: el ciclo
+    # pagado se usa entero y al vencer la suscripción pasa a CANCELADA (sin
+    # período de gracia, porque no hay nada que regularizar). Los datos no se
+    # borran nunca. Pagar o «reactivar» la deshace.
+    cancela_al_vencer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    cancelacion_solicitada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelacion_motivo: Mapped[str | None] = mapped_column(String(300))
+    # Cuándo se hizo efectiva (la anota el barrido diario, o al instante si no
+    # había un ciclo pagado que respetar).
+    cancelada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Fin del período de prueba. NULL = cliente normal.
     # Mientras hoy <= prueba_hasta el negocio NO es moroso ni cliente al día:
     # es un estado propio, y mezclarlo con cualquiera de los dos ensucia el

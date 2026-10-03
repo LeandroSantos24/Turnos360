@@ -56,7 +56,7 @@ def _contar(db: Session, modelo, empresa_id: int, *extra) -> int:
 def ficha(db: Session, empresa: Empresa) -> dict:
     hoy = hoy_de_pared()
     lim = planes.limites_de(empresa.plan)
-    est = estado_suscripcion(empresa)
+    est = estado_suscripcion(empresa, db)
     sem = cobranza.semaforo_de(empresa, hoy)
 
     # ── Uso: lo que compró contra lo que usa ──────────────────────────
@@ -136,6 +136,19 @@ def ficha(db: Session, empresa: Empresa) -> dict:
             "detalle": sem["detalle"],
             "dias_restantes": sem["dias_restantes"],
             "en_prorroga": sem["en_prorroga"],
+            # Estado centralizado (core/estados_suscripcion.py): el mismo que
+            # ve el negocio en «Mi suscripción».
+            "estado_base": est["estado_base"],
+            "etiqueta": est["etiqueta"],
+            "tono": est["tono"],
+            "reservas_abiertas": est["reservas_abiertas"],
+            "plan_programado": empresa.plan_programado,
+            "cancela_al_vencer": bool(empresa.cancela_al_vencer),
+            "cancelacion_motivo": empresa.cancelacion_motivo,
+            "cancelacion_solicitada_en": (
+                empresa.cancelacion_solicitada_en.isoformat()
+                if empresa.cancelacion_solicitada_en else None
+            ),
         },
         "cobranza": {
             "pagos": len(pagos),

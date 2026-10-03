@@ -72,6 +72,7 @@ import logging
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -383,6 +384,14 @@ def acreditar_cobro(db: Session, authorized_payment_id: str):
             str(pago.get("status_detail") or estado_pago or "sin detalle")[:200]
         )
         fila.actualizada_en = dt.datetime.now(dt.timezone.utc)
+        empresa = db.get(Empresa, fila.empresa_id)
+        if empresa is not None and estado_pago in ("rejected", "cancelled"):
+            cobranza.evento(
+                db, empresa, "pago_rechazado",
+                f"El débito automático no se pudo cobrar ({fila.ultimo_error})",
+                hecho_por="mercadopago", actor_tipo="mercadopago",
+                monto=float(datos.get("transaction_amount") or 0) or None,
+            )
         db.commit()
         log.warning(
             "MP débito: cobro no aprobado",
@@ -427,6 +436,7 @@ def acreditar_cobro(db: Session, authorized_payment_id: str):
         registrado_por="mercadopago",
         renovar=True,
         plan=plan_a_activar,
+        actor_tipo="mercadopago",
     )
     cuota.mp_payment_id = payment_id
 
@@ -436,7 +446,13 @@ def acreditar_cobro(db: Session, authorized_payment_id: str):
     fila.cobros_fallidos = 0
     fila.ultimo_error = None
     fila.actualizada_en = dt.datetime.now(dt.timezone.utc)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Un aviso `payment` y otro `subscription_authorized_payment` del
+        # mismo cargo llegaron a la vez: el otro ya lo registró.
+        db.rollback()
+        return None
 
     log.info(
         "MP débito: cuota cobrada automáticamente",
@@ -533,3 +549,54 @@ def para_mostrar(db: Session, empresa_id: int) -> dict | None:
         "cobros_fallidos": fila.cobros_fallidos or 0,
         "ultimo_error": fila.ultimo_error,
     }
+
+
+def ajustar_al_plan(db: Session, empresa: Empresa) -> bool:
+    """Lleva el monto del débito automático al plan que la empresa tiene hoy.
+
+    Sin esto, quien sube de plan pagando por otro medio (o a quien se le
+    aplica una baja programada) sigue autorizado por el monto VIEJO: Mercado
+    Pago le cobraría de más o de menos todos los meses. Nunca levanta: si MP
+    no responde queda un evento para revisarlo a mano.
+    """
+    from app.services import cobranza
+
+    fila = vigente(db, empresa.id)
+    if fila is None or not se_vende_solo(plan_de(empresa.plan)):
+        return False
+    monto = monto_de(empresa, plan_de(empresa.plan).value)
+    if fila.plan == plan_de(empresa.plan).value and fila.monto is not None and abs(float(fila.monto) - monto) < 1:
+        return True
+    ok = True
+    if esta_activo():
+        try:
+            r = httpx.put(
+                f"{MP_API}/preapproval/{fila.preapproval_id}",
+                json={
+                    "reason": f"Turnos360 {limites_de(empresa.plan).etiqueta}"[:255],
+                    "auto_recurring": {"transaction_amount": monto, "currency_id": "ARS"},
+                },
+                headers=_headers(),
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+        except Exception:
+            log.exception("MP débito: no se pudo ajustar el monto (%s)", fila.preapproval_id)
+            ok = False
+    if ok:
+        fila.plan = plan_de(empresa.plan).value
+        fila.monto = monto
+        fila.actualizada_en = dt.datetime.now(dt.timezone.utc)
+        cobranza.evento(
+            db, empresa, "plan",
+            f"Débito automático ajustado a {cobranza.pesos(monto)} ({limites_de(empresa.plan).etiqueta})",
+            hecho_por="sistema", actor_tipo="sistema",
+        )
+    else:
+        cobranza.evento(
+            db, empresa, "pago_rechazado",
+            "No se pudo actualizar el monto del débito automático en Mercado Pago: revisalo a mano",
+            hecho_por="sistema", actor_tipo="sistema",
+        )
+    db.commit()
+    return ok

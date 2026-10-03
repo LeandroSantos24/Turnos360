@@ -321,7 +321,7 @@ def test_subir_de_plan_NO_activa_nada_sin_pagar(client, db, armar_empresa):
     r = client.post(
         "/empresa/suscripcion/cambiar-plan",
         headers=token_de(ctx.dueno),
-        json={"plan": "multi"},
+        json={"plan": "multi", "confirmo": True},
     )
 
     assert r.status_code == 200, r.text
@@ -339,7 +339,7 @@ def test_bajar_de_plan_contesta_cuando_se_aplica(client, db, armar_empresa):
     r = client.post(
         "/empresa/suscripcion/cambiar-plan",
         headers=token_de(ctx.dueno),
-        json={"plan": "inicial"},
+        json={"plan": "inicial", "confirmo": True},
     )
 
     assert r.status_code == 200, r.text
@@ -360,7 +360,7 @@ def test_elegir_el_plan_que_ya_tengo_cancela_la_baja(client, db, armar_empresa):
     r = client.post(
         "/empresa/suscripcion/cambiar-plan",
         headers=token_de(ctx.dueno),
-        json={"plan": "multi"},
+        json={"plan": "multi", "confirmo": True},
     )
 
     assert r.json()["accion"] == "cancelada"

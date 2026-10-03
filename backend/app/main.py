@@ -97,7 +97,18 @@ async def agregar_security_headers(request: Request, call_next):
 # archivo que se sube.
 _uploads = Path(settings.uploads_dir)
 _uploads.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_uploads), check_dir=False), name="uploads")
+class _UploadsPublicos(StaticFiles):
+    """Sirve /uploads MENOS la carpeta privada (comprobantes de pago)."""
+
+    async def get_response(self, path, scope):
+        if path.replace("\\", "/").lstrip("/").split("/", 1)[0].startswith("_"):
+            from starlette.exceptions import HTTPException as _HTTPExc
+
+            raise _HTTPExc(status_code=404)
+        return await super().get_response(path, scope)
+
+
+app.mount("/uploads", _UploadsPublicos(directory=str(_uploads), check_dir=False), name="uploads")
 
 app.include_router(auth.router)
 app.include_router(clientes.router)

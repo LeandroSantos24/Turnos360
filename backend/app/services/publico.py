@@ -89,12 +89,16 @@ def exigir_al_dia(empresa: Empresa) -> None:
     nadie.
 
     LA PRÓRROGA ES LA QUE MANDA. Mientras esté dentro de los días de gracia
-    esto no frena nada; el corte es recién cuando `estado_suscripcion` dice
-    "vencida", que ya contempla la prórroga.
+    esto no frena nada. La regla vive en UN lugar
+    (`estado_suscripcion(...)["reservas_abiertas"]`): vencida y pasada la
+    prórroga, prueba terminada hace más de 3 días, cancelada o suspendida.
+    Un pago en revisión NO corta: el negocio ya hizo su parte.
     """
+    from sqlalchemy.orm import object_session
+
     from app.services.suscripcion import estado_suscripcion
 
-    if estado_suscripcion(empresa)["estado"] != "vencida":
+    if estado_suscripcion(empresa, object_session(empresa))["reservas_abiertas"]:
         return
 
     raise HTTPException(
@@ -223,7 +227,7 @@ def vidriera(db: Session, slug: str, sucursal_id: int | None = None) -> dict:
         # El servidor lo frena igual en `reservar()`: esto es para no hacerle
         # completar todo el formulario a alguien que va a chocar contra un
         # error al final, no para reemplazar el candado.
-        "reservas_abiertas": estado_suscripcion(empresa)["estado"] != "vencida",
+        "reservas_abiertas": estado_suscripcion(empresa, db)["reservas_abiertas"],
         "nombre": empresa.nombre,
         "slug": empresa.slug,
         "descripcion": empresa.descripcion,

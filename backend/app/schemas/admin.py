@@ -127,6 +127,8 @@ class EmpresaAdminOut(BaseModel):
 
 class EmpresaPausar(BaseModel):
     activa: bool
+    # Motivo: queda en el registro de eventos y en la auditoría.
+    motivo: str | None = Field(default=None, max_length=200)
 
 
 class SuscripcionAdminIn(BaseModel):
@@ -195,6 +197,7 @@ class EmpresaCobranzaOut(BaseModel):
     cantidad_usuarios: int = 0
     cantidad_recursos: int = 0
     limite_recursos: int | None = None
+    limite_sucursales: int | None = None
     capacidad_excedida: bool = False
     ultimo_pago: str | None = None
 
@@ -203,6 +206,15 @@ class EmpresaCobranzaOut(BaseModel):
     semaforo_fin_prorroga: str | None = None
     semaforo_en_prorroga: bool = False
     semaforo_detalle: str
+
+    # Estado centralizado (app/core/estados_suscripcion.py).
+    estado: str | None = None
+    estado_etiqueta: str | None = None
+    estado_tono: str | None = None
+    cancela_al_vencer: bool = False
+    plan_programado: str | None = None
+    precio_pactado: bool = False
+    debito: dict | None = None
 
 
 class MetodoTotal(BaseModel):
@@ -223,6 +235,15 @@ class ResumenCobranzaOut(BaseModel):
     empresas_vencidas: int
     mrr: float
     dias_aviso: int
+    dias_prorroga: int = 3
+    suscripciones_activas: int = 0
+    pagos_en_revision: int = 0
+    monto_en_revision: float = 0
+    cancelaciones_mes: int = 0
+    cancelaciones_programadas: int = 0
+    pagos_rechazados: int = 0
+    renovaciones_mes: int = 0
+    alertas: list[dict] = Field(default_factory=list)
 
 
 class PagoSuscripcionIn(BaseModel):
@@ -240,6 +261,11 @@ class PagoSuscripcionIn(BaseModel):
     # pasar a Pro queda con el pago registrado y el plan en Inicial — y nadie
     # se entera hasta que reclama.
     plan: str | None = Field(default=None, max_length=20)
+    # Un id único por intento de carga (lo genera la pantalla al abrir el
+    # diálogo). Un doble click o un reintento no registran dos cuotas.
+    clave_idempotencia: str | None = Field(
+        default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"
+    )
 
 
 class PagoSuscripcionOut(BaseModel):
@@ -259,6 +285,28 @@ class PagoSuscripcionOut(BaseModel):
 
 class ProrrogaIn(BaseModel):
     dias: int = Field(gt=0, le=90, description="Días de gracia a sumar")
+
+
+class AprobarAvisoIn(BaseModel):
+    """Aprobar una transferencia avisada: se registra el pago que corresponde."""
+
+    monto: float | None = Field(default=None, gt=0, le=100_000_000)
+    fecha: dt.date | None = None
+    notas: str | None = Field(default=None, max_length=500)
+    confirmo: bool = False
+
+
+class SolicitarInfoIn(BaseModel):
+    mensaje: str = Field(min_length=3, max_length=300)
+
+
+class CancelarAdminIn(BaseModel):
+    motivo: str | None = Field(default=None, max_length=300)
+    confirmo: bool = False
+
+
+class ConfirmarIn(BaseModel):
+    confirmo: bool = False
 
 
 class FichaComercialIn(BaseModel):

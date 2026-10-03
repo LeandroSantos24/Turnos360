@@ -1049,13 +1049,29 @@ def avisar_vencimientos() -> None:
     except Exception:
         log.exception("Falló aplicar las bajas de plan programadas")
 
-    hoy = dt.date.today()
+    # Las cancelaciones cuyo ciclo terminó pasan a CANCELADA (queda la fecha
+    # en el registro de eventos). Misma lógica: sesión y try propios.
+    try:
+        with SessionLocal() as db_cancel:
+            canceladas = cobranza.aplicar_cancelaciones(db_cancel)
+        if canceladas:
+            log.info("Cancelaciones hechas efectivas: %s", canceladas)
+    except Exception:
+        log.exception("Falló aplicar las cancelaciones programadas")
+
+    from app.core.reloj import hoy_de_pared
+
+    hoy = hoy_de_pared()
     hitos = _hitos_de_vencimiento()
     with SessionLocal() as db:
         empresas = db.scalars(select(Empresa).where(Empresa.activa.is_(True))).all()
         for empresa in empresas:
             vence = empresa.suscripcion_vence
             if vence is None:
+                continue
+            # Quien canceló ya decidió irse: avisarle «tu suscripción vence»
+            # para que pague es justamente lo que pidió que no pase.
+            if empresa.cancela_al_vencer:
                 continue
             # En período de prueba no se cobra: avisarle de un vencimiento que
             # no existe es la mejor forma de que no convierta.
