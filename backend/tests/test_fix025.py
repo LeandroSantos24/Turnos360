@@ -13,6 +13,7 @@ import datetime as dt
 import uuid
 
 from app.core.crypto import hash_clave
+from app.core.reloj import hoy_de_pared
 from app.core.seguridad import crear_token_superadmin
 from app.models import Rubro, SuperAdmin
 
@@ -72,7 +73,7 @@ def test_crear_empresa_no_tira_500_y_devuelve_la_prueba_como_texto(client, db):
         "Pydantic se cae y el panel ve un 500 con la empresa ya creada."
     )
     assert cuerpo["estado_suscripcion"] == "prueba"
-    assert cuerpo["prueba_hasta"] == str(dt.date.today() + dt.timedelta(days=14))
+    assert cuerpo["prueba_hasta"] == str(hoy_de_pared() + dt.timedelta(days=14))
 
 
 def test_crear_empresa_sin_prueba_no_se_cae(client, db):

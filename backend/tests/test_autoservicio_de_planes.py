@@ -24,6 +24,7 @@ import datetime as dt
 
 
 from app.core import planes
+from app.core.reloj import hoy_de_pared
 from app.services import cobranza
 from app.services import mp_suscripcion as mp_sus
 
@@ -172,7 +173,7 @@ def test_quien_sube_de_plan_no_pierde_los_dias_que_ya_pago(db, armar_empresa):
     no puede salir con MENOS vencimiento del que entró."""
     ctx = armar_empresa()
     ctx.empresa.plan = "inicial"
-    lejos = dt.date.today() + dt.timedelta(days=29)
+    lejos = hoy_de_pared() + dt.timedelta(days=29)
     ctx.empresa.suscripcion_vence = lejos
     db.flush()
 
@@ -188,7 +189,7 @@ def test_quien_sube_de_plan_no_pierde_los_dias_que_ya_pago(db, armar_empresa):
 def test_el_que_vencio_hace_meses_cuenta_desde_hoy(db, armar_empresa):
     """Estuvo cortado: no se le regalan las semanas que no pagó."""
     ctx = armar_empresa()
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=90)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=90)
     db.flush()
 
     cobranza.registrar_pago(
@@ -196,7 +197,7 @@ def test_el_que_vencio_hace_meses_cuenta_desde_hoy(db, armar_empresa):
     )
     db.flush()
 
-    esperado = dt.date.today() + dt.timedelta(days=cobranza.DIAS_CICLO)
+    esperado = hoy_de_pared() + dt.timedelta(days=cobranza.DIAS_CICLO)
     assert ctx.empresa.suscripcion_vence == esperado
 
 
@@ -220,7 +221,7 @@ def test_bajar_no_toca_el_plan_hasta_que_venza(db, armar_empresa):
     """El mes ya está pagado y se usa entero."""
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=12)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=12)
     db.flush()
 
     cuando = cobranza.programar_baja(db, ctx.empresa, "pro")
@@ -235,7 +236,7 @@ def test_la_baja_se_aplica_sola_cuando_vence(db, armar_empresa):
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
     ctx.empresa.plan_programado = "pro"
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=1)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=1)
     db.flush()
 
     cobranza.aplicar_bajas_programadas(db)
@@ -250,7 +251,7 @@ def test_la_baja_no_se_adelanta(db, armar_empresa):
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
     ctx.empresa.plan_programado = "pro"
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=5)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=5)
     db.flush()
 
     cobranza.aplicar_bajas_programadas(db)
@@ -266,7 +267,7 @@ def test_aplicar_bajas_dos_veces_no_hace_nada_la_segunda(db, armar_empresa):
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
     ctx.empresa.plan_programado = "pro"
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=1)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=1)
     db.flush()
 
     assert cobranza.aplicar_bajas_programadas(db) >= 1
@@ -333,7 +334,7 @@ def test_subir_de_plan_NO_activa_nada_sin_pagar(client, db, armar_empresa):
 def test_bajar_de_plan_contesta_cuando_se_aplica(client, db, armar_empresa):
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=10)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=10)
     db.commit()
 
     r = client.post(
@@ -354,7 +355,7 @@ def test_elegir_el_plan_que_ya_tengo_cancela_la_baja(client, db, armar_empresa):
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
     ctx.empresa.plan_programado = "inicial"
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=10)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=10)
     db.commit()
 
     r = client.post(
@@ -450,7 +451,7 @@ def test_el_barrido_diario_aplica_las_bajas_sin_reventar(db, armar_empresa, monk
     ctx = armar_empresa()
     ctx.empresa.plan = "multi"
     ctx.empresa.plan_programado = "pro"
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=1)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=1)
     db.commit()
 
     class SesionDelTest:

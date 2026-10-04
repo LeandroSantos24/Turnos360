@@ -235,6 +235,22 @@ export default function RegistroPage() {
             {enviando ? "Creando tu cuenta…" : "Crear mi cuenta gratis"}
           </Button>
 
+          {/* Sin esto la cuenta se creaba sin que el negocio viera nunca los
+              términos (cobro, suspensión por falta de pago, baja) ni la
+              política de privacidad que exige la Ley 25.326 al recolectar
+              datos. */}
+          <p className="text-center text-xs text-muted-foreground">
+            Al crear tu cuenta aceptás los{" "}
+            <Link href="/terminos" target="_blank" className="font-medium text-foreground underline underline-offset-2">
+              Términos y condiciones
+            </Link>{" "}
+            y la{" "}
+            <Link href="/privacidad" target="_blank" className="font-medium text-foreground underline underline-offset-2">
+              Política de privacidad
+            </Link>
+            .
+          </p>
+
           <p className="text-center text-sm text-muted-foreground">
             ¿Ya tenés cuenta?{" "}
             <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">

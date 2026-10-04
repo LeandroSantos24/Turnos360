@@ -26,6 +26,7 @@ import uuid
 import pytest
 
 from app.core import planes
+from app.core.reloj import hoy_de_pared
 from app.models import DebitoAutomatico, PagoSuscripcion
 from app.services import mp_debito
 from app.services.suscripcion import DIAS_PRORROGA
@@ -64,7 +65,7 @@ def _cobro(fila, *, estado_pago="approved", payment_id=None, monto=None, detalle
         "external_reference": mp_debito.referencia_de(fila.empresa_id, fila.plan),
         "currency_id": "ARS",
         "transaction_amount": monto if monto is not None else float(fila.monto),
-        "debit_date": dt.date.today().isoformat(),
+        "debit_date": hoy_de_pared().isoformat(),
         "retry_attempt": 0,
         "status": "processed",
         "payment": {
@@ -85,7 +86,7 @@ def test_un_cobro_aprobado_corre_el_vencimiento_y_activa_el_plan(
     """El mes se paga solo: nadie transfiere, nadie avisa, nadie registra."""
     ctx = armar_empresa()
     ctx.empresa.plan = "inicial"
-    ctx.empresa.suscripcion_vence = dt.date.today()
+    ctx.empresa.suscripcion_vence = hoy_de_pared()
     db.flush()
 
     fila = _suscripcion(db, ctx.empresa, plan="pro")
@@ -97,7 +98,7 @@ def test_un_cobro_aprobado_corre_el_vencimiento_y_activa_el_plan(
     assert pago is not None, "Un cobro aprobado tiene que acreditarse."
     assert pago.metodo == "debito_automatico"
     assert ctx.empresa.plan == "pro", "El plan que paga la suscripción se activa solo."
-    assert ctx.empresa.suscripcion_vence > dt.date.today()
+    assert ctx.empresa.suscripcion_vence > hoy_de_pared()
 
 
 def test_un_cobro_rechazado_no_acredita_nada_pero_deja_el_motivo(
@@ -110,7 +111,7 @@ def test_un_cobro_rechazado_no_acredita_nada_pero_deja_el_motivo(
     sería la agenda apagada.
     """
     ctx = armar_empresa()
-    vencia = dt.date.today() + dt.timedelta(days=2)
+    vencia = hoy_de_pared() + dt.timedelta(days=2)
     ctx.empresa.suscripcion_vence = vencia
     db.flush()
 
@@ -140,7 +141,7 @@ def test_el_mismo_cobro_notificado_dos_veces_paga_un_mes_solo(
     con seis meses pagos por un mes cobrado, y se descubre auditando.
     """
     ctx = armar_empresa()
-    ctx.empresa.suscripcion_vence = dt.date.today()
+    ctx.empresa.suscripcion_vence = hoy_de_pared()
     db.flush()
 
     fila = _suscripcion(db, ctx.empresa)
@@ -289,7 +290,7 @@ def test_sin_token_de_mp_el_endpoint_lo_explica(client, db, armar_empresa, monke
 def test_cancelar_no_le_saca_el_mes_que_ya_pago(db, armar_empresa, monkeypatch):
     """Cortar en el acto algo que está pagado se siente como un robo."""
     ctx = armar_empresa()
-    vence = dt.date.today() + dt.timedelta(days=18)
+    vence = hoy_de_pared() + dt.timedelta(days=18)
     ctx.empresa.suscripcion_vence = vence
     db.flush()
     fila = _suscripcion(db, ctx.empresa)
@@ -523,7 +524,7 @@ def test_la_prorroga_que_se_le_promete_al_dueno_es_la_que_se_aplica(
     prometido siete días que ya no existen.
     """
     ctx = armar_empresa()
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=5)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=5)
     db.commit()
 
     datos = client.get("/empresa/mi-suscripcion", headers=token_de(ctx.dueno)).json()
@@ -576,7 +577,7 @@ def test_al_que_paga_solo_no_se_le_avisa_que_vence(db, armar_empresa, monkeypatc
     """
     ctx = armar_empresa()
     ctx.empresa.prueba_hasta = None
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=3)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=3)
     db.flush()
     _suscripcion(db, ctx.empresa, estado=mp_debito.ACTIVO)
     db.flush()
@@ -590,7 +591,7 @@ def test_al_que_tiene_el_debito_rebotado_SÍ_se_le_avisa(db, armar_empresa, monk
     solo, y el dueño todavía no sabe que su tarjeta falló."""
     ctx = armar_empresa()
     ctx.empresa.prueba_hasta = None
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=3)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=3)
     db.flush()
     fila = _suscripcion(db, ctx.empresa, estado=mp_debito.ACTIVO)
     fila.cobros_fallidos = 1
@@ -605,7 +606,7 @@ def test_al_que_paga_a_mano_se_le_sigue_avisando(db, armar_empresa, monkeypatch)
     se pondría en rojo y nadie recibiría un aviso de cobranza nunca más."""
     ctx = armar_empresa()
     ctx.empresa.prueba_hasta = None
-    ctx.empresa.suscripcion_vence = dt.date.today() + dt.timedelta(days=3)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() + dt.timedelta(days=3)
     db.flush()
 
     mandados = _correr_avisos(db, monkeypatch)

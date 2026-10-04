@@ -25,6 +25,7 @@ que la prórroga exista.
 
 import datetime as dt
 
+from app.core.reloj import hoy_de_pared
 from app.services.suscripcion import DIAS_PRORROGA
 from tests.conftest import token_de
 
@@ -33,7 +34,7 @@ def _vencida_hace(db, ctx, dias: int):
     """Deja la empresa con el vencimiento `dias` días atrás, y sin prueba."""
     ctx.empresa.prueba_hasta = None
     ctx.empresa.plan = "inicial"
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=dias)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=dias)
     db.commit()
 
 
@@ -51,7 +52,7 @@ def _reservar(client, ctx, db=None, hora: int | None = None):
         _HORA[0] = 9 if _HORA[0] >= 19 else _HORA[0] + 1
         hora = _HORA[0]
     inicio = dt.datetime.combine(
-        dt.date.today() + dt.timedelta(days=1), dt.time(hora, 0)
+        hoy_de_pared() + dt.timedelta(days=1), dt.time(hora, 0)
     )
     return client.post(
         f"/publico/{ctx.empresa.slug}/reservar",
@@ -168,8 +169,8 @@ def test_una_empresa_en_prueba_nunca_se_corta(client, db, armar_empresa):
     """Todavía no le toca pagar. Cortarle la página durante la prueba es la
     mejor forma de que no se quede."""
     ctx = armar_empresa()
-    ctx.empresa.prueba_hasta = dt.date.today() + dt.timedelta(days=3)
-    ctx.empresa.suscripcion_vence = dt.date.today() - dt.timedelta(days=90)
+    ctx.empresa.prueba_hasta = hoy_de_pared() + dt.timedelta(days=3)
+    ctx.empresa.suscripcion_vence = hoy_de_pared() - dt.timedelta(days=90)
     db.commit()
 
     assert _reservar(client, ctx, db).status_code in (200, 201)
