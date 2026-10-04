@@ -23,12 +23,15 @@ import {
   Scissors,
   Crown,
   ArrowRight,
+  MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 
 import { listarRecursos, Recurso } from "@/lib/recursos-api";
 import { listarTurnosDelDia, Turno } from "@/lib/turnos-api";
-import { listarClientes, Cliente } from "@/lib/clientes-api";
+import { listarClientes, obtenerCliente, Cliente } from "@/lib/clientes-api";
+import { useConfigRubro } from "@/lib/config-rubro";
+import { linkWaCliente } from "@/lib/telefono";
 import {
   estadisticasMembresias,
   EstadisticasMembresias,
@@ -78,6 +81,14 @@ export default function InicioPage() {
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [turnosFuturos, setTurnosFuturos] = useState<Turno[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  // Teléfonos de los clientes de "Próximos turnos" que no vinieron en la
+  // lista de 200 (negocios grandes). Se piden de a uno, son 5 como mucho.
+  const [telefonosExtra, setTelefonosExtra] = useState<Record<number, string | null>>({});
+  const config = useConfigRubro();
+  // El recordatorio manual por WhatsApp es del plan Pro en adelante (la
+  // prueba incluye todo). Es la forma sin costo: abre el WhatsApp del que
+  // atiende con el mensaje escrito; no pasa por la API paga de Meta.
+  const conRecordatorioWa = Boolean(config?.funciones?.includes("whatsapp"));
   const [estadisticas, setEstadisticas] =
     useState<EstadisticasMembresias | null>(null);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -285,6 +296,55 @@ export default function InicioPage() {
     )
     .slice(0, 5);
 
+  const telefonoDe = (clienteId: number): string | null | undefined =>
+    clientes.find((c) => c.id === clienteId)?.telefono ?? telefonosExtra[clienteId];
+
+  const recordatorioWa = (t: Turno): string | null => {
+    if (!conRecordatorioWa || !t.fecha_inicio) return null;
+    // Solo lo que todavía no pasó: recordarle un turno en curso o terminado
+    // no tiene sentido.
+    if (t.estado !== "pendiente" && t.estado !== "confirmado") return null;
+    // Los turnos viajan en "hora de pared" con Z (las 10:00 del local llegan
+    // como 10:00Z), igual que en horaDe: el día sale de los componentes UTC.
+    const d = new Date(t.fecha_inicio);
+    const diaTurno = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const ahora = new Date();
+    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    const diferencia = Math.round((diaTurno.getTime() - hoy.getTime()) / 86_400_000);
+    const dia =
+      diferencia === 0
+        ? "hoy"
+        : diferencia === 1
+          ? "mañana"
+          : `el ${format(diaTurno, "EEEE d/M", { locale: es })}`;
+    const nombre = (t.cliente_nombre ?? "").trim().split(/\s+/)[0];
+    const servicio = t.servicio_nombre ? ` de ${t.servicio_nombre.toLowerCase()}` : "";
+    const negocio = config?.nombre ? ` en ${config.nombre}` : "";
+    return linkWaCliente(
+      telefonoDe(t.cliente_id),
+      `¡Hola${nombre ? ` ${nombre}` : ""}! Te recordamos tu turno${servicio}${negocio} ${dia} a las ${horaDe(t.fecha_inicio)}. ¡Te esperamos!`,
+    );
+  };
+
+  // Teléfonos que faltan para el botón de WhatsApp de "Próximos turnos".
+  // Va después de `proximos` (no hay ningún return antes del JSX, así que
+  // el orden de los hooks no cambia entre renders).
+  const idsSinTelefono = conRecordatorioWa
+    ? proximos
+        .map((t) => t.cliente_id)
+        .filter((id, i, arr) => arr.indexOf(id) === i)
+        .filter((id) => !clientes.some((c) => c.id === id) && !(id in telefonosExtra))
+        .join(",")
+    : "";
+  useEffect(() => {
+    if (!idsSinTelefono) return;
+    for (const id of idsSinTelefono.split(",").map(Number)) {
+      obtenerCliente(id)
+        .then((c) => setTelefonosExtra((p) => ({ ...p, [id]: c.telefono })))
+        .catch(() => setTelefonosExtra((p) => ({ ...p, [id]: null })));
+    }
+  }, [idsSinTelefono]);
+
   const nombreBarbero = (id: number) =>
     recursos.find((r) => r.id === id)?.nombre ?? "—";
 
@@ -460,35 +520,49 @@ export default function InicioPage() {
             <ul className="flex flex-col gap-1">
               {proximos.map((t) => {
                 const color = colorEstadoHex(t.estado);
+                const wa = recordatorioWa(t);
                 return (
-                  <Link
-                    key={t.id}
-                    href="/agenda"
-                    className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/50"
-                  >
-                    <span
-                      className="w-12 shrink-0 text-sm font-bold tabular-nums"
-                      style={{ fontFamily: "var(--fuente-titulos)" }}
+                  <li key={t.id} className="flex items-center gap-1">
+                    <Link
+                      href="/agenda"
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/50"
                     >
-                      {t.fecha_inicio && horaDe(t.fecha_inicio)}
-                    </span>
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">
-                        {t.cliente_nombre}
+                      <span
+                        className="w-12 shrink-0 text-sm font-bold tabular-nums"
+                        style={{ fontFamily: "var(--fuente-titulos)" }}
+                      >
+                        {t.fecha_inicio && horaDe(t.fecha_inicio)}
                       </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {t.servicio_nombre ?? "Sin servicio"}
-                        {barberoId === null &&
-                          ` · ${nombreBarbero(t.recurso_id)}`}
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">
+                          {t.cliente_nombre}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {t.servicio_nombre ?? "Sin servicio"}
+                          {barberoId === null &&
+                            ` · ${nombreBarbero(t.recurso_id)}`}
+                        </span>
+                      </div>
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+                        style={{ backgroundColor: `${color}22`, color }}
+                      >
+                        {labelEstado(t.estado)}
                       </span>
-                    </div>
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                      style={{ backgroundColor: `${color}22`, color }}
-                    >
-                      {labelEstado(t.estado)}
-                    </span>
-                  </Link>
+                    </Link>
+                    {wa && (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Mandar recordatorio por WhatsApp a ${t.cliente_nombre ?? "el cliente"}`}
+                        title="Recordarle el turno por WhatsApp"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#128c4a] transition-colors hover:bg-[#25d366]/15"
+                      >
+                        <MessageCircle size={18} />
+                      </a>
+                    )}
+                  </li>
                 );
               })}
             </ul>

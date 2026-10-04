@@ -93,6 +93,12 @@ jobs:
       - name: Tipos (contra la línea de base)
         run: npm run typecheck
 
+      # Lógica del navegador con casos fijos: la lista blanca de los pixeles
+      # (XSS en la vidriera) y el armado del número de WhatsApp (mismos casos
+      # que el backend).
+      - name: Checks del navegador
+        run: npm run check:seguimiento && npm run check:telefono
+
       # Las NEXT_PUBLIC_* se hornean en tiempo de compilación. Acá van valores
       # de mentira: no se despliega nada, solo se comprueba que compile.
       - name: Build de producción
