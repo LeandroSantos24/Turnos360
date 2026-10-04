@@ -254,6 +254,17 @@ services:
       # Esta sí es de runtime: la usa el sitemap, que corre server-side
       # dentro del contenedor y llega al backend por la red interna.
       API_URL_INTERNA: http://backend:8000
+    # Que Next RESPONDA (no que el proceso exista): un servidor Node colgado
+    # sigue "Up" pero no contesta. /robots.txt es estático y barato. Docker no
+    # reinicia por "unhealthy": esto sirve para ver el estado real en
+    # `docker compose ps` después de un deploy o un reinicio del VPS; la
+    # alerta la da el monitor externo. wget es el de busybox de node:alpine.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 5 -O /dev/null http://127.0.0.1:3000/robots.txt || exit 1"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 20s
     depends_on:
       - backend
 
