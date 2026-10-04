@@ -15,7 +15,7 @@ from app.core.config import settings
 celery_app = Celery(
     "turnos360",
     broker=settings.redis_url,
-    include=["app.tasks.emails", "app.tasks.agenda"],
+    include=["app.tasks.emails", "app.tasks.agenda", "app.tasks.latido"],
 )
 
 celery_app.conf.update(
@@ -44,6 +44,12 @@ celery_app.conf.update(
         }
     },
     beat_schedule={
+        # Prueba de vida de beat + worker + cola, para /estado. Ver
+        # app/tasks/latido.py. Cada 5 min; /estado lo da por caído a los 15.
+        "latido": {
+            "task": "app.tasks.latido.latido",
+            "schedule": 300.0,
+        },
         # Cada 15 min: recordatorios de 24 h y de 2 h (doble recordatorio).
         "recordatorios": {
             "task": "app.tasks.emails.encolar_recordatorios",

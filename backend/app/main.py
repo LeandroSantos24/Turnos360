@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.logging import configurar_logging
 from app.core.observabilidad import (
     estado_listo,
+    estado_publico,
     estado_vivo,
     iniciar_sentry,
     registrar_observabilidad,
@@ -161,5 +162,19 @@ def ready(response: Response) -> dict:
     nada: el backend se reportaba sano con Postgres caído.
     """
     cuerpo, codigo = estado_listo()
+    response.status_code = codigo
+    return cuerpo
+
+
+@app.get("/estado", tags=["meta"])
+def estado(response: Response) -> dict:
+    """Para el MONITOR EXTERNO (UptimeRobot, Better Stack, etc.).
+
+    200 solo si la base, Redis y las tareas programadas (worker + beat) están
+    andando; 503 si cualquiera falla. Detrás de Nginx queda en /api/estado.
+    No lo usa el healthcheck del contenedor: ese mira /ready, porque un worker
+    caído no es motivo para dar por enfermo al backend.
+    """
+    cuerpo, codigo = estado_publico()
     response.status_code = codigo
     return cuerpo

@@ -27,7 +27,7 @@ log = logging.getLogger("turnos360")
 
 # Rutas que no vale la pena loguear: las sondas del contenedor pegan cada
 # pocos segundos y taparían todo lo demás.
-_RUTAS_SILENCIOSAS = {"/health", "/ready"}
+_RUTAS_SILENCIOSAS = {"/health", "/ready", "/estado"}
 
 
 class ContextoYAcceso:
@@ -185,7 +185,9 @@ def _redis_responde() -> tuple[bool, str]:
     try:
         import redis
 
-        cliente = redis.from_url(settings.redis_url, socket_connect_timeout=2)
+        cliente = redis.from_url(
+            settings.redis_url, socket_connect_timeout=2, socket_timeout=2
+        )
         cliente.ping()
         return True, "ok"
     except Exception as e:  # noqa: BLE001
@@ -219,6 +221,74 @@ def estado_listo() -> tuple[dict, int]:
     }
     codigo = 200 if (base_ok and redis_ok) else 503
     return cuerpo, codigo
+
+
+# ── Estado para el monitor externo ───────────────────────────────────────
+#
+# /ready contesta "¿la API puede atender?" (base + Redis) y es lo que mira el
+# healthcheck del contenedor. El monitor externo necesita una pregunta más
+# amplia: "¿Turnos360 está funcionando entero?". Eso incluye que el worker y
+# beat sigan vivos — si se caen, la web anda pero dejan de salir los
+# recordatorios y las señas vencidas no liberan el horario, y nadie lo nota.
+#
+# Cómo se sabe sin un sistema de monitoreo propio: beat encola cada 5 minutos
+# la tarea `latido`, el worker la ejecuta y deja la hora en Redis. Si esa hora
+# tiene más de 15 minutos, alguno de los dos (o la cola) no está andando.
+
+LATIDO_CLAVE = "turnos360:latido"
+LATIDO_CADA_S = 300
+LATIDO_VENCE_S = 900
+_ARRANQUE = time.time()
+
+
+def _tareas_al_dia() -> tuple[bool, str]:
+    try:
+        import redis
+
+        cliente = redis.from_url(
+            settings.redis_url, socket_connect_timeout=2, socket_timeout=2
+        )
+        crudo = cliente.get(LATIDO_CLAVE)
+    except Exception as e:  # noqa: BLE001
+        log.warning("estado: no pude leer el latido (%s)", type(e).__name__)
+        return False, "falla"
+    if crudo is None:
+        # Recién desplegado (Redis no persiste): beat manda el primer latido a
+        # los 5 minutos. Se le da margen; pasado el margen, sin latido = caído.
+        if time.time() - _ARRANQUE < LATIDO_VENCE_S:
+            return True, "esperando"
+        return False, "sin latido"
+    try:
+        edad = time.time() - float(crudo)
+    except (TypeError, ValueError):
+        return False, "falla"
+    return (True, "ok") if edad <= LATIDO_VENCE_S else (False, "atrasadas")
+
+
+def estado_publico() -> tuple[dict, int]:
+    """Lo que mira el monitor externo: 200 si todo anda, 503 si algo no.
+
+    Solo dice ok/falla por componente: ni versiones, ni nombres de
+    excepciones, ni hosts. El motivo técnico queda en el log del backend.
+    """
+    base_ok, base_det = _base_responde()
+    redis_ok, redis_det = _redis_responde()
+    if redis_ok:
+        tareas_ok, tareas = _tareas_al_dia()
+    else:
+        tareas_ok, tareas = False, "falla"
+    todo_ok = base_ok and redis_ok and tareas_ok
+    if not todo_ok:
+        log.warning(
+            "estado: falla (base=%s redis=%s tareas=%s)", base_det, redis_det, tareas
+        )
+    cuerpo = {
+        "status": "ok" if todo_ok else "falla",
+        "base": "ok" if base_ok else "falla",
+        "redis": "ok" if redis_ok else "falla",
+        "tareas": tareas,
+    }
+    return cuerpo, (200 if todo_ok else 503)
 
 
 # ══════════════════════════════════════════════════════════════════════════
