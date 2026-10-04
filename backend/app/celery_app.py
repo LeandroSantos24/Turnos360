@@ -8,6 +8,7 @@ El broker es el Redis que ya corre en el stack.
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import beat_init, celeryd_init
 
 from app.core.config import settings
 
@@ -76,3 +77,22 @@ celery_app.conf.update(
         },
     },
 )
+
+
+# Sentry en el worker y en beat (la API lo arranca en main.py). Va por señal y
+# no al importar este módulo porque la API también lo importa para encolar
+# tareas: así cada proceso se reporta una sola vez y con su componente.
+# Con SENTRY_DSN vacío no hace nada. Una tarea que agota sus reintentos llega
+# a Sentry con el nombre de la tarea; un reintento intermedio no.
+@celeryd_init.connect
+def _sentry_en_worker(**_):
+    from app.core.observabilidad import iniciar_sentry
+
+    iniciar_sentry("worker")
+
+
+@beat_init.connect
+def _sentry_en_beat(**_):
+    from app.core.observabilidad import iniciar_sentry
+
+    iniciar_sentry("beat")

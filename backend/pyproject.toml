@@ -23,6 +23,9 @@ dependencies = [
     # routers/subidas.py: re-codificar es lo que hace seguro servir un
     # archivo que subió un desconocido.
     "pillow>=11.0",
+    # Errores de producción a Sentry. Solo se activa con SENTRY_DSN; sin DSN
+    # no manda nada y no abre ninguna conexión (ver core/observabilidad.py).
+    "sentry-sdk>=2.40",
 ]
 
 [project.optional-dependencies]
