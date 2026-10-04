@@ -33,6 +33,20 @@ info()  { echo "${AZUL}  ·${N} $1"; }
 ERRORES=0
 AVISOS=0
 
+# Alerta opcional (Healthchecks.io o compatible), igual que backup.sh: avisa
+# si la verificación falla (código 1) y, como espera un aviso por semana,
+# también si un día deja de correr. Los avisos (código 2) no son una falla.
+VERIFICAR_PING_URL="${VERIFICAR_PING_URL:-}"
+avisar_monitor() {
+  local codigo=$?
+  [[ -n "$VERIFICAR_PING_URL" ]] || return 0
+  local sufijo=""
+  [[ "$codigo" -ne 0 && "$codigo" -ne 2 ]] && sufijo="/fail"
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "verificación: código $codigo" \
+    "${VERIFICAR_PING_URL%/}${sufijo}" || echo "  ! No se pudo avisar al monitor." >&2
+}
+trap avisar_monitor EXIT
+
 ARCHIVO="${1:-}"
 CONSERVAR="${2:-}"
 

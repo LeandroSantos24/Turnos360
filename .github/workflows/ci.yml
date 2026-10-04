@@ -62,6 +62,15 @@ jobs:
       - name: Tests
         run: cd backend && python -m pytest -q
 
+  # Scripts de operación: que un backup que falla nunca se dé por bueno.
+  # Sin Docker ni base: docker y curl se imitan dentro del test.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backup (fallos ruidosos, permisos, rotación)
+        run: bash infra/scripts/tests/test_backup.sh
+
   # ─────────────────────────────────────────────────────────────────────────
   # Frontend. Antes no existía: el panel no se verificaba en ningún momento,
   # así que un error de tipos o un build roto llegaba al servidor y recién

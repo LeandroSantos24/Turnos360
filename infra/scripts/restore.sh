@@ -25,6 +25,19 @@ fi
 POSTGRES_USER="$(grep -E '^POSTGRES_USER=' "$ENV_FILE" | cut -d= -f2-)"
 POSTGRES_DB="$(grep -E '^POSTGRES_DB=' "$ENV_FILE" | cut -d= -f2-)"
 
+# Antes de apagar nada: ¿el archivo está entero? Un dump cortado no se
+# restaura (backup.sh ya no deja ninguno, pero puede venir de otro lado).
+if ! gzip -t "$ARCHIVO" 2>/dev/null; then
+    echo "El archivo está cortado o corrupto. No se restaura." >&2
+    exit 1
+fi
+FINAL_DUMP="$(gunzip -c "$ARCHIVO" | tail -n 20)"
+case "$FINAL_DUMP" in
+    *"PostgreSQL database dump complete"*) ;;
+    *) echo "El dump no termina con la marca de pg_dump: está incompleto. No se restaura." >&2
+       exit 1 ;;
+esac
+
 echo "═══════════════════════════════════════════════════════"
 echo " Vas a RESTAURAR:  $ARCHIVO"
 echo " Sobre la base:    $POSTGRES_DB"
@@ -58,8 +71,15 @@ else
 fi
 
 echo "→ Restaurando..."
-gunzip -c "$ARCHIVO" | docker compose --env-file "$ENV_FILE" -f "$COMPOSE" exec -T db \
-    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --quiet
+# --single-transaction: todo o nada. Si algo falla a mitad, Postgres deshace
+# también los DROP del principio y la base queda EXACTAMENTE como estaba, en
+# vez de a medio borrar.
+if ! gunzip -c "$ARCHIVO" | docker compose --env-file "$ENV_FILE" -f "$COMPOSE" exec -T db \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --single-transaction --quiet; then
+    echo "✘ La restauración FALLÓ y se deshizo entera: la base quedó como estaba." >&2
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE" start backend worker beat
+    exit 1
+fi
 
 echo "→ Levantando servicios..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE" start backend worker beat
