@@ -29,6 +29,7 @@ import {
 import { EASE, Revelar } from "@/components/landing/movimiento";
 import { MockupReserva } from "@/components/landing/mockup-reserva";
 import { TelefonoLocal } from "@/components/landing/telefono-local";
+import { MediosDePago } from "@/components/landing/medios-de-pago";
 
 const font = {
   titulo: "var(--fuente-titulos)",
@@ -52,15 +53,15 @@ const LADOS = "clamp(20px,5vw,72px)";
 const caja = { maxWidth: ANCHO, margin: "0 auto" } as const;
 
 const pains = [
-  { num: "01", title: "Los ausentes", body: "El que reserva y no viene te quema una hora que podías facturar. Es el dolor número uno del rubro." },
-  { num: "02", title: "El WhatsApp desbordado", body: "Contestás mensajes todo el día para agendar turnos, incluso fuera de horario y los domingos." },
-  { num: "03", title: "No sabés tus números", body: "Cuánto facturaste el mes, cuánto le toca a cada barbero, qué servicio deja más plata: ni idea real." },
-  { num: "04", title: "Clientes que se van", body: "No sabés quién hace tres meses que no viene. Y recuperarlo cuesta menos que conseguir uno nuevo." },
+  { num: "01", title: "Menos turnos perdidos", body: "Recordatorios automáticos y, si querés, seña online al reservar. El cliente se acuerda y avisa con tiempo si no puede venir." },
+  { num: "02", title: "Un WhatsApp más tranquilo", body: "Tus clientes reservan solos desde tu link, a cualquier hora. Vos contestás lo que de verdad necesita una respuesta." },
+  { num: "03", title: "Tus números, claros", body: "Lo que facturaste, lo que le toca a cada profesional y el servicio que más deja, sin cuentas en papelitos." },
+  { num: "04", title: "Clientes que vuelven", body: "Ves quién hace tiempo que no viene y le mandás una campaña para que vuelva a reservar." },
 ];
 
 const features = [
-  { glyph: "$", title: "Seña online con Mercado Pago", body: "El cliente paga la seña al reservar. El que puso plata, viene. Tu arma directa contra los ausentes." },
-  { glyph: "≡", title: "Agenda con carriles paralelos", body: "Un corte, una tintura y una barba conviven en el mismo horario sin pisarse. Los competidores esto lo resuelven mal." },
+  { glyph: "$", title: "Seña online con Mercado Pago", body: "El cliente paga la seña (o el total) al reservar, con tu propia cuenta de Mercado Pago. La plata va directo a vos." },
+  { glyph: "≡", title: "Agenda con carriles paralelos", body: "Un corte, una tintura y una barba conviven en el mismo horario sin pisarse, cada uno en su carril." },
   { glyph: "◉", title: "Caja de verdad", body: "Apertura, cierre y arqueo. Pago dividido entre métodos, comisión por método y gastos del día." },
   { glyph: "%", title: "Comisiones por profesional", body: "Cada barbero con su porcentaje. La liquidación sale sola, sin cuentas en papelitos." },
   { glyph: "∞", title: "Membresías y gift cards", body: "“Pagás $50.000 y tenés los cortes del mes.” Abonos, gift cards con QR y cupones para llenar horas flojas." },
@@ -87,19 +88,21 @@ const steps = [
  *
  * `img` es OPCIONAL a propósito: mientras no exista el archivo, la tarjeta cae
  * al emoji y la sección se ve completa igual.
- * Formato: 800 × 1000 px (4:5), JPG, bajo 150 KB, en /public/img/.
+ * Formato: 480 × 600 px (4:5), WebP, en /public/img/rubros/.
  */
 const rubros: { emoji: string; label: string; img?: string }[] = [
-  { emoji: "💈", label: "Barberías", img: "/img/rubro-barberia.jpg" },
-  { emoji: "✂️", label: "Peluquerías", img: "/img/rubro-peluqueria.jpg" },
-  { emoji: "💅", label: "Salones de uñas", img: "/img/rubro-unas.jpg" },
-  { emoji: "✨", label: "Centros de estética", img: "/img/rubro-estetica.jpg" },
-  { emoji: "🧖", label: "Spa y masajes", img: "/img/rubro-spa.jpg" },
-  { emoji: "🎨", label: "Tatuajes", img: "/img/rubro-tatuajes.jpg" },
-  { emoji: "🥗", label: "Nutrición", img: "/img/rubro-nutricion.jpg" },
-  { emoji: "🤸", label: "Kinesiología", img: "/img/rubro-kinesiologia.jpg" },
-  { emoji: "🧠", label: "Psicología", img: "/img/rubro-psicologia.jpg" },
-  { emoji: "🩺", label: "Consultorios", img: "/img/rubro-consultorios.jpg" },
+  { emoji: "💈", label: "Barberías", img: "/img/rubros/barberia.webp" },
+  { emoji: "✂️", label: "Peluquerías", img: "/img/rubros/peluqueria.webp" },
+  { emoji: "💅", label: "Uñas y depilación", img: "/img/rubros/unas.webp" },
+  { emoji: "✨", label: "Centros de estética", img: "/img/rubros/estetica.webp" },
+  { emoji: "🧖", label: "Spa y masajes", img: "/img/rubros/spa.webp" },
+  { emoji: "🎨", label: "Tatuajes", img: "/img/rubros/tatuajes.webp" },
+  { emoji: "🥗", label: "Nutrición", img: "/img/rubros/nutricion.webp" },
+  { emoji: "🤸", label: "Kinesiología", img: "/img/rubros/kinesiologia.webp" },
+  { emoji: "🧠", label: "Psicología", img: "/img/rubros/psicologia.webp" },
+  { emoji: "🩺", label: "Consultorios", img: "/img/rubros/medico.webp" },
+  { emoji: "🚗", label: "Lavaderos" },
+  { emoji: "🏋️", label: "Gimnasios" },
 ];
 
 const locales = [
@@ -128,7 +131,7 @@ const BASE_INCLUIDA = [
   "Agenda con carriles paralelos",
   "Página de reservas propia (tu link y tu QR)",
   "Seña online con Mercado Pago",
-  "Recordatorios automáticos anti-ausencias",
+  "Recordatorios automáticos por email",
   "Caja con apertura, cierre y arqueo",
   "Ficha y historial de cada cliente",
   "Soporte por WhatsApp",
@@ -157,7 +160,6 @@ const planes = [
       "Gift cards con QR",
       "Cupones de descuento",
       "Comisiones por profesional",
-      "WhatsApp con recordatorios",
     ],
     destacado: true,
   },
@@ -758,7 +760,7 @@ export default function Page() {
                   textWrap: "balance" as React.CSSProperties["textWrap"],
                 }}
               >
-                Los que reservan y no vienen{" "}
+                Todos tus turnos y tu negocio,{" "}
                 <span
                   style={{
                     background: "linear-gradient(100deg, #12b886 0%, #6ee7c4 55%, #a7f3d0 100%)",
@@ -767,7 +769,7 @@ export default function Page() {
                     color: "transparent",
                   }}
                 >
-                  te están costando plata.
+                  en un solo lugar.
                 </span>
               </motion.h1>
 
@@ -784,9 +786,9 @@ export default function Page() {
                   textWrap: "pretty" as React.CSSProperties["textWrap"],
                 }}
               >
-                Tus clientes reservan solos, pagan la seña con Mercado Pago y reciben
-                recordatorios automáticos. Vos atendés; el sistema agenda, cobra y te
-                muestra los números.
+                Agenda, reservas online, caja y clientes en un mismo sistema. Tus
+                clientes reservan desde tu link, reciben recordatorios y, si querés,
+                dejan la seña con Mercado Pago. Vos te ocupás de atender.
               </motion.p>
 
               <motion.div
@@ -839,7 +841,7 @@ export default function Page() {
               }}
             >
               <span style={{ fontSize: 13.5, fontWeight: 700, color: "#7d8ca3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                Se integra con
+                Funciona con
               </span>
               {/* Cada logo en su pastilla clara: son marcas con su propio color
                   y sobre el navy el de Mercado Pago —azul sobre azul— casi no
@@ -891,12 +893,13 @@ export default function Page() {
           <div style={caja}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", alignItems: "center", gap: "clamp(28px,4vw,56px)", marginBottom: 48 }}>
               <Titulo
-                h2="Si manejás el negocio con libreta y WhatsApp, esto te suena."
-                bajada="Cuatro cosas que le pasan a casi todos los dueños del rubro."
+                h2="Menos tareas administrativas. Más tiempo para tus clientes."
+                bajada="Lo que cambia cuando la agenda, los cobros y los clientes están en el mismo lugar."
               />
               <Revelar demora={0.08}>
                 <img
                   src="/img/duena-notebook.jpg"
+                  loading="lazy"
                   alt="Dueña revisando sus números en Turnos360"
                   style={{ width: "100%", maxWidth: 480, borderRadius: 24, objectFit: "cover", aspectRatio: "3 / 2", boxShadow: "0 28px 60px -18px rgba(16,22,32,0.28)", marginLeft: "auto", display: "block" }}
                 />
@@ -1208,6 +1211,8 @@ export default function Page() {
         </section>
 
         {/* ══ PRECIOS ══ */}
+        <MediosDePago />
+
         <section id="precios" style={{ background: "#f7f9fb", padding: `clamp(64px,8vw,112px) ${LADOS}`, position: "relative", overflow: "hidden" }}>
           {/* Dos halos diluidos detrás de las tarjetas: sin esto la sección es
               un rectángulo gris y las tres flotan sin apoyarse en nada. */}

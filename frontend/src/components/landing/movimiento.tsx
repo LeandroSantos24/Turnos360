@@ -38,10 +38,13 @@ export function Revelar({
     <motion.div
       className={className}
       style={style}
-      initial={quieto ? false : { opacity: 0, y }}
+      // El estado inicial es el mismo con y sin «menos movimiento»: el
+      // servidor no conoce la preferencia y cambiarlo rompía la hidratación.
+      // Lo que cambia es la transición: con menos movimiento aparece de una.
+      initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.15 }}
-      transition={{ duration: 0.6, ease: EASE, delay: demora }}
+      transition={quieto ? { duration: 0 } : { duration: 0.6, ease: EASE, delay: demora }}
     >
       {children}
     </motion.div>
