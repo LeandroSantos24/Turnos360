@@ -65,7 +65,7 @@ export function SelectorRubro({
             tabIndex={activoEnTab ? 0 : -1}
             onClick={() => onCambio(r.codigo)}
             onKeyDown={(e) => teclas(e, i)}
-            className={`group relative overflow-hidden rounded-2xl border bg-card text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-safe:hover:-translate-y-0.5 ${
+            className={`group relative flex flex-col justify-start overflow-hidden rounded-2xl border bg-card text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-safe:hover:-translate-y-0.5 ${
               elegido ? "border-primary ring-2 ring-primary/60" : "hover:border-foreground/20 hover:shadow-md"
             }`}
           >

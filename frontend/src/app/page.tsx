@@ -101,8 +101,8 @@ const rubros: { emoji: string; label: string; img?: string }[] = [
   { emoji: "🤸", label: "Kinesiología", img: "/img/rubros/kinesiologia.webp" },
   { emoji: "🧠", label: "Psicología", img: "/img/rubros/psicologia.webp" },
   { emoji: "🩺", label: "Consultorios", img: "/img/rubros/medico.webp" },
-  { emoji: "🚗", label: "Lavaderos" },
-  { emoji: "🏋️", label: "Gimnasios" },
+  { emoji: "🚗", label: "Lavaderos", img: "/img/rubros/lavadero.webp" },
+  { emoji: "🏋️", label: "Gimnasios", img: "/img/rubros/gimnasio.webp" },
 ];
 
 const locales = [

@@ -40,11 +40,9 @@ export const RUBROS_INFO: Record<string, InfoRubro> = {
   nutricion: { imagen: "/img/rubros/nutricion.webp", descripcion: "Primera consulta, seguimiento y antropometría.", icono: Leaf, orden: 8 },
   psicologia: { imagen: "/img/rubros/psicologia.webp", descripcion: "Sesiones presenciales u online.", icono: MessageCircleHeart, orden: 9 },
   tatuajes: { imagen: "/img/rubros/tatuajes.webp", descripcion: "Sesiones largas con seña y retoques.", icono: Palette, orden: 10 },
-  // Sin foto todavía: con null no se pide el archivo (no hay 404 en consola)
-  // y la tarjeta muestra el ícono. Al sumar /img/rubros/<codigo>.webp, va acá.
-  lavadero: { imagen: null, descripcion: "Lavados por box, con patente y vehículo.", icono: Car, orden: 11 },
-  gimnasio: { imagen: null, descripcion: "Entrenamiento personal y evaluaciones.", icono: Dumbbell, orden: 12 },
-  otros: { imagen: null, descripcion: "Cualquier negocio que trabaje con turnos.", icono: Briefcase, orden: 99 },
+  lavadero: { imagen: "/img/rubros/lavadero.webp", descripcion: "Lavados por box, con patente y vehículo.", icono: Car, orden: 11 },
+  gimnasio: { imagen: "/img/rubros/gimnasio.webp", descripcion: "Entrenamiento personal y evaluaciones.", icono: Dumbbell, orden: 12 },
+  otros: { imagen: "/img/rubros/otros.webp", descripcion: "Cualquier negocio que trabaje con turnos.", icono: Briefcase, orden: 99 },
 };
 
 export function infoRubro(codigo: string): InfoRubro {
