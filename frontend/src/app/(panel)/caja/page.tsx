@@ -18,9 +18,7 @@ import {
   cerrarCaja,
   listarMovimientos,
   anularMovimiento,
-  listarCajas,
   CajaResumen,
-  Caja,
   Movimiento,
 } from "@/lib/finanzas-api";
 import { ApiError } from "@/lib/api";
@@ -39,20 +37,13 @@ import {
 } from "@/components/ui/dialog";
 import { GastoDialog } from "./gasto-dialog";
 import { NUM } from "@/lib/numeros";
+import { SubNav } from "@/components/sub-nav";
+import { PESTANAS_CAJA } from "./pestanas";
 
 function pesos(n: number): string {
   return `$${Number(n).toLocaleString("es-AR")}`;
 }
 
-function fechaHora(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function CajaPage() {
   const [resumen, setResumen] = useState<CajaResumen | null>(null);
@@ -68,7 +59,6 @@ export default function CajaPage() {
   const [aAnular, setAAnular] = useState<Movimiento | null>(null);
   const [motivoAnul, setMotivoAnul] = useState("");
   const [anulando, setAnulando] = useState(false);
-  const [cajas, setCajas] = useState<Caja[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abriendo, setAbriendo] = useState(false);
   const [cerrando, setCerrando] = useState(false);
@@ -93,15 +83,13 @@ export default function CajaPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [r, m, cs] = await Promise.all([
+      const [r, m] = await Promise.all([
         cajaActual(mirando),
         listarMovimientos({ limite: PAGINA, sucursalId: mirando }),
-        listarCajas(mirando),
       ]);
       setResumen(r);
       setMovimientos(m.items);
       setTotalMovs(m.total);
-      setCajas(cs);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Error al cargar");
     } finally {
@@ -177,6 +165,10 @@ export default function CajaPage() {
         >
           <Printer className="h-4 w-4" /> Parte del día
         </a>
+      </div>
+
+      <div className="mb-6">
+        <SubNav items={PESTANAS_CAJA} etiqueta="Apartados de la caja" />
       </div>
 
       {/* Selector de local. Solo existe si el negocio tiene más de uno. */}
@@ -521,49 +513,6 @@ export default function CajaPage() {
             </div>
           )}
         </>
-      )}
-
-      {/* Historial de cajas */}
-      {cajas.length > 0 && (
-        <div className="mt-8">
-          <h2 className="mb-3 text-lg font-bold">Historial de cajas</h2>
-          <div className="divide-y overflow-hidden rounded-2xl border bg-card">
-            {cajas.map((c) => {
-              const abierta = c.estado === "abierta";
-              return (
-                <div key={c.id} className="flex items-center gap-4 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium tabular-nums" style={NUM}>
-                      {fechaHora(c.fecha_apertura)}
-                      {abierta ? " · en curso" : ` → ${fechaHora(c.fecha_cierre)}`}
-                    </p>
-                    <p className="text-xs text-muted-foreground tabular-nums" style={NUM}>
-                      Inicial {pesos(c.saldo_inicial)}
-                      {c.saldo_final != null && ` · Cierre ${pesos(c.saldo_final)}`}
-                    </p>
-                  </div>
-                  <a
-                    href={`/imprimir/caja/${c.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
-                  >
-                    Imprimir
-                  </a>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                      abierta
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {abierta ? "Abierta" : "Cerrada"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
 
       {/* Abrir caja */}

@@ -21,6 +21,7 @@ import {
   Users,
   Scissors,
   UserCog,
+  ShieldCheck,
   CreditCard,
   Gift,
   Megaphone,
@@ -94,31 +95,36 @@ const NAV: NavItem[] = [
   { href: "/clientes", label: "Clientes", icon: Users, grupo: "principal" },
   { href: "/servicios", label: "Servicios", icon: Scissors, grupo: "negocio", ocultarProfesional: true },
   { href: "/recursos", label: "Recursos", icon: UserCog, grupo: "negocio", ocultarProfesional: true },
-  { href: "/equipo", label: "Equipo", icon: Users, grupo: "negocio", soloDueno: true },
+  { href: "/equipo", label: "Equipo", icon: ShieldCheck, grupo: "negocio", soloDueno: true },
   { href: "/sucursales", label: "Sucursales", icon: Building2, grupo: "negocio", soloDueno: true, soloMultisucursal: true },
-  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "negocio", ocultarProfesional: true, funcionRequerida: "membresias" },
-  { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "negocio", ocultarProfesional: true, moduloRequerido: "gift_cards", funcionRequerida: "gift_cards" },
-  { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "negocio", soloDueno: true },
+  { href: "/membresias", label: "Membresías", icon: CreditCard, grupo: "ventas", ocultarProfesional: true, funcionRequerida: "membresias" },
+  { href: "/gift-cards", label: "Gift cards", icon: Gift, grupo: "ventas", ocultarProfesional: true, moduloRequerido: "gift_cards", funcionRequerida: "gift_cards" },
+  { href: "/campanas", label: "Campañas", icon: Megaphone, grupo: "ventas", soloDueno: true },
   // WhatsApp queda FUERA del menú para el lanzamiento: el circuito está
   // entero en el código pero no hay proveedor real conectado (WA_PROVEEDOR=
   // simulado), así que la pantalla no le sirve todavía a ningún dueño.
   // Para encenderlo más adelante —por empresa— alcanza con poner
   // "whatsapp": true en los módulos del preset de esa empresa.
-  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "negocio", soloDueno: true, moduloRequerido: "whatsapp", funcionRequerida: "whatsapp" },
-  { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "negocio", soloDueno: true, funcionRequerida: "cupones" },
+  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, grupo: "ventas", soloDueno: true, moduloRequerido: "whatsapp", funcionRequerida: "whatsapp" },
+  { href: "/cupones", label: "Cupones", icon: TicketPercent, grupo: "ventas", soloDueno: true, funcionRequerida: "cupones" },
   { href: "/cuenta", label: "Mi cuenta", icon: UserCircle, grupo: "config" },
   { href: "/suscripcion", label: "Mi suscripción", icon: Receipt, grupo: "config", soloDueno: true },
-  { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "negocio", soloDueno: true },
-  { href: "/reglas-reserva", label: "Reglas de reserva", icon: CalendarClock, grupo: "negocio", soloDueno: true },
-  { href: "/seguimiento", label: "Seguimiento", icon: LineChart, grupo: "negocio", soloDueno: true },
+  { href: "/mi-pagina", label: "Mi página", icon: Globe, grupo: "web", soloDueno: true },
+  { href: "/reglas-reserva", label: "Reglas de reserva", icon: CalendarClock, grupo: "web", soloDueno: true },
+  { href: "/seguimiento", label: "Seguimiento", icon: LineChart, grupo: "web", soloDueno: true },
   { href: "/estadisticas", label: "Estadísticas", icon: BarChart3, grupo: "finanzas", soloDueno: true },
   { href: "/caja", label: "Caja", icon: Banknote, grupo: "finanzas", ocultarProfesional: true },
   { href: "/metodos-pago", label: "Métodos de pago", icon: Wallet, grupo: "finanzas", soloDueno: true },
 ];
 
+// "Negocio" tenía 12 entradas mezcladas (operación, ventas, página web). En
+// grupos de 3 a 5 el menú se escanea de un vistazo. El orden del array NAV no
+// importa: cada ítem cae en su grupo.
 const GRUPOS = [
   { id: "principal", label: "Principal" },
   { id: "negocio", label: "Negocio" },
+  { id: "ventas", label: "Ventas y fidelización" },
+  { id: "web", label: "Reservas online" },
   { id: "finanzas", label: "Finanzas" },
   { id: "config", label: "Configuración" },
 ];
