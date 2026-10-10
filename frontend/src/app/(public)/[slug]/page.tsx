@@ -15,32 +15,8 @@ import { Loader2 } from "lucide-react";
 
 import { obtenerVidriera, type Vidriera } from "@/lib/publico-api";
 import { ApiError } from "@/lib/api";
-import {
-  TopBar,
-  Hero,
-  Servicios,
-  Equipo,
-  Galeria,
-  Horarios,
-  Ubicacion,
-  Confianza,
-  Contacto,
-  FooterVidriera,
-  BarraMobile,
-  acentoDe,
-  TINTA,
-  TINTA_SUAVE,
-  ACENTO_DEFAULT,
-  BORDE,
-  hexA,
-} from "./vidriera-ui";
-import {
-  conAlfa,
-  estilosDe,
-  formaDelLogo,
-  normalizarTema,
-  type TemaVidriera,
-} from "@/lib/tema-vidriera";
+import { acentoDe, TINTA, TINTA_SUAVE, ACENTO_DEFAULT } from "./vidriera-ui";
+import { CuerpoVidriera } from "./cuerpo-vidriera";
 import { ReservaWizard } from "./reserva-wizard";
 import { ScriptsSeguimiento } from "@/components/scripts-seguimiento";
 import { BannerCookies, useConsentimiento } from "@/components/banner-cookies";
@@ -153,10 +129,6 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   }
 
   const acento = acentoDe(vidriera);
-  // El look que eligió el negocio en «Mi página». Se resuelve una vez y baja
-  // por variables CSS: ver el comentario de TINTA en vidriera-ui.tsx.
-  const tema = normalizarTema(vidriera.tema as Partial<TemaVidriera> | undefined);
-  const look = estilosDe(tema, vidriera.color_marca);
   const haySeguimiento = Boolean(
     (vidriera.meta_pixel_id ?? "").trim() || (vidriera.google_tag_id ?? "").trim(),
   );
@@ -165,121 +137,40 @@ export default function VidrieraPage({ params }: { params: { slug: string } }) {
   const cerrar = () => setWizard({ abierto: false, servicio: null });
 
   return (
-    <div
-      className="vd-raiz min-h-screen antialiased"
-      style={
-        {
-          // Las variables que consume TODA la vidriera. Definidas acá arriba
-          // una sola vez: cualquier componente de adentro —y cualquiera que
-          // se agregue después— hereda el look sin recibir nada.
-          "--vd-texto": look.texto,
-          "--vd-texto-suave": look.textoSuave,
-          "--vd-borde": conAlfa(look.texto, 0.12),
-          "--vd-superficie": conAlfa(look.texto, 0.05),
-          "--vd-tarjeta": look.tarjeta.background as string,
-          "--vd-radio": look.radio,
-          // La forma del logo, por el mismo canal que los colores. Ver
-          // Monograma en vidriera-ui.tsx: antes estaba cableada ahí y no
-          // tenía forma de enterarse de lo que el dueño había elegido.
-          "--vd-logo-radio": formaDelLogo(tema.logo_forma).radio,
-          "--vd-logo-ajuste": formaDelLogo(tema.logo_forma).ajuste,
-          color: look.texto,
-          fontFamily: undefined,
-          ...look.fondo,
-        } as React.CSSProperties
+    <CuerpoVidriera
+      vidriera={vidriera}
+      sucursalId={sucursalId}
+      onSucursal={setSucursalId}
+      onReservar={abrir}
+      arriba={
+        <>
+          <ScriptsSeguimiento
+            metaPixelId={vidriera.meta_pixel_id}
+            googleTagId={vidriera.google_tag_id}
+            habilitado={consentimiento === "aceptado"}
+          />
+          <BannerCookies
+            // Sin pixel no hay cookies de terceros que consentir: el cartel sería
+            // un obstáculo entre el cliente y la reserva, sin nada que decidir.
+            visible={haySeguimiento && consentimiento === null}
+            acento={acento}
+            onAceptar={() => decidirCookies("aceptado")}
+            onRechazar={() => decidirCookies("rechazado")}
+          />
+          {avisoPago && <BannerPago tipo={avisoPago} onCerrar={() => setAvisoPago(null)} />}
+        </>
       }
-    >
-      {/* La tipografía de títulos que eligió el negocio. Va en un <style> y no
-          en el style del div porque tiene que alcanzar a los h1..h3 que están
-          repartidos por todos los componentes hijos. */}
-      <style>{`
-        .vd-raiz h1, .vd-raiz h2, .vd-raiz h3 { font-family: ${look.familiaTitulos}; }
-        .vd-tarjeta { background: var(--vd-tarjeta, #ffffff); }
-      `}</style>
-      <ScriptsSeguimiento
-        metaPixelId={vidriera.meta_pixel_id}
-        googleTagId={vidriera.google_tag_id}
-        habilitado={consentimiento === "aceptado"}
-      />
-      <BannerCookies
-        // Sin pixel no hay cookies de terceros que consentir: el cartel sería
-        // un obstáculo entre el cliente y la reserva, sin nada que decidir.
-        visible={haySeguimiento && consentimiento === null}
-        acento={acento}
-        onAceptar={() => decidirCookies("aceptado")}
-        onRechazar={() => decidirCookies("rechazado")}
-      />
-      {avisoPago && <BannerPago tipo={avisoPago} onCerrar={() => setAvisoPago(null)} />}
-      <TopBar v={vidriera} acento={acento} onReservar={() => abrir()} />
-      <Hero v={vidriera} acento={acento} onReservar={() => abrir()} />
-
-      {/* Elegir local. Solo con más de uno: el cliente de un negocio de una
-          silla no tiene que elegir entre una sola opción. */}
-      {vidriera.sucursales.length > 1 && (
-        <section className="mx-auto max-w-3xl px-5 pb-2 pt-4">
-          <p
-            className="mb-2 text-center text-sm font-medium"
-            style={{ color: TINTA_SUAVE }}
-          >
-            ¿A qué local querés ir?
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {vidriera.sucursales.map((suc) => {
-              const elegido = suc.id === sucursalId;
-              return (
-                <button
-                  key={suc.id}
-                  type="button"
-                  onClick={() => setSucursalId(suc.id)}
-                  className="rounded-2xl border px-4 py-3 text-left transition-colors"
-                  style={{
-                    borderColor: elegido ? acento : BORDE,
-                    background: elegido ? hexA(acento, 0.08) : "transparent",
-                  }}
-                >
-                  <span className="block text-sm font-semibold">{suc.nombre}</span>
-                  {suc.direccion && (
-                    <span className="block text-xs" style={{ color: TINTA_SUAVE }}>
-                      {suc.direccion}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {vidriera.descripcion && (
-        <section className="mx-auto max-w-3xl px-5 pb-4 text-center">
-          <p
-            className="whitespace-pre-line text-base leading-relaxed"
-            style={{ color: TINTA_SUAVE }}
-          >
-            {vidriera.descripcion}
-          </p>
-        </section>
-      )}
-
-      <Servicios v={vidriera} acento={acento} onElegir={(id) => abrir(id)} />
-      <Equipo v={vidriera} acento={acento} />
-      <Galeria v={vidriera} acento={acento} />
-      <Horarios v={vidriera} acento={acento} />
-      <Ubicacion v={vidriera} acento={acento} />
-      <Confianza v={vidriera} acento={acento} />
-      <Contacto v={vidriera} acento={acento} />
-      <FooterVidriera />
-
-      <BarraMobile acento={acento} onReservar={() => abrir()} />
-      <ReservaWizard
-        v={vidriera}
-        slug={params.slug}
-        acento={acento}
-        abierto={wizard.abierto}
-        servicioInicial={wizard.servicio}
-        sucursalId={sucursalId}
-        onCerrar={cerrar}
-      />
-    </div>
+      alFinal={
+        <ReservaWizard
+          v={vidriera}
+          slug={params.slug}
+          acento={acento}
+          abierto={wizard.abierto}
+          servicioInicial={wizard.servicio}
+          sucursalId={sucursalId}
+          onCerrar={cerrar}
+        />
+      }
+    />
   );
 }

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
+from app.schemas.publico import VidrieraOut
 from app.schemas.empresa import (
     ActividadCampanas,
     AutomatizacionesConfig,
@@ -130,6 +131,23 @@ def probar_senas(empresa_id: EmpresaActual, db: DB) -> dict:
     except mp.TokenInvalido as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     return {"ok": True, "cuenta": cuenta}
+
+
+@router.get(
+    "/vidriera-previa",
+    response_model=VidrieraOut,
+    dependencies=[Depends(gate_dueno)],
+)
+def vidriera_previa(empresa_id: EmpresaActual, db: DB) -> VidrieraOut:
+    """La página pública del propio negocio, para la vista previa del editor.
+
+    No cuenta como visita y no exige el email verificado: es el dueño mirando
+    lo suyo, no un cliente.
+    """
+    from app.models import Empresa
+    from app.services import publico as svc_publico
+
+    return svc_publico.vidriera_de_empresa(db, db.get(Empresa, empresa_id))
 
 
 @router.get(

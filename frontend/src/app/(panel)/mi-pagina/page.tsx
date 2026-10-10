@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import {
   Save,
   Copy,
+  Download,
   Check,
   ExternalLink,
   X,
@@ -46,7 +47,8 @@ import {
   Redes,
 } from "@/lib/empresa-api";
 import { listarRecursos, editarRecurso, Recurso } from "@/lib/recursos-api";
-import { listarServicios } from "@/lib/servicios-api";
+import type { Vidriera } from "@/lib/publico-api";
+import { CodigoQR } from "@/components/codigo-qr";
 import { ApiError } from "@/lib/api";
 import { SubirImagen } from "@/components/subir-imagen";
 import { RequiereDueno } from "@/components/requiere-rol";
@@ -352,8 +354,8 @@ function LinkPublico({ slug }: { slug: string | null }) {
       className="lg:col-span-2"
     >
       {url ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <code className="flex-1 truncate rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm">
+        <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center">
+          <code className="flex-1 break-all rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm">
             {url}
           </code>
           <div className="flex gap-2">
@@ -378,8 +380,48 @@ function LinkPublico({ slug }: { slug: string | null }) {
       ) : (
         <p className="text-sm text-muted-foreground">Cargando tu link…</p>
       )}
+
+      {url && (
+        <div className="mt-5 flex flex-col items-center gap-4 border-t pt-5 sm:flex-row sm:items-start">
+          <div className="rounded-2xl border bg-white p-2">
+            <CodigoQR texto={url} tam={148} />
+          </div>
+          <div className="space-y-2 text-center sm:text-left">
+            <p className="font-medium">Tu QR</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Imprimilo y ponelo en el mostrador, la vidriera o las tarjetas: lo escanean con la cámara y caen
+              directo en tu página para reservar.
+            </p>
+            <Button type="button" variant="outline" onClick={() => descargarQR(url, slug)}>
+              <Download className="mr-1.5 h-4 w-4" />
+              Descargar QR (PNG)
+            </Button>
+          </div>
+        </div>
+      )}
     </Seccion>
   );
+}
+
+/** El QR en alta (1000 px aprox.), para imprimir sin que se pixele. */
+async function descargarQR(url: string, slug: string | null) {
+  try {
+    const QR = await import("qrcode");
+    const data = await QR.toDataURL(url, {
+      errorCorrectionLevel: "M",
+      margin: 4,
+      width: 1000,
+      color: { dark: "#0c1015", light: "#ffffff" },
+    });
+    const a = document.createElement("a");
+    a.href = data;
+    a.download = `qr-${slug ?? "mi-pagina"}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    toast.error("No se pudo generar el QR. Probá de nuevo.");
+  }
 }
 
 /** Galería: URLs de fotos con vista previa. Se guarda con el botón global. */
@@ -571,36 +613,18 @@ function ContenidoMiPagina() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [seccion, setSeccion] = useState<SeccionId>("look");
-  const [nombreNegocio, setNombreNegocio] = useState("");
-  const [servicioEjemplo, setServicioEjemplo] = useState<
-    { nombre: string; precio: number | null; duracion_min: number } | null
-  >(null);
 
   useEffect(() => {
     Promise.all([
       obtenerLanding(),
       obtenerConfigEmpresa().catch(() => null),
       listarRecursos().catch(() => null),
-      // Un servicio REAL para la previa. Con uno inventado, lo que el dueño
-      // juzga no es su página: es una maqueta con datos de otro negocio.
-      listarServicios().catch(() => null),
     ])
-      .then(([data, config, pagina, servicios]) => {
+      .then(([data, config, pagina]) => {
         setForm({ ...VACIO, ...data, redes: data.redes ?? {}, galeria: data.galeria ?? [] });
-        if (config) {
-          setSlug(config.slug);
-          setNombreNegocio(config.nombre);
-        }
+        if (config) setSlug(config.slug);
         if (pagina)
           setRecursos(pagina.items.filter((r) => r.tipo === "persona" && r.activo));
-        const primero = servicios?.items?.find((s) => s.activo && s.agendable);
-        if (primero) {
-          setServicioEjemplo({
-            nombre: primero.nombre,
-            precio: primero.precio ?? null,
-            duracion_min: primero.duracion_min,
-          });
-        }
       })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : "Error al cargar"),
@@ -608,13 +632,35 @@ function ContenidoMiPagina() {
       .finally(() => setCargando(false));
   }, []);
 
-  // Solo previsualizamos URLs http(s) completas: mientras el dueño está
-  // pegando el link, el valor intermedio no es una imagen y el recuadro
-  // quedaría roto.
-  const portadaPrevia =
-    form?.portada_url && /^https?:\/\/[^\s"'()<>]+$/i.test(form.portada_url.trim())
-      ? form.portada_url.trim()
-      : null;
+  // Lo que todavía no se guardó, con la forma de la vidriera, para la vista
+  // previa. Las URLs a medio pegar no se mandan: serían una imagen rota.
+  const urlOk = (u: string | null | undefined) =>
+    u && /^https?:\/\/[^\s"'()<>]+$/i.test(u.trim()) ? u.trim() : null;
+  const datosPrevia = useMemo<Partial<Vidriera>>(
+    () =>
+      form
+        ? {
+            descripcion: form.descripcion,
+            direccion: form.direccion,
+            telefono_publico: form.telefono_publico,
+            email_publico: form.email_publico,
+            logo_url: urlOk(form.logo_url),
+            portada_url: urlOk(form.portada_url),
+            color_marca: form.color_marca,
+            horarios_atencion: form.horarios_atencion,
+            // Solo las redes cargadas: un campo vacío no es una red.
+            redes: Object.fromEntries(
+              Object.entries(form.redes)
+                .map(([k, v]) => [k, (v ?? "").trim()])
+                .filter(([, v]) => v),
+            ) as Record<string, string>,
+            galeria: form.galeria.map((g) => urlOk(g)).filter((g): g is string => Boolean(g)),
+            tema: normalizarTema(form.tema),
+          }
+        : {},
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [form],
+  );
 
   function set<K extends keyof LandingConfig>(clave: K, valor: LandingConfig[K]) {
     setForm((f) => (f ? { ...f, [clave]: valor } : f));
@@ -916,18 +962,7 @@ function ContenidoMiPagina() {
 
         {/* Vista previa */}
         <div className="hidden lg:block">
-          <VistaPrevia
-            tema={normalizarTema(form.tema)}
-            datos={{
-              nombre: nombreNegocio,
-              descripcion: form.descripcion,
-              direccion: form.direccion,
-              logo_url: form.logo_url,
-              portada_url: portadaPrevia,
-              color_marca: form.color_marca,
-              servicio: servicioEjemplo,
-            }}
-          />
+          <VistaPrevia datos={datosPrevia} />
         </div>
       </div>
 
@@ -935,18 +970,7 @@ function ContenidoMiPagina() {
         {/* En pantallas chicas la previa no entra al costado: va abajo, donde
             igual se ve al scrollear. Esconderla del todo dejaría al que edita
             desde el celular sin la mitad de la pantalla. */}
-        <VistaPrevia
-          tema={normalizarTema(form.tema)}
-          datos={{
-            nombre: nombreNegocio,
-            descripcion: form.descripcion,
-            direccion: form.direccion,
-            logo_url: form.logo_url,
-            portada_url: portadaPrevia,
-            color_marca: form.color_marca,
-            servicio: servicioEjemplo,
-          }}
-        />
+        <VistaPrevia datos={datosPrevia} />
       </div>
     </div>
   );

@@ -8,5 +8,5 @@ export const RUTAS_PRIVADAS = [
   "agenda", "caja", "campanas", "clientes", "cuenta", "cupones", "equipo",
   "estadisticas", "gift-cards", "inicio", "membresias", "metodos-pago",
   "mi-dia", "mi-pagina", "recursos", "reglas-reserva", "seguimiento",
-  "servicios", "sucursales", "suscripcion", "whatsapp",
+  "servicios", "sucursales", "suscripcion", "vista-previa", "whatsapp",
 ];

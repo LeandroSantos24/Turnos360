@@ -65,6 +65,7 @@ SLUGS_RESERVADOS = frozenset({
     "inicio", "cuenta", "suscripcion", "campanas", "cupones", "membresias",
     "gift-cards", "estadisticas", "metodos-pago", "mi-pagina", "mi-dia",
     "reglas-reserva", "seguimiento", "whatsapp", "sucursales", "verificar",
+    "vista-previa",
     # Rutas del backend y assets
     "api", "publico", "health", "ready", "docs", "static", "_next",
     "favicon.ico", "robots.txt", "sitemap.xml", "icon.png",

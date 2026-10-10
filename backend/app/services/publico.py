@@ -167,7 +167,19 @@ def vidriera(db: Session, slug: str, sucursal_id: int | None = None) -> dict:
     servicio muestra el precio de ahí. Sin él, se muestra todo (que es lo que
     pasa siempre en un negocio de un solo local).
     """
-    empresa = resolver_empresa(db, slug)
+    return vidriera_de_empresa(db, resolver_empresa(db, slug), sucursal_id)
+
+
+def vidriera_de_empresa(
+    db: Session, empresa: Empresa, sucursal_id: int | None = None
+) -> dict:
+    """Lo mismo que `vidriera`, para una empresa ya resuelta.
+
+    La usa también la vista previa de «Mi página»: el dueño tiene que poder
+    ver cómo queda su página aunque todavía no haya confirmado el email (que
+    es justo cuando la está armando). Los mismos datos que ve el cliente, por
+    la misma función: así la previa no puede mentir.
+    """
     abiertas = _sucursales_abiertas(db, empresa.id)
     if sucursal_id is not None and sucursal_id not in {s.id for s in abiertas}:
         raise HTTPException(
