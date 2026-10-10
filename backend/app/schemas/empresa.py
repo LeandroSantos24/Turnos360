@@ -520,3 +520,24 @@ class AvisoPagoOut(BaseModel):
     resuelto: bool = False
     empresa_id: int | None = None
     empresa_nombre: str | None = None
+
+
+class EnviosCampana(BaseModel):
+    enviados: int = 0
+    fallidos: int = 0
+    ultimo: str | None = None
+
+
+class AlcanceCampanas(BaseModel):
+    """A cuántos clientes les puede llegar cada tipo de mensaje."""
+
+    clientes: int
+    con_email: int
+    aceptan_promos: int
+    con_cumple: int
+
+
+class ActividadCampanas(BaseModel):
+    dias: int
+    campanas: dict[str, EnviosCampana]
+    alcance: AlcanceCampanas

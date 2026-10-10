@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.api.deps import DB, EmpresaActual, UsuarioActual, gate_dueno
 from app.core.rate_limit import limiter
 from app.schemas.empresa import (
+    ActividadCampanas,
     AutomatizacionesConfig,
     AvisoPagoIn,
     CambioPlanIn,
@@ -129,6 +130,16 @@ def probar_senas(empresa_id: EmpresaActual, db: DB) -> dict:
     except mp.TokenInvalido as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     return {"ok": True, "cuenta": cuenta}
+
+
+@router.get(
+    "/automatizaciones/actividad",
+    response_model=ActividadCampanas,
+    dependencies=[Depends(gate_dueno)],
+)
+def actividad_campanas(empresa_id: EmpresaActual, db: DB) -> ActividadCampanas:
+    """Qué hicieron las campañas en los últimos 30 días y a cuántos llegan."""
+    return svc.actividad_campanas(db, empresa_id)
 
 
 @router.get(

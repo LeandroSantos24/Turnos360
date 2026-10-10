@@ -262,3 +262,77 @@ def actualizar_seguimiento(db: Session, empresa_id: int, datos) -> dict:
         "google_tag_id": empresa.google_tag_id,
         "google_conversion_label": empresa.google_conversion_label,
     }
+
+
+# Prefijo con que cada campaña queda registrada en Mensaje.contenido
+# (tasks/emails.py). Las pruebas van como «prueba_campana …» y no cuentan.
+_PREFIJOS_CAMPANA = {
+    "recordatorio_24h": "recordatorio_24h ",
+    "recordatorio_2h": "recordatorio_2h ",
+    "cumple": "cumple ",
+    "inactivos": "inactivo ",
+    "resena_google": "pedido_resena ",
+}
+
+
+def actividad_campanas(db: Session, empresa_id: int, dias: int = 30) -> dict:
+    """Emails que mandó cada campaña en los últimos `dias` y a quién llegan.
+
+    Sale de la tabla Mensaje, que es donde queda cada envío real (y cada
+    fallo). No es una estimación: si dice 12, salieron 12 emails.
+    """
+    import datetime as dt
+
+    from sqlalchemy import case, func, select
+
+    from app.models import Cliente
+    from app.models.enums import CanalMensaje, EstadoMensaje
+    from app.models.mensajeria import Mensaje
+
+    desde = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)
+    campanas: dict[str, dict] = {}
+    for clave, prefijo in _PREFIJOS_CAMPANA.items():
+        fila = db.execute(
+            select(
+                func.count().filter(Mensaje.estado == EstadoMensaje.ENVIADO),
+                func.count().filter(Mensaje.estado == EstadoMensaje.FALLIDO),
+                func.max(
+                    case((Mensaje.estado == EstadoMensaje.ENVIADO, Mensaje.fecha))
+                ),
+            ).where(
+                Mensaje.empresa_id == empresa_id,
+                Mensaje.canal == CanalMensaje.EMAIL,
+                Mensaje.fecha >= desde,
+                Mensaje.contenido.startswith(prefijo),
+            )
+        ).one()
+        campanas[clave] = {
+            "enviados": int(fila[0] or 0),
+            "fallidos": int(fila[1] or 0),
+            "ultimo": fila[2].isoformat() if fila[2] else None,
+        }
+
+    con_email = (Cliente.email.is_not(None)) & (func.trim(Cliente.email) != "")
+    base = (Cliente.empresa_id == empresa_id) & (Cliente.activo.is_(True))
+    alcance = db.execute(
+        select(
+            func.count(),
+            func.count().filter(con_email),
+            func.count().filter(con_email & Cliente.acepta_marketing.is_(True)),
+            func.count().filter(
+                con_email
+                & Cliente.acepta_marketing.is_(True)
+                & Cliente.fecha_nacimiento.is_not(None)
+            ),
+        ).where(base)
+    ).one()
+    return {
+        "dias": dias,
+        "campanas": campanas,
+        "alcance": {
+            "clientes": int(alcance[0]),
+            "con_email": int(alcance[1]),
+            "aceptan_promos": int(alcance[2]),
+            "con_cumple": int(alcance[3]),
+        },
+    }

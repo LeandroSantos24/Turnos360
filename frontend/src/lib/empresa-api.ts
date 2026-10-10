@@ -610,6 +610,24 @@ export function guardarAutomatizaciones(datos: Automatizaciones): Promise<Automa
 }
 
 
+/** Envíos reales de una campaña (tabla Mensaje), sin contar las pruebas. */
+export interface EnviosCampana {
+  enviados: number;
+  fallidos: number;
+  ultimo: string | null;
+}
+
+export interface ActividadCampanas {
+  dias: number;
+  campanas: Record<keyof Automatizaciones, EnviosCampana>;
+  /** A cuántos clientes les puede llegar cada tipo de mensaje. */
+  alcance: { clientes: number; con_email: number; aceptan_promos: number; con_cumple: number };
+}
+
+export function obtenerActividadCampanas(): Promise<ActividadCampanas> {
+  return api.get<ActividadCampanas>("/empresa/automatizaciones/actividad");
+}
+
 /**
  * Manda una muestra de la campaña al email del usuario que la pide.
  *
