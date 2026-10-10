@@ -32,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FotoRubro, SelectorRubro } from "@/components/selector-rubro";
 
 /** Mismo normalizador que el backend, para que el preview no mienta. */
 function aSlug(v: string, final = false): string {
@@ -43,21 +44,11 @@ function aSlug(v: string, final = false): string {
   return final ? limpio.replace(/^-+|-+$/g, "") : limpio.replace(/^-+/, "");
 }
 
-/** Un emoji por rubro, para que la grilla se lea de un vistazo. */
-const EMOJI: Record<string, string> = {
-  barberia: "💈",
-  peluqueria: "✂️",
-  unas: "💅",
-  estetica: "✨",
-  spa: "🧖",
-  medico: "🩺",
-  odontologia: "🦷",
-  nutricion: "🥗",
-  psicologia: "🧠",
-  kinesiologia: "🤸",
-  tatuajes: "🎨",
-  veterinaria: "🐶",
-};
+/** Plural simple en castellano (barbero → barberos, box → boxes, sesión → sesiones). */
+function plural(p: string): string {
+  if (/ón$/i.test(p)) return p.replace(/ón$/i, "ones");
+  return /[aeiouáéíóú]$/i.test(p) ? `${p}s` : `${p}es`;
+}
 
 export default function RegistroPage() {
   const router = useRouter();
@@ -70,12 +61,13 @@ export default function RegistroPage() {
   const [email, setEmail] = useState("");
   const [clave, setClave] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // Paso 1: qué tipo de negocio es. Paso 2: los datos, con la vista previa.
+  const [paso, setPaso] = useState<1 | 2>(1);
 
   useEffect(() => {
     listarRubrosPublicos()
       .then((r) => {
         setRubros(r);
-        if (r.length) setRubro((actual) => actual || r[0].codigo);
       })
       .catch(() => toast.error("No pudimos cargar los rubros. Recargá la página."));
   }, []);
@@ -114,43 +106,64 @@ export default function RegistroPage() {
     }
   }
 
+  const elegido = rubros.find((r) => r.codigo === rubro);
+
+  if (paso === 1) {
+    return (
+      <div className="min-h-screen bg-muted/30 px-4 py-10">
+        <div className="mx-auto max-w-5xl">
+          <Encabezado subtitulo="Creá tu cuenta y empezá a gestionar turnos. 14 días gratis, sin tarjeta." />
+          <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+            <h1 className="text-xl font-bold tracking-tight">¿Qué tipo de negocio tenés?</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Con esto armamos tu agenda con los nombres y los servicios de tu rubro. Después cambiás lo que quieras.
+            </p>
+            <div className="mt-5">
+              {rubros.length === 0 ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="aspect-[4/3] animate-pulse rounded-2xl bg-muted" />
+                  ))}
+                </div>
+              ) : (
+                <SelectorRubro rubros={rubros} valor={rubro} onCambio={setRubro} etiqueta="Tipo de negocio" />
+              )}
+            </div>
+            <div className="mt-6 flex flex-col-reverse items-center justify-between gap-3 sm:flex-row">
+              <p className="text-sm text-muted-foreground">
+                ¿Ya tenés cuenta?{" "}
+                <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+                  Iniciá sesión
+                </Link>
+              </p>
+              <Button size="lg" className="w-full sm:w-auto" disabled={!rubro} onClick={() => setPaso(2)}>
+                {elegido ? `Continuar con ${elegido.nombre}` : "Elegí tu rubro para continuar"}
+              </Button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-muted/30 px-4 py-10">
-      <div className="mx-auto max-w-xl">
-        <div className="mb-6 text-center">
-          <Link href="/" className="text-2xl font-bold">
-            Turnos<span className="text-primary">360</span>
-          </Link>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Creá tu cuenta y empezá a gestionar turnos. 14 días gratis, sin tarjeta.
-          </p>
-        </div>
-
+      <div className="mx-auto max-w-5xl">
+        <Encabezado subtitulo="Último paso: tus datos y los de tu negocio." />
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <form
           onSubmit={enviar}
           className="space-y-5 rounded-2xl border bg-card p-6 shadow-sm"
         >
-          <div className="space-y-2">
-            <Label>¿Cuál es tu rubro? *</Label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {rubros.map((r) => (
-                <button
-                  key={r.codigo}
-                  type="button"
-                  onClick={() => setRubro(r.codigo)}
-                  className={`rounded-xl border p-3 text-center transition-colors ${
-                    rubro === r.codigo
-                      ? "border-primary bg-primary/5"
-                      : "hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="text-xl">{EMOJI[r.codigo] ?? "📅"}</div>
-                  <div className="mt-1 text-xs font-medium leading-tight">
-                    {r.nombre}
-                  </div>
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-bold tracking-tight">Tus datos</h1>
+            <button
+              type="button"
+              onClick={() => setPaso(1)}
+              className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {elegido?.nombre ?? "Rubro"} · cambiar
+            </button>
           </div>
 
           <div className="space-y-2">
@@ -258,7 +271,58 @@ export default function RegistroPage() {
             </Link>
           </p>
         </form>
+
+        <VistaPrevia rubro={elegido} negocio={negocio} slug={slugFinal} />
+        </div>
       </div>
     </div>
   );
 }
+
+function Encabezado({ subtitulo }: { subtitulo: string }) {
+  return (
+    <div className="mb-6 text-center">
+      <Link href="/" className="text-2xl font-bold">
+        Turnos<span className="text-primary">360</span>
+      </Link>
+      <p className="mt-1.5 text-sm text-muted-foreground">{subtitulo}</p>
+    </div>
+  );
+}
+
+/** Cómo va a quedar: lo que el dueño ve antes de crear la cuenta. */
+function VistaPrevia({ rubro, negocio, slug }: { rubro?: RubroPublico; negocio: string; slug: string }) {
+  if (!rubro) return null;
+  const recurso = rubro.recurso ?? "profesional";
+  const cliente = rubro.cliente ?? "cliente";
+  return (
+    <aside aria-label="Vista previa" className="overflow-hidden rounded-2xl border bg-card shadow-sm lg:sticky lg:top-6">
+      <FotoRubro codigo={rubro.codigo} />
+      <div className="space-y-4 p-5 text-sm">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vista previa</p>
+          <p className="mt-1 text-lg font-bold leading-tight">{negocio.trim() || "Tu negocio"}</p>
+          <p className="truncate text-muted-foreground">turnos360.com.ar/{slug || "tu-negocio"}</p>
+        </div>
+        <p>
+          Tu agenda va a hablar de <b>{plural(recurso)}</b>, <b>{plural(cliente)}</b> y{" "}
+          <b>{plural(rubro.turno ?? "turno")}</b>.
+        </p>
+        {rubro.servicios && rubro.servicios.length > 0 && (
+          <div>
+            <p className="font-medium">Arrancás con estos servicios:</p>
+            <ul className="mt-1.5 flex flex-wrap gap-1.5">
+              {rubro.servicios.map((s) => (
+                <li key={s} className="rounded-full bg-muted px-2.5 py-1 text-xs">
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">Precios y duraciones se cambian desde Servicios.</p>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+

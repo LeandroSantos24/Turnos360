@@ -213,3 +213,77 @@ PRESET_TATUAJES = {
         {"nombre": "Piercing", "duracion_min": 30, "precio": 18000, "grupo": "piercing", "paso_turno_min": 30},
     ],
 }
+
+# ── Peluquería ───────────────────────────────────────────────────────────
+PRESET_PELUQUERIA = {
+    "terminologia": {"turno": "turno", "recurso": "estilista", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [
+        {"clave": "tipo_cabello", "etiqueta": "Tipo de cabello", "tipo": "texto"},
+        {"clave": "formula_color", "etiqueta": "Fórmula de color", "tipo": "texto"},
+        {"clave": "alergias", "etiqueta": "Alergias a productos", "tipo": "texto"},
+    ],
+    "datos_sensibles": False,
+    # Mientras el color actúa, la estilista hace un brushing: carriles distintos.
+    "servicios": [
+        {"nombre": "Corte", "duracion_min": 45, "precio": 14000, "grupo": "corte", "paso_turno_min": 15},
+        {"nombre": "Brushing", "duracion_min": 30, "precio": 9000, "grupo": "corte", "paso_turno_min": 15},
+        {"nombre": "Color de raíz", "duracion_min": 90, "precio": 26000, "grupo": "tintura", "paso_turno_min": 30},
+        {"nombre": "Mechas / balayage", "duracion_min": 150, "precio": 45000, "grupo": "tintura", "paso_turno_min": 30},
+        {"nombre": "Tratamiento capilar", "duracion_min": 45, "precio": 16000, "grupo": "tratamiento", "paso_turno_min": 15},
+    ],
+}
+
+# ── Lavadero de vehículos ────────────────────────────────────────────────
+PRESET_LAVADERO = {
+    "terminologia": {"turno": "turno", "recurso": "box", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [
+        {"clave": "patente", "etiqueta": "Patente", "tipo": "texto"},
+        {"clave": "vehiculo", "etiqueta": "Marca y modelo", "tipo": "texto"},
+    ],
+    "datos_sensibles": False,
+    # Cada box lava un vehículo por vez: sin carriles paralelos.
+    "servicios": [
+        {"nombre": "Lavado exterior", "duracion_min": 30, "precio": 12000, "grupo": None, "paso_turno_min": 30},
+        {"nombre": "Lavado completo", "duracion_min": 60, "precio": 20000, "grupo": None, "paso_turno_min": 30},
+        {"nombre": "Lavado premium con encerado", "duracion_min": 90, "precio": 35000, "grupo": None, "paso_turno_min": 30},
+        {"nombre": "Limpieza de tapizados", "duracion_min": 120, "precio": 45000, "grupo": None, "paso_turno_min": 60},
+    ],
+}
+
+# ── Gimnasio y entrenamiento ─────────────────────────────────────────────
+# Turnos individuales (entrenamiento personal, evaluaciones). Las clases
+# grupales con cupo todavía no existen en el sistema; el abono mensual se
+# arma con Membresías.
+PRESET_GIMNASIO = {
+    "terminologia": {"turno": "clase", "recurso": "entrenador", "cliente": "alumno"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [
+        {"clave": "objetivo", "etiqueta": "Objetivo", "tipo": "texto"},
+        {"clave": "apto_fisico", "etiqueta": "Apto físico (vencimiento)", "tipo": "texto"},
+    ],
+    "datos_sensibles": False,
+    "servicios": [
+        {"nombre": "Entrenamiento personal", "duracion_min": 60, "precio": 15000, "grupo": None, "paso_turno_min": 60},
+        {"nombre": "Evaluación física", "duracion_min": 45, "precio": 12000, "grupo": None, "paso_turno_min": 45},
+        {"nombre": "Clase de prueba", "duracion_min": 60, "precio": 0, "grupo": None, "paso_turno_min": 60},
+    ],
+}
+
+# ── Otros negocios de servicios ──────────────────────────────────────────
+# Terminología neutra y un solo servicio de ejemplo para editar: no hay forma
+# de adivinar el catálogo de un rubro que no conocemos.
+PRESET_OTROS = {
+    "terminologia": {"turno": "turno", "recurso": "profesional", "cliente": "cliente"},
+    "tipo_turno_default": "simple",
+    "modulos": {"gift_cards": True, "ficha_clinica": False, "ordenes_trabajo": False},
+    "campos_cliente": [],
+    "datos_sensibles": False,
+    "servicios": [
+        {"nombre": "Turno de 30 minutos", "duracion_min": 30, "precio": 0, "grupo": None, "paso_turno_min": 30},
+    ],
+}

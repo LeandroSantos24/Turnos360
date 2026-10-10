@@ -25,9 +25,13 @@ from app.models import Rubro, SuperAdmin
 from app.presets import (
     PRESET_BARBERIA,
     PRESET_ESTETICA,
+    PRESET_GIMNASIO,
     PRESET_KINESIOLOGIA,
+    PRESET_LAVADERO,
     PRESET_MEDICO,
     PRESET_NUTRICION,
+    PRESET_OTROS,
+    PRESET_PELUQUERIA,
     PRESET_PSICOLOGIA,
     PRESET_SPA,
     PRESET_TATUAJES,
@@ -37,7 +41,8 @@ from app.presets import (
 # El orden es el que ve quien se registra en el desplegable de rubro: primero
 # los que más entran, no alfabético.
 RUBROS = [
-    ("barberia", "Barbería / Peluquería", PRESET_BARBERIA),
+    ("barberia", "Barbería", PRESET_BARBERIA),
+    ("peluqueria", "Peluquería", PRESET_PELUQUERIA),
     ("unas", "Centro de uñas / Manicura", PRESET_UNAS),
     ("estetica", "Centro de estética", PRESET_ESTETICA),
     ("spa", "Spa & Masajes", PRESET_SPA),
@@ -46,6 +51,9 @@ RUBROS = [
     ("kinesiologia", "Kinesiología", PRESET_KINESIOLOGIA),
     ("psicologia", "Psicología", PRESET_PSICOLOGIA),
     ("medico", "Consultorio médico", PRESET_MEDICO),
+    ("lavadero", "Lavadero de vehículos", PRESET_LAVADERO),
+    ("gimnasio", "Gimnasio y entrenamiento", PRESET_GIMNASIO),
+    ("otros", "Otro negocio de servicios", PRESET_OTROS),
 ]
 
 EMAIL_DEV = "admin@turnos360.com"

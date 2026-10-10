@@ -369,8 +369,24 @@ def rubros_publicos(request: Request, db: DB) -> list[RubroPublicoOut]:
     """Los rubros para elegir en el formulario de registro."""
     from app.models import Rubro
 
-    filas = db.scalars(select(Rubro).order_by(Rubro.nombre)).all()
-    return [RubroPublicoOut(codigo=r.codigo, nombre=r.nombre) for r in filas]
+    filas = db.scalars(
+        select(Rubro).where(Rubro.activo.is_(True)).order_by(Rubro.nombre)
+    ).all()
+    salida = []
+    for r in filas:
+        preset = r.preset or {}
+        term = preset.get("terminologia") or {}
+        salida.append(
+            RubroPublicoOut(
+                codigo=r.codigo,
+                nombre=r.nombre,
+                recurso=term.get("recurso") or "profesional",
+                cliente=term.get("cliente") or "cliente",
+                turno=term.get("turno") or "turno",
+                servicios=[s["nombre"] for s in preset.get("servicios") or [] if s.get("nombre")],
+            )
+        )
+    return salida
 
 
 @router.post(

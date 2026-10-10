@@ -179,3 +179,9 @@ class RegistroOut(BaseModel):
 class RubroPublicoOut(BaseModel):
     codigo: str
     nombre: str
+    # Para la vista previa del alta: cómo se va a llamar cada cosa y con qué
+    # servicios arranca. Sale del preset (configuración nuestra, no sensible).
+    recurso: str = "profesional"
+    cliente: str = "cliente"
+    turno: str = "turno"
+    servicios: list[str] = []

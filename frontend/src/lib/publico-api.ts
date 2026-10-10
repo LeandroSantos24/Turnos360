@@ -153,6 +153,12 @@ export function validarCupon(
 export interface RubroPublico {
   codigo: string;
   nombre: string;
+  /** Cómo se llaman las cosas en ese rubro (del preset). */
+  recurso?: string;
+  cliente?: string;
+  turno?: string;
+  /** Servicios con los que arranca el negocio (editables después). */
+  servicios?: string[];
 }
 
 export interface DatosRegistro {
