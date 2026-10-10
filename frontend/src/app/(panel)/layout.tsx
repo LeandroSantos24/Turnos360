@@ -342,7 +342,7 @@ export default function PanelLayout({
                       return (
                         <Link
                           key={item.href}
-                          href="/suscripcion"
+                          href="/suscripcion/planes"
                           title={`${labelNav(item)} viene con el plan Pro`}
                         >
                           <div

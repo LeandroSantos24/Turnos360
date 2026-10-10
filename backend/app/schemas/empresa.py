@@ -294,6 +294,7 @@ class PagoSuscripcionOut(BaseModel):
     tienen por qué llegarle al cliente.
     """
 
+    id: int | None = None
     fecha: str | None
     monto: float
     metodo: str
@@ -304,6 +305,8 @@ class PagoSuscripcionOut(BaseModel):
     tipo_etiqueta: str | None = None
     plan_etiqueta: str | None = None
     estado: str = "aprobado"
+    # Referencia real del cobro (id de Mercado Pago), si la hay.
+    referencia: str | None = None
 
 
 class DatosCobro(BaseModel):

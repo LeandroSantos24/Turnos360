@@ -15,7 +15,7 @@
  * paso, y la fila copiable del CBU.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -149,7 +149,7 @@ export function montoDe(datos: MiSuscripcion, destino?: PlanDeLaGrilla): number 
  * nadie decide sobre una foto vieja. Si alguien entra directo al paso 4 por el
  * historial del navegador, llega con los datos frescos igual.
  */
-export function useSuscripcion() {
+function useSuscripcionPropia(activo: boolean) {
   const [datos, setDatos] = useState<MiSuscripcion | null>(null);
   const [avisoPendiente, setAvisoPendiente] = useState(false);
   // El aviso puede estar esperando que lo revisemos ("pendiente") o esperando
@@ -157,7 +157,7 @@ export function useSuscripcion() {
   // sentido volver a avisar.
   const [avisoEstado, setAvisoEstado] = useState<string | null>(null);
   const [mensajeAdmin, setMensajeAdmin] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(activo);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -180,8 +180,8 @@ export function useSuscripcion() {
   }, []);
 
   useEffect(() => {
-    cargar();
-  }, [cargar]);
+    if (activo) cargar();
+  }, [activo, cargar]);
 
   return {
     datos,
@@ -192,6 +192,26 @@ export function useSuscripcion() {
     cargando,
     cargar,
   };
+}
+
+type EstadoSuscripcionPantalla = ReturnType<typeof useSuscripcionPropia>;
+
+const CtxSuscripcion = createContext<EstadoSuscripcionPantalla | null>(null);
+
+/**
+ * Las pestañas de «Mi suscripción» (resumen, planes, pagos…) comparten UNA
+ * lectura: pasar de una a otra no vuelve a pedir nada. El circuito de pago
+ * (./cambiar/*) queda afuera a propósito y lee fresco en cada paso.
+ */
+export function ProveedorSuscripcion({ children }: { children: React.ReactNode }) {
+  const valor = useSuscripcionPropia(true);
+  return <CtxSuscripcion.Provider value={valor}>{children}</CtxSuscripcion.Provider>;
+}
+
+export function useSuscripcion(): EstadoSuscripcionPantalla {
+  const ctx = useContext(CtxSuscripcion);
+  const propio = useSuscripcionPropia(ctx === null);
+  return ctx ?? propio;
 }
 
 /**

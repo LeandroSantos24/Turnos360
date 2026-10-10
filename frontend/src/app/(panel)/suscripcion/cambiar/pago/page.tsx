@@ -24,7 +24,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Banknote, CreditCard, ExternalLink, Repeat } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { activarDebitoAutomatico, pagarSuscripcionMP } from "@/lib/empresa-api";
 import {
   Cargando,

@@ -153,7 +153,7 @@ function ContenidoSucursales() {
         {sinCupo && (
           <p className="text-sm text-muted-foreground">
             — para sumar otro,{" "}
-            <Link href="/suscripcion" className="font-medium underline underline-offset-4">
+            <Link href="/suscripcion/planes" className="font-medium underline underline-offset-4">
               cambiá de plan
             </Link>
             .

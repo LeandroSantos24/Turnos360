@@ -128,6 +128,7 @@ export function guardarReglasReserva(datos: ReglasReserva): Promise<ReglasReserv
 // ============================================================
 
 export interface PagoSuscripcion {
+  id?: number;
   fecha: string | null;
   monto: number;
   /** Etiqueta del método («Transferencia bancaria», «Mercado Pago»…). */
@@ -139,6 +140,8 @@ export interface PagoSuscripcion {
   tipo_etiqueta?: string;
   plan_etiqueta?: string | null;
   estado?: string;
+  /** Referencia del cobro (id de Mercado Pago) cuando existe. */
+  referencia?: string | null;
 }
 
 /**

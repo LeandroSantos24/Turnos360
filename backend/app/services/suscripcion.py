@@ -431,7 +431,7 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
                 AjusteSuscripcion.tipo.in_(tuple(EVENTOS_VISIBLES)),
             )
             .order_by(AjusteSuscripcion.creado_en.desc(), AjusteSuscripcion.id.desc())
-            .limit(12)
+            .limit(50)
         )
     )
 
@@ -525,6 +525,7 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
         ],
         "pagos": [
             {
+                "id": p.id,
                 "fecha": _fmt(p.fecha),
                 "monto": float(p.monto),
                 "metodo": METODOS.get(p.metodo, p.metodo),
@@ -534,6 +535,9 @@ def mi_suscripcion(db, empresa_id: int) -> dict:
                 "tipo_etiqueta": TIPOS_PAGO.get(p.tipo or "", "Pago"),
                 "plan_etiqueta": planes.limites_de(p.plan).etiqueta if p.plan else None,
                 "estado": "aprobado",
+                # Referencia real del cobro, si la hay (el id de Mercado Pago).
+                # No hay comprobante fiscal: no se inventa uno.
+                "referencia": f"Mercado Pago #{p.mp_payment_id}" if p.mp_payment_id else None,
             }
             for p in pagos
         ],
