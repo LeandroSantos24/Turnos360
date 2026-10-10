@@ -48,8 +48,34 @@ class UsuarioMe(BaseModel):
     # eso, la página pública del negocio no aparece y el dueño no tiene forma
     # de saber por qué.
     email_verificado: bool = True
+    # Para «Mi cuenta»: a qué negocio y a qué local pertenece esta persona,
+    # con nombre. Recepción y el profesional no pueden listar locales, así que
+    # sin esto no tendrían forma de ver el suyo.
+    empresa_nombre: str | None = None
+    sucursal_nombre: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class PerfilActualizar(BaseModel):
+    """Lo único que una persona puede cambiar de su propio usuario.
+
+    Va con lista cerrada a propósito: ni email (es el usuario para entrar y
+    pide verificación), ni rol, ni local (los decide el dueño desde Equipo).
+    """
+
+    nombre: str = Field(min_length=2, max_length=120)
+
+
+class CerrarSesionesRequest(BaseModel):
+    clave_actual: str = Field(min_length=1, max_length=100)
+
+
+class SesionRenovada(TokenResponse):
+    """Respuesta de las acciones que cortan las demás sesiones: un par nuevo
+    para ESTE dispositivo, así quien hizo el cambio no queda afuera."""
+
+    detalle: str
 
 class OlvidePasswordRequest(BaseModel):
     email: str = Field(max_length=200)

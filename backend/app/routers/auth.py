@@ -19,8 +19,19 @@ import logging
 import secrets
 
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
-from app.models import Empresa, Usuario
-from app.schemas.auth import CambiarPasswordRequest, OlvidePasswordRequest, RestablecerPasswordRequest, LoginRequest, RefreshRequest, TokenResponse, UsuarioMe
+from app.models import Empresa, Sucursal, Usuario
+from app.schemas.auth import (
+    CambiarPasswordRequest,
+    CerrarSesionesRequest,
+    LoginRequest,
+    OlvidePasswordRequest,
+    PerfilActualizar,
+    RefreshRequest,
+    RestablecerPasswordRequest,
+    SesionRenovada,
+    TokenResponse,
+    UsuarioMe,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -153,14 +164,64 @@ def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
     )
 
 
+def _usuario_me(db, usuario: Usuario) -> UsuarioMe:
+    """El usuario con el nombre de su negocio y de su local.
+
+    El local se busca DENTRO de la empresa del usuario: un sucursal_id que no
+    fuera de su negocio (no debería pasar) no filtra el nombre de otro.
+    """
+    empresa = db.get(Empresa, usuario.empresa_id)
+    sucursal = db.scalar(
+        select(Sucursal).where(
+            Sucursal.id == usuario.sucursal_id,
+            Sucursal.empresa_id == usuario.empresa_id,
+        )
+    )
+    datos = UsuarioMe.model_validate(usuario)
+    datos.empresa_nombre = empresa.nombre if empresa else None
+    datos.sucursal_nombre = sucursal.nombre if sucursal else None
+    return datos
+
+
+def _sesion_nueva(usuario: Usuario, detalle: str) -> SesionRenovada:
+    tv = int(usuario.token_version or 0)
+    return SesionRenovada(
+        access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value, tv),
+        refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value, tv),
+        detalle=detalle,
+    )
+
+
 @router.get("/me", response_model=UsuarioMe)
-def me(usuario: UsuarioActual) -> Usuario:
+def me(usuario: UsuarioActual, db: DB) -> UsuarioMe:
     """Devuelve los datos del usuario autenticado.
 
     Ruta protegida: sin un access token válido en el header, FastAPI corta
     con 401 antes de entrar acá (lo hace el guardián get_current_usuario).
     """
-    return usuario
+    return _usuario_me(db, usuario)
+
+
+@router.patch("/me", response_model=UsuarioMe)
+@limiter.limit("20/minute")
+def actualizar_perfil(
+    request: Request, datos: PerfilActualizar, usuario: UsuarioActual, db: DB
+) -> UsuarioMe:
+    """Cambia los datos propios que la persona puede tocar sola: el nombre.
+
+    El schema es una lista cerrada (PerfilActualizar): aunque alguien mande
+    rol, email o empresa_id en el JSON, Pydantic los descarta.
+    """
+    nombre = " ".join(datos.nombre.split())
+    if len(nombre) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Escribí tu nombre (al menos 2 letras).",
+        )
+    usuario.nombre = nombre
+    db.commit()
+    db.refresh(usuario)
+    return _usuario_me(db, usuario)
 
 # ============================================================
 # Recuperación y cambio de contraseña
@@ -269,23 +330,59 @@ def restablecer_password(
     return {"detalle": "Contraseña actualizada. Ya podés entrar con la nueva."}
 
 
-@router.post("/cambiar-password")
+@router.post("/cambiar-password", response_model=SesionRenovada)
 @limiter.limit("10/minute")
 def cambiar_password(
     request: Request, datos: CambiarPasswordRequest, usuario: UsuarioActual, db: DB
-) -> dict:
-    """Cambio de clave estando logueado: pide la actual y setea la nueva."""
+) -> SesionRenovada:
+    """Cambio de clave estando logueado: pide la actual y setea la nueva.
+
+    Corta todas las sesiones (token_version + 1) y devuelve un par nuevo para
+    este dispositivo. Antes no devolvía nada: el panel decía «Contraseña
+    actualizada» y al siguiente clic echaba a la persona al login.
+    """
     if not verificar_clave(datos.clave_actual, usuario.hash_clave):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La contraseña actual no es correcta",
+        )
+    if datos.clave_nueva == datos.clave_actual:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña nueva tiene que ser distinta de la actual",
         )
     usuario.hash_clave = hash_clave(datos.clave_nueva)
     usuario.reset_token_hash = None
     usuario.reset_token_expira = None
     usuario.token_version = int(usuario.token_version or 0) + 1
     db.commit()
-    return {
-        "detalle": "Contraseña actualizada. Por seguridad se cerraron las "
-        "demás sesiones: volvé a entrar."
-    }
+    return _sesion_nueva(
+        usuario,
+        "Contraseña actualizada. Se cerró la sesión en tus otros dispositivos.",
+    )
+
+
+@router.post("/cerrar-otras-sesiones", response_model=SesionRenovada)
+@limiter.limit("5/minute")
+def cerrar_otras_sesiones(
+    request: Request, datos: CerrarSesionesRequest, usuario: UsuarioActual, db: DB
+) -> SesionRenovada:
+    """Saca de la cuenta a cualquier otro dispositivo, sin cambiar la clave.
+
+    Pide la contraseña: con solo un token robado, alguien podría usar esto
+    para echar al dueño de verdad y quedarse con la única sesión válida.
+
+    No hay lista de sesiones para mostrar: los tokens no se guardan en el
+    servidor. Lo que sí se puede hacer, y de forma segura, es invalidarlos
+    todos de una (el mismo mecanismo que el cambio de clave).
+    """
+    if not verificar_clave(datos.clave_actual, usuario.hash_clave):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña no es correcta",
+        )
+    usuario.token_version = int(usuario.token_version or 0) + 1
+    db.commit()
+    return _sesion_nueva(
+        usuario, "Listo: se cerró la sesión en todos tus otros dispositivos."
+    )

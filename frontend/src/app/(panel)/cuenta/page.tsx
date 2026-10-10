@@ -1,180 +1,132 @@
 "use client";
 
 /**
- * Mi cuenta (/cuenta) — por ahora: cambiar la contraseña estando logueado.
- * Pide la actual (para que nadie con la sesión abierta la cambie sin saberla)
- * y la nueva dos veces.
+ * Mi cuenta · Resumen (/cuenta).
+ *
+ * Quién sos, en qué negocio y con qué plan, y la entrada a cada apartado.
+ * El estado del plan es el que manda el servidor (etiqueta y tono de
+ * core/estados_suscripcion.py): acá no se calcula nada, se muestra y se
+ * deriva a «Mi suscripción», que es donde vive el detalle.
  */
 
 import { useEffect, useState } from "react";
-import { Crown, CheckCircle2, AlertTriangle } from "lucide-react";
-import { toast } from "sonner";
+import Link from "next/link";
+import { ArrowRight, Building2, KeyRound, MailWarning, Receipt, UserRound } from "lucide-react";
 
-import { api, ApiError } from "@/lib/api";
-import { etiquetaPlan } from "@/lib/precios";
+import { useConfigRubro } from "@/lib/config-rubro";
 import { obtenerSuscripcion, type Suscripcion } from "@/lib/empresa-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { etiquetaPlan } from "@/lib/precios";
+import { BadgeEstado } from "../suscripcion/_suscripcion";
+import { Avatar, CargandoCuenta, ErrorCuenta, ROL_LABEL, useCuenta } from "./_cuenta";
 
-export default function CuentaPage() {
-  const [actual, setActual] = useState("");
-  const [nueva, setNueva] = useState("");
-  const [nueva2, setNueva2] = useState("");
-  const [guardando, setGuardando] = useState(false);
-
-  async function manejarSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (nueva.length < 8) {
-      toast.error("La contraseña nueva debe tener al menos 8 caracteres");
-      return;
-    }
-    if (nueva !== nueva2) {
-      toast.error("Las contraseñas nuevas no coinciden");
-      return;
-    }
-    setGuardando(true);
-    try {
-      await api.post("/auth/cambiar-password", {
-        clave_actual: actual,
-        clave_nueva: nueva,
-      });
-      toast.success("Contraseña actualizada");
-      setActual("");
-      setNueva("");
-      setNueva2("");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "No se pudo cambiar");
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <h1 className="titulo-pantalla">
-          Mi <b>cuenta</b>.
-        </h1>
-      </div>
-
-      <TarjetaSuscripcion />
-
-      <div className="rounded-2xl border bg-card p-5">
-        <p className="font-semibold">Cambiar contraseña</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Si te la creó el negocio, acá elegís la tuya.
-        </p>
-        {/* El formulario NO se estira a los 1200px del contenedor: un campo
-            de contraseña de 1150px de ancho se ve absurdo y encima cuesta
-            más leerlo. El encabezado se alinea con el del resto del panel,
-            que es lo que se nota al navegar; el formulario mantiene su
-            ancho de formulario. */}
-        <form onSubmit={manejarSubmit} className="mt-4 max-w-md space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="c-actual">Contraseña actual</Label>
-            <Input
-              id="c-actual"
-              type="password"
-              required
-              value={actual}
-              onChange={(e) => setActual(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="c-nueva">Contraseña nueva</Label>
-            <Input
-              id="c-nueva"
-              type="password"
-              required
-              minLength={8}
-              value={nueva}
-              onChange={(e) => setNueva(e.target.value)}
-              placeholder="Mínimo 8 caracteres"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="c-nueva2">Repetí la nueva</Label>
-            <Input
-              id="c-nueva2"
-              type="password"
-              required
-              value={nueva2}
-              onChange={(e) => setNueva2(e.target.value)}
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={guardando}>
-            {guardando ? "Guardando…" : "Cambiar contraseña"}
-          </Button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ── Tarjeta de estado de la suscripción ── */
-function TarjetaSuscripcion() {
+export default function CuentaResumen() {
+  const { usuario, error, recargar } = useCuenta();
+  const config = useConfigRubro();
+  const dueno = usuario?.rol === "dueno";
   const [sus, setSus] = useState<Suscripcion | null>(null);
 
   useEffect(() => {
+    if (!dueno) return;
     obtenerSuscripcion()
       .then(setSus)
       .catch(() => setSus(null));
-  }, []);
+  }, [dueno]);
 
-  if (!sus) return null;
+  if (error) return <ErrorCuenta onReintentar={recargar} />;
+  if (!usuario) return <CargandoCuenta />;
 
-  // El color sale del TONO que manda el servidor (core/estados_suscripcion.py)
-  // y no de una tabla por estado: así un estado nuevo nunca sale sin pintar.
-  const TONOS: Record<string, { color: string; bg: string; Icono: typeof Crown }> = {
-    info: { color: "#0ea5e9", bg: "#0ea5e915", Icono: Crown },
-    ok: { color: "#10b981", bg: "#10b98115", Icono: CheckCircle2 },
-    aviso: { color: "#f59e0b", bg: "#f59e0b15", Icono: AlertTriangle },
-    error: { color: "#ef4444", bg: "#ef444415", Icono: AlertTriangle },
-    neutro: { color: "#6b7280", bg: "#6b728015", Icono: Crown },
-  };
-  const estilo = { ...(TONOS[sus.tono ?? "neutro"] ?? TONOS.neutro), chip: sus.etiqueta ?? "—" };
+  const multisucursal = (config?.limite_sucursales ?? 1) > 1;
+  const plan = sus ? etiquetaPlan(sus.plan) : config?.plan_etiqueta;
 
-  // Antes esto era un ternario con dos casos y un "si no, mostrá el código
-  // crudo". Por eso el plan multi aparecía como «multi» en minúscula.
-  const nombrePlan = `Plan ${etiquetaPlan(sus.plan)}`;
+  const accesos = [
+    {
+      href: "/cuenta/perfil",
+      Icono: UserRound,
+      titulo: "Perfil",
+      texto: "Tu nombre y cómo figurás en el panel.",
+      aviso: usuario.email_verificado ? null : "Email sin confirmar",
+    },
+    {
+      href: "/cuenta/seguridad",
+      Icono: KeyRound,
+      titulo: "Seguridad",
+      texto: "Contraseña y sesiones en otros dispositivos.",
+      aviso: null,
+    },
+    {
+      href: "/cuenta/negocio",
+      Icono: Building2,
+      titulo: "Negocio y permisos",
+      texto: "Tu rol, tu local y qué podés hacer.",
+      aviso: null,
+    },
+  ];
 
   return (
-    <div
-      className="rounded-2xl border p-5"
-      style={{ borderColor: `${estilo.color}40`, background: estilo.bg }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-            style={{ background: `${estilo.color}22` }}
-          >
-            <estilo.Icono className="h-5 w-5" style={{ color: estilo.color }} />
-          </div>
-          <div>
-            <p className="font-semibold leading-tight">{nombrePlan}</p>
-            <p className="text-sm" style={{ color: estilo.color }}>
-              {sus.mensaje}
-            </p>
+    <div className="space-y-6">
+      {/* Quién sos + tarjeta de contexto del negocio */}
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="tarjeta flex items-center gap-4 p-5">
+          <Avatar nombre={usuario.nombre} tam="lg" />
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold leading-tight">{usuario.nombre}</p>
+            <p className="truncate text-sm text-muted-foreground">{usuario.email}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-[hsl(170_85%_26%)] dark:text-primary">
+                {ROL_LABEL[usuario.rol] ?? usuario.rol}
+              </span>
+              {!usuario.email_verificado && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+                  <MailWarning className="h-3 w-3" aria-hidden /> Email sin confirmar
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        {sus.estado !== "sin_vencimiento" && (
-          <span
-            className="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ background: `${estilo.color}22`, color: estilo.color }}
-          >
-            {estilo.chip}
-          </span>
-        )}
-      </div>
 
-      {(sus.estado_base === "prorroga" || sus.estado_base === "vencida" || sus.estado_base === "prueba_vencida") && sus.estado !== "en_revision" && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Para seguir usando Turnos360 sin interrupciones, regularizá tu
-          suscripción desde «Mi suscripción».
-        </p>
-      )}
+        <div className="tarjeta p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tu negocio</p>
+          <p className="mt-1 truncate text-lg font-bold leading-tight">
+            {usuario.empresa_nombre ?? config?.nombre ?? "—"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {[config?.rubro_nombre, multisucursal ? usuario.sucursal_nombre : null].filter(Boolean).join(" · ")}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {plan && <span className="text-sm font-medium">Plan {plan}</span>}
+            {dueno && sus?.etiqueta && <BadgeEstado etiqueta={sus.etiqueta} tono={sus.tono ?? "neutro"} />}
+          </div>
+          {dueno && sus?.mensaje && <p className="mt-1 text-xs text-muted-foreground">{sus.mensaje}</p>}
+          {dueno && (
+            <Link
+              href="/suscripcion"
+              className="enlace mt-3 inline-flex items-center gap-1.5 text-sm"
+            >
+              <Receipt className="h-4 w-4" aria-hidden />
+              Ver vencimiento, pagos y planes
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          )}
+        </div>
+      </section>
+
+      {/* Accesos a cada apartado */}
+      <section aria-label="Apartados" className="grid gap-3 sm:grid-cols-3">
+        {accesos.map(({ href, Icono, titulo, texto, aviso }) => (
+          <Link
+            key={href}
+            href={href}
+            className="tarjeta tarjeta-viva group flex flex-col gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted">
+              <Icono className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="font-semibold">{titulo}</span>
+            <span className="text-sm text-muted-foreground">{texto}</span>
+            {aviso && <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{aviso}</span>}
+          </Link>
+        ))}
+      </section>
     </div>
   );
 }

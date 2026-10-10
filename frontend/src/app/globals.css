@@ -57,7 +57,9 @@
     --secondary-foreground: 222 47% 11%;
 
     --muted: 214 32% 91%;             /* gris suave */
-    --muted-foreground: 215 16% 47%;  /* #475569 texto 2 */
+    /* 41 % y no 47 %: con 47 (#65758b) daba 4,46:1 sobre el fondo del panel y 4:1
+       sobre los chips grises, debajo del mínimo AA (4,5) en todo texto secundario. */
+    --muted-foreground: 215 16% 41%;  /* #58667a texto 2 */
 
     --accent: 168 100% 42%;           /* teal */
     --accent-foreground: 222 47% 11%;
@@ -259,6 +261,19 @@ select option {
     border: 1px solid hsl(var(--border));
     background-color: hsl(var(--card));
     box-shadow: var(--sombra-tarjeta);
+  }
+
+  /* Link dentro de un texto. El teal de marca (#00d4aa) sobre blanco da 1,9:1
+     y no se lee: en claro va un teal oscuro (5:1) y siempre subrayado, que es
+     lo que lo distingue del texto de al lado sin depender del color. */
+  .enlace {
+    color: hsl(170 85% 26%);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .dark .enlace {
+    color: hsl(var(--primary));
   }
 
   .tarjeta-viva {

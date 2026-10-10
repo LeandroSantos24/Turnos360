@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 
 import { isLoggedIn, clearToken } from "@/lib/auth";
-import { getMe, UsuarioMe } from "@/lib/auth-api";
+import { EVENTO_PERFIL, getMe, UsuarioMe } from "@/lib/auth-api";
 import {
   obtenerConfigEmpresa,
   ConfigEmpresa,
@@ -131,7 +131,9 @@ const GRUPOS = [
 
 /** Rutas que el profesional SÍ puede ver. El resto lo redirige a "Mi día". */
 function profesionalPuedeVer(pathname: string): boolean {
-  return pathname === "/mi-dia" || pathname.startsWith("/clientes");
+  // «Mi cuenta» también: estaba en su menú pero lo devolvía a «Mi día», y un
+  // profesional no tenía dónde cambiar la contraseña que le creó el dueño.
+  return pathname === "/mi-dia" || pathname.startsWith("/clientes") || pathname.startsWith("/cuenta");
 }
 
 const ROL_LABEL: Record<string, string> = {
@@ -196,6 +198,16 @@ export default function PanelLayout({
       })
       .catch(() => router.push("/login"));
   }, [router]);
+
+  // «Mi cuenta» avisa cuando cambia el nombre, para que la barra lateral no
+  // siga mostrando el viejo hasta recargar.
+  useEffect(() => {
+    const releer = () => {
+      getMe().then(setUsuario).catch(() => {});
+    };
+    window.addEventListener(EVENTO_PERFIL, releer);
+    return () => window.removeEventListener(EVENTO_PERFIL, releer);
+  }, []);
 
   // Gateo de rutas del profesional: si entra (o lo mandan) a una pantalla de
   // gestión, lo devolvemos a "Mi día".

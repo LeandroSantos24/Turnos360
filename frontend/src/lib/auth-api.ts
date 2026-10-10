@@ -27,6 +27,9 @@ export interface UsuarioMe {
    * Mientras esté en false, la página pública de su negocio no se muestra.
    */
   email_verificado: boolean;
+  /** Nombre del negocio y del local de esta persona (para «Mi cuenta»). */
+  empresa_nombre?: string | null;
+  sucursal_nombre?: string | null;
 }
 
 /** Inicia sesión: manda email + clave, guarda los tokens si todo va bien. */
@@ -56,4 +59,49 @@ export async function login(email: string, clave: string): Promise<void> {
 export async function getMe(): Promise<UsuarioMe> {
   const { api } = await import("./api");
   return api.get<UsuarioMe>("/auth/me");
+}
+
+/** Aviso para que el panel (barra lateral) vuelva a leer el usuario. */
+export const EVENTO_PERFIL = "t360:perfil-actualizado";
+
+/** Cambia el nombre propio. Es lo único que cada uno edita de sí mismo. */
+export async function actualizarPerfil(nombre: string): Promise<UsuarioMe> {
+  const { api } = await import("./api");
+  const u = await api.patch<UsuarioMe>("/auth/me", { nombre });
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO_PERFIL));
+  return u;
+}
+
+interface SesionRenovada extends TokenResponse {
+  detalle: string;
+}
+
+/**
+ * Cambia la contraseña. El servidor cierra TODAS las sesiones y devuelve un
+ * par nuevo para este dispositivo: se guarda acá para no quedar afuera.
+ */
+export async function cambiarPassword(claveActual: string, claveNueva: string): Promise<string> {
+  const { api } = await import("./api");
+  const r = await api.post<SesionRenovada>("/auth/cambiar-password", {
+    clave_actual: claveActual,
+    clave_nueva: claveNueva,
+  });
+  saveTokens(r.access_token, r.refresh_token);
+  return r.detalle;
+}
+
+/** Saca de la cuenta a los demás dispositivos. Pide la contraseña. */
+export async function cerrarOtrasSesiones(claveActual: string): Promise<string> {
+  const { api } = await import("./api");
+  const r = await api.post<SesionRenovada>("/auth/cerrar-otras-sesiones", {
+    clave_actual: claveActual,
+  });
+  saveTokens(r.access_token, r.refresh_token);
+  return r.detalle;
+}
+
+/** Vuelve a mandar el email para confirmar la dirección. */
+export async function reenviarVerificacion(): Promise<void> {
+  const { api } = await import("./api");
+  await api.post("/auth/reenviar-verificacion", {});
 }
