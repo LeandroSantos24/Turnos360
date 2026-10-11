@@ -109,19 +109,20 @@ def test_cada_forma_tiene_su_geometria_definida():
 @pytest.mark.parametrize(
     "archivo",
     [
-        "frontend/src/app/(public)/[slug]/page.tsx",
-        "frontend/src/app/(panel)/mi-pagina/vista-previa.tsx",
+        # La página real (y la previa del celular, que ahora es la misma
+        # página en un iframe: ver test_la_previa_del_celular_es_la_pagina).
+        "frontend/src/app/(public)/[slug]/cuerpo-vidriera.tsx",
         "frontend/src/app/(panel)/mi-pagina/panel-look.tsx",
     ],
 )
 def test_los_tres_leen_la_geometria_del_mismo_lugar(archivo):
     """LA regla que evita que esto vuelva a pasar.
 
-    Cada uno de estos tres archivos dibuja el logo en algún lado —la página
-    real, la previa del celular, la previa del editor— y los tres tienen que
-    sacar el radio y el `object-fit` de `formaDelLogo`. El día que uno vuelva
-    a escribir `borderRadius: "999px"` a mano, las previas dejan de coincidir
-    con la página y nadie se entera hasta que un cliente lo ve.
+    Los archivos que dibujan el logo —la página real y la previa del
+    editor— tienen que sacar el radio y el `object-fit` de `formaDelLogo`.
+    El día que uno vuelva a escribir `borderRadius: "999px"` a mano, las
+    previas dejan de coincidir con la página y nadie se entera hasta que un
+    cliente lo ve.
     """
     ruta = RAIZ / archivo
     _saltear_sin_frontend(ruta)
@@ -189,3 +190,17 @@ def test_una_forma_inventada_se_rechaza(client, db, armar_empresa):
         json={"tema": {"logo_forma": "triangulo"}},
     )
     assert r.status_code == 422
+
+
+def test_la_previa_del_celular_es_la_pagina():
+    """La previa del celular ya no dibuja nada propio: embebe /vista-previa,
+    que pinta con el mismo CuerpoVidriera que la página pública. Si alguien
+    vuelve a dibujarla a mano, este test lo frena."""
+    previa = RAIZ / "frontend/src/app/(panel)/mi-pagina/vista-previa.tsx"
+    ruta = RAIZ / "frontend/src/app/vista-previa/page.tsx"
+    publica = RAIZ / "frontend/src/app/(public)/[slug]/page.tsx"
+    for f in (previa, ruta, publica):
+        _saltear_sin_frontend(f)
+    assert 'src="/vista-previa"' in previa.read_text(encoding="utf-8")
+    assert "CuerpoVidriera" in ruta.read_text(encoding="utf-8")
+    assert "CuerpoVidriera" in publica.read_text(encoding="utf-8")
