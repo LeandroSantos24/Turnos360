@@ -239,6 +239,26 @@ Table categoria_financiera {
   }
 }
 
+Table cierre_caja_saas {
+  id integer [pk]
+  desde date [not null]
+  hasta date [not null]
+  estado varchar(20) [not null]
+  totales jsonb [not null]
+  observaciones text
+  preparado_por varchar(160) [not null]
+  preparado_en timestamp with time zone [not null]
+  cerrado_por varchar(160)
+  cerrado_en timestamp with time zone
+  reabierto_por varchar(160)
+  reabierto_en timestamp with time zone
+  motivo_reapertura varchar(300)
+
+  Indexes {
+    (desde, hasta) [name: 'uq_cierre_periodo_vigente', unique]
+  }
+}
+
 Table cliente {
   id integer [pk]
   nombre varchar(120) [not null]
@@ -335,6 +355,30 @@ Table deuda_cliente {
   }
 }
 
+Table devolucion_suscripcion {
+  id integer [pk]
+  pago_id integer [ref: > pago_suscripcion.id, not null]
+  empresa_id integer [ref: > empresa.id, not null]
+  monto numeric(12, 2) [not null]
+  metodo varchar(20) [not null]
+  estado varchar(20) [not null]
+  motivo varchar(300) [not null]
+  referencia varchar(120)
+  mp_refund_id varchar(40)
+  error varchar(300)
+  clave_idempotencia varchar(64)
+  origen varchar(20) [not null]
+  solicitada_por varchar(160)
+  solicitada_en timestamp with time zone [not null]
+  confirmada_en timestamp with time zone
+
+  Indexes {
+    pago_id [name: 'ix_devolucion_pago']
+    empresa_id [name: 'ix_devolucion_suscripcion_empresa_id']
+    clave_idempotencia [name: 'uq_devolucion_idem', unique]
+  }
+}
+
 Table empresa {
   id integer [pk]
   rubro_id integer [ref: > rubro.id, not null]
@@ -426,6 +470,20 @@ Table especialidad {
 
   Indexes {
     empresa_id [name: 'ix_especialidad_empresa_id']
+  }
+}
+
+Table evento_mp {
+  id integer [pk]
+  recibido_en timestamp with time zone [not null]
+  tipo varchar(60) [not null]
+  accion varchar(40)
+  recurso_id varchar(64)
+  resultado varchar(20) [not null]
+  detalle varchar(300)
+
+  Indexes {
+    recibido_en [name: 'ix_evento_mp_recibido']
   }
 }
 
@@ -788,6 +846,13 @@ Table pago_suscripcion {
   anulado boolean [not null]
   anulado_en timestamp with time zone
   anulado_por varchar(160)
+  anulado_motivo varchar(300)
+  comision numeric(12, 2)
+  neto numeric(12, 2)
+  conciliado boolean [not null]
+  conciliado_en timestamp with time zone
+  conciliado_por varchar(160)
+  referencia_banco varchar(120)
 
   Indexes {
     (empresa_id, fecha) [name: 'ix_pago_suscripcion_empresa_fecha']
@@ -946,6 +1011,8 @@ Table turno {
   recordatorio_2h_enviado boolean [not null]
   creado_at timestamp with time zone [not null]
   motivo_cancelacion varchar(300)
+  gestion_version integer [not null]
+  gestion_token_hash varchar(64)
   notas text
   creado_por integer [ref: > usuario.id]
   creado_en timestamp with time zone [not null]
@@ -960,6 +1027,7 @@ Table turno {
     fecha_inicio [name: 'ix_turno_recordatorio_2h_pendiente']
     fecha_inicio [name: 'ix_turno_recordatorio_pendiente']
     creado_at [name: 'ix_turno_sena_pendiente']
+    gestion_token_hash [name: 'uq_turno_gestion_token', unique]
   }
 }
 

@@ -165,8 +165,14 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
         recurso_id = (body.get("data") or {}).get("id") if isinstance(body.get("data"), dict) else None
     accion = str(body.get("action") or "")[:40]
 
+    from app.services import eventos_mp
+
     tipo = str(tipo or "").strip()
     if not recurso_id or tipo not in _TIPOS_DE_AVISO:
+        eventos_mp.registrar(
+            db, tipo=tipo or "?", accion=accion, recurso_id=recurso_id and str(recurso_id),
+            resultado="ignorado", detalle="Tipo de aviso que no se procesa",
+        )
         return {"ok": True}
 
     # Mismo blindaje que el webhook de señas: un id con forma rara muere acá,
@@ -175,14 +181,29 @@ async def mp_webhook_suscripcion(request: Request, db: DB) -> dict:
     valida, manejar = _TIPOS_DE_AVISO[tipo]
     recurso_id = str(recurso_id)
     if not valida(recurso_id):
+        eventos_mp.registrar(
+            db, tipo=tipo, accion=accion, resultado="ignorado", detalle="Id con formato inválido",
+        )
         return {"ok": True}
 
     # Ojo: el secreto es el de LA CUENTA DE TURNOS360, distinto del de las
     # señas. El modo de rollout (off/log/enforce) sí se comparte.
     if not firma_mp.acepta(request, recurso_id, settings.mp_saas_webhook_secret):
+        eventos_mp.registrar(
+            db, tipo=tipo, accion=accion, recurso_id=recurso_id, resultado="firma_invalida",
+        )
         return {"ok": True}
 
-    await to_thread.run_sync(manejar, db, recurso_id, accion)
+    try:
+        await to_thread.run_sync(manejar, db, recurso_id, accion)
+    except Exception as e:
+        db.rollback()
+        eventos_mp.registrar(
+            db, tipo=tipo, accion=accion, recurso_id=recurso_id, resultado="error",
+            detalle=type(e).__name__,
+        )
+        raise
+    eventos_mp.registrar(db, tipo=tipo, accion=accion, recurso_id=recurso_id, resultado="procesado")
     return {"ok": True}
 
 

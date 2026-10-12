@@ -108,13 +108,44 @@ ETIQUETAS = {
     "revertir": "Revirtió un movimiento",
     "ficha": "Editó la ficha comercial",
     "ver_comprobante": "Vio un comprobante",
+    "devolucion": "Devolución",
+    "conciliar": "Concilió un pago",
+    "desconciliar": "Desconcilió un pago",
+    "anular_pago": "Anuló un pago",
+    "anular_intento": "Anuló un pago pendiente",
+    "cierre_preparado": "Preparó un cierre de caja",
+    "cierre_confirmado": "Cerró la caja",
+    "cierre_reabierto": "Reabrió un cierre",
+    "cierre_descartado": "Descartó un borrador de cierre",
+    "acceso_usuario": "Cambió un acceso",
+    "restablecer_clave": "Inició un restablecimiento de contraseña",
+    "exportar": "Exportó un reporte",
 }
 
 
-def listar(db: Session, empresa_id: int | None = None, limite: int = 100) -> list[dict]:
+def listar(
+    db: Session,
+    empresa_id: int | None = None,
+    limite: int = 100,
+    *,
+    accion: str | None = None,
+    admin_email: str | None = None,
+    desde=None,
+    hasta=None,
+) -> list[dict]:
+    import datetime as _dt
+
     q = select(AuditoriaAdmin).order_by(AuditoriaAdmin.creado_en.desc(), AuditoriaAdmin.id.desc())
     if empresa_id is not None:
         q = q.where(AuditoriaAdmin.empresa_id == empresa_id)
+    if accion:
+        q = q.where(AuditoriaAdmin.accion == accion)
+    if admin_email:
+        q = q.where(AuditoriaAdmin.admin_email.ilike(f"%{admin_email.strip()}%"))
+    if desde:
+        q = q.where(AuditoriaAdmin.creado_en >= _dt.datetime.combine(desde, _dt.time.min, _dt.timezone.utc))
+    if hasta:
+        q = q.where(AuditoriaAdmin.creado_en < _dt.datetime.combine(hasta + _dt.timedelta(days=1), _dt.time.min, _dt.timezone.utc))
     filas = db.scalars(q.limit(min(max(limite, 1), 500))).all()
     nombres = {}
     ids = {f.empresa_id for f in filas if f.empresa_id}

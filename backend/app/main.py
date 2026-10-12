@@ -23,7 +23,7 @@ from pathlib import Path
 
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import cupones, equipo, sucursales, subidas, whatsapp
+from app.routers import admin_finanzas, cupones, equipo, sucursales, subidas, whatsapp
 from app.routers import agenda, auth, clientes, recursos, servicios, turnos, membresias, salud, empresa, items, finanzas, estadisticas, admin, publico, giftcards
 
 
@@ -133,6 +133,7 @@ app.include_router(cupones.router)
 app.include_router(finanzas.router)
 app.include_router(estadisticas.router)
 app.include_router(admin.router)
+app.include_router(admin_finanzas.router)
 app.include_router(publico.router)
 
 

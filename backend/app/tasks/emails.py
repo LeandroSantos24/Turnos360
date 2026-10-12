@@ -563,7 +563,7 @@ def pedir_resena(turno_id: int, manual: bool = False) -> None:
 
 
 @celery_app.task(name="app.tasks.emails.enviar_reset_password")
-def enviar_reset_password(usuario_id: int, token: str) -> None:
+def enviar_reset_password(usuario_id: int, token: str, por_soporte: bool = False) -> None:
     """Link para elegir una contraseña nueva.
 
     Esta tarea FALTABA. routers/auth.py la importaba y la llamaba, pero no
@@ -585,7 +585,12 @@ def enviar_reset_password(usuario_id: int, token: str) -> None:
             "Restablecer tu contraseña",
             [
                 f"Hola{(' ' + esc(usuario.nombre)) if usuario.nombre else ''}, "
-                "pediste cambiar la contraseña de tu cuenta de Turnos360.",
+                + (
+                    "el equipo de soporte de Turnos360 inició el cambio de la "
+                    "contraseña de tu cuenta."
+                    if por_soporte
+                    else "pediste cambiar la contraseña de tu cuenta de Turnos360."
+                ),
                 "Tocá el botón y elegí una nueva. El link "
                 "<b>vence en 60 minutos</b> y sirve <b>una sola vez</b>.",
                 "<span style='font-size:13px;color:#8a94a6'>Si no fuiste vos, "

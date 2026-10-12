@@ -234,6 +234,75 @@ def consultar_pago(payment_id: str) -> dict | None:
         return None
 
 
+class ErrorMP(Exception):
+    """Mercado Pago rechazó la operación o no respondió. El mensaje es para
+    mostrárselo al admin (sin tokens ni datos sensibles)."""
+
+
+def _llamar(metodo: str, ruta: str, *, json: dict | None = None, idem: str | None = None) -> dict:
+    """Llamada autenticada a la API con el token de Turnos360. Levanta ErrorMP."""
+    if not esta_activo():
+        raise ErrorMP("Mercado Pago no está configurado (falta MP_SAAS_ACCESS_TOKEN).")
+    headers = {"Authorization": f"Bearer {settings.mp_saas_access_token}"}
+    if idem:
+        # Mercado Pago usa esta clave para no ejecutar dos veces la misma
+        # devolución si el pedido se repite (doble clic, reintento de red).
+        headers["X-Idempotency-Key"] = idem
+    try:
+        r = httpx.request(metodo, f"{MP_API}{ruta}", headers=headers, json=json, timeout=TIMEOUT)
+    except httpx.HTTPError as e:
+        log.warning("MP SaaS: sin respuesta en %s %s (%s)", metodo, ruta, type(e).__name__)
+        raise ErrorMP("Mercado Pago no respondió. No se hizo nada: probá de nuevo en un rato.") from e
+    if r.status_code >= 400:
+        try:
+            cuerpo = r.json()
+            detalle = str(cuerpo.get("message") or cuerpo.get("error") or "")[:200]
+        except Exception:
+            detalle = ""
+        log.warning("MP SaaS: %s %s → %s %s", metodo, ruta, r.status_code, detalle)
+        raise ErrorMP(f"Mercado Pago rechazó la operación ({r.status_code}){': ' + detalle if detalle else ''}.")
+    try:
+        return r.json()
+    except Exception:
+        return {}
+
+
+def devolver(payment_id: str, monto: float | None, clave: str) -> dict:
+    """Pide la devolución (total si monto es None) de un pago aprobado.
+
+    Devuelve el reembolso tal como lo informa MP: {id, status, amount}. El
+    estado puede quedar «in_process»: recién «approved» es plata devuelta.
+    """
+    cuerpo = {"amount": round(float(monto), 2)} if monto is not None else {}
+    return _llamar("POST", f"/v1/payments/{payment_id}/refunds", json=cuerpo, idem=clave)
+
+
+def consultar_devolucion(payment_id: str, refund_id: str) -> dict:
+    return _llamar("GET", f"/v1/payments/{payment_id}/refunds/{refund_id}")
+
+
+def cancelar_pago(payment_id: str) -> dict:
+    """Anula un pago que todavía NO se aprobó (pendiente / en proceso).
+
+    MP solo lo permite en esos estados: un pago aprobado se devuelve, no se
+    cancela.
+    """
+    return _llamar("PUT", f"/v1/payments/{payment_id}", json={"status": "cancelled"})
+
+
+def comision_de(datos: dict) -> tuple[float | None, float | None]:
+    """(comisión, neto) de un pago de la API. None si MP no los informa."""
+    try:
+        fees = sum(float(f.get("amount") or 0) for f in (datos.get("fee_details") or []))
+        neto = (datos.get("transaction_details") or {}).get("net_received_amount")
+        neto = float(neto) if neto is not None else None
+        if not datos.get("fee_details") and neto is None:
+            return None, None
+        return round(fees, 2), (round(neto, 2) if neto is not None else None)
+    except Exception:
+        return None, None
+
+
 def ya_acreditado(db: Session, payment_id: str) -> bool:
     """¿Esta notificación ya se procesó? Mercado Pago reintenta varias veces."""
     return (
@@ -376,6 +445,7 @@ def acreditar(db: Session, payment_id: str, accion: str = "") -> PagoSuscripcion
             intento_id=intento.id if intento else None,
         )
         pago.mp_payment_id = payment_id
+        pago.comision, pago.neto = comision_de(datos)
         if intento is not None:
             intento.estado = "aprobado"
             intento.mp_payment_id = payment_id
@@ -434,11 +504,19 @@ def _revisar_devolucion(db: Session, pago: PagoSuscripcion) -> None:
     from app.services import cobranza
 
     datos = consultar_pago(pago.mp_payment_id)
-    if not datos or str(datos.get("status") or "") not in _DEVOLUCION:
+    if not datos:
+        return
+    # Las devoluciones que informa MP (también las parciales, que dejan el
+    # pago «approved») quedan registradas una por una, con su estado real.
+    nuevas = sincronizar_devoluciones(db, pago, datos)
+    if str(datos.get("status") or "") not in _DEVOLUCION:
+        if nuevas:
+            db.commit()
         return
     pago.anulado = True
     pago.anulado_en = dt.datetime.now(dt.timezone.utc)
     pago.anulado_por = "mercadopago"
+    pago.anulado_motivo = f"Mercado Pago informó {datos.get('status')}"
     empresa = db.get(Empresa, pago.empresa_id)
     cobranza.evento(
         db, empresa, "pago_devuelto",
@@ -555,3 +633,54 @@ def verificar(db: Session, pago: PagoSuscripcion) -> dict:
         }
     )
     return salida
+
+
+_ESTADO_DEVOLUCION = {
+    "approved": "aprobada",
+    "in_process": "en_proceso",
+    "pending": "en_proceso",
+    "rejected": "rechazada",
+    "cancelled": "rechazada",
+}
+
+
+def sincronizar_devoluciones(db: Session, pago: PagoSuscripcion, datos: dict) -> int:
+    """Pone al día las devoluciones del pago con lo que dice MP. No hace commit.
+
+    Si MP informa una devolución que no se pidió desde el panel (la hicieron
+    desde la cuenta de MP), se registra igual, con origen «mercadopago».
+    Devuelve cuántas cambiaron o se agregaron.
+    """
+    from app.models import DevolucionSuscripcion
+
+    cambios = 0
+    for r in datos.get("refunds") or []:
+        rid = str(r.get("id") or "")
+        if not rid:
+            continue
+        estado = _ESTADO_DEVOLUCION.get(str(r.get("status") or ""), "en_proceso")
+        dev = db.scalar(
+            select(DevolucionSuscripcion).where(DevolucionSuscripcion.mp_refund_id == rid)
+        )
+        if dev is None:
+            dev = DevolucionSuscripcion(
+                pago_id=pago.id,
+                empresa_id=pago.empresa_id,
+                monto=float(r.get("amount") or 0),
+                metodo="mercadopago",
+                estado=estado,
+                motivo="Devolución hecha desde la cuenta de Mercado Pago",
+                mp_refund_id=rid,
+                origen="mercadopago",
+                solicitada_por="mercadopago",
+            )
+            db.add(dev)
+            cambios += 1
+        elif dev.estado != estado:
+            dev.estado = estado
+            cambios += 1
+        if dev.estado == "aprobada" and dev.confirmada_en is None:
+            dev.confirmada_en = dt.datetime.now(dt.timezone.utc)
+    if cambios:
+        db.flush()
+    return cambios

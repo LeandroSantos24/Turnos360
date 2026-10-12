@@ -101,8 +101,139 @@ class PagoSuscripcion(Base):
     )
     anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     anulado_por: Mapped[str | None] = mapped_column(String(160))
+    # Por qué se anuló (corrección de carga, devolución…). La anulación nunca
+    # borra el pago: queda con su motivo y quién lo hizo.
+    anulado_motivo: Mapped[str | None] = mapped_column(String(300))
+
+    # Lo que cobró el proveedor y lo que efectivamente queda. Solo se conoce
+    # para Mercado Pago (fee_details del pago); en una transferencia es 0.
+    comision: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    neto: Mapped[float | None] = mapped_column(Numeric(12, 2))
+
+    # Conciliación con el banco / la cuenta de MP: que la plata se vio llegar.
+    # Registrado en el sistema ≠ conciliado. La caja muestra las dos cosas.
+    conciliado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    conciliado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    conciliado_por: Mapped[str | None] = mapped_column(String(160))
+    referencia_banco: Mapped[str | None] = mapped_column(String(120))
 
     empresa: Mapped["Empresa"] = relationship()  # noqa: F821
+
+
+class DevolucionSuscripcion(Base):
+    """Una devolución (total o parcial) de un pago de cuota.
+
+    Separada del pago a propósito: el pago original no se toca ni se borra, y
+    una devolución puede quedar pendiente en el proveedor. Solo cuenta como
+    plata devuelta cuando su estado es «aprobada».
+
+    - metodo «mercadopago»: se pide a la API de MP; `mp_refund_id` y el estado
+      salen de MP (approved / in_process / rejected).
+    - metodo «manual»: transferencias y efectivo. La registra el admin con la
+      referencia de la transferencia de vuelta.
+    """
+
+    __tablename__ = "devolucion_suscripcion"
+    __table_args__ = (
+        Index("ix_devolucion_pago", "pago_id"),
+        Index(
+            "uq_devolucion_idem",
+            "clave_idempotencia",
+            unique=True,
+            postgresql_where=text("clave_idempotencia is not null"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pago_id: Mapped[int] = mapped_column(ForeignKey("pago_suscripcion.id"))
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresa.id"), index=True)
+    monto: Mapped[float] = mapped_column(Numeric(12, 2))
+    # "mercadopago" | "manual"
+    metodo: Mapped[str] = mapped_column(String(20))
+    # "solicitada" | "en_proceso" | "aprobada" | "rechazada"
+    estado: Mapped[str] = mapped_column(
+        String(20), default="solicitada", server_default=text("'solicitada'")
+    )
+    motivo: Mapped[str] = mapped_column(String(300))
+    referencia: Mapped[str | None] = mapped_column(String(120))
+    mp_refund_id: Mapped[str | None] = mapped_column(String(40))
+    error: Mapped[str | None] = mapped_column(String(300))
+    clave_idempotencia: Mapped[str | None] = mapped_column(String(64))
+    # Vino de un aviso de Mercado Pago (payment.updated) y no del panel.
+    origen: Mapped[str] = mapped_column(
+        String(20), default="panel", server_default=text("'panel'")
+    )
+    solicitada_por: Mapped[str | None] = mapped_column(String(160))
+    solicitada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    confirmada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EventoMP(Base):
+    """Cada notificación que llegó al webhook de la cuenta de Turnos360.
+
+    Es lo que permite decir algo cierto sobre la integración: cuándo llegó el
+    último aviso, si se procesó, y qué falló. Sin esto, «¿anda Mercado Pago?»
+    solo se podía contestar mirando los logs del servidor.
+    No guarda el cuerpo del aviso ni ningún dato sensible: tipo, acción, id del
+    recurso, si la firma cerró y qué pasó.
+    """
+
+    __tablename__ = "evento_mp"
+    __table_args__ = (Index("ix_evento_mp_recibido", "recibido_en"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recibido_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    tipo: Mapped[str] = mapped_column(String(60))
+    accion: Mapped[str | None] = mapped_column(String(40))
+    recurso_id: Mapped[str | None] = mapped_column(String(64))
+    # "procesado" | "ignorado" | "firma_invalida" | "error"
+    resultado: Mapped[str] = mapped_column(String(20))
+    detalle: Mapped[str | None] = mapped_column(String(300))
+
+
+class CierreCajaSaas(Base):
+    """Cierre de un período de la caja de Turnos360 (no la de un negocio).
+
+    Se prepara (borrador, con los totales calculados), se revisa y se cierra.
+    Cerrado, no se edita: si hay que corregir algo se reabre con motivo, y la
+    reapertura queda en la auditoría. Un solo cierre vigente por período.
+    """
+
+    __tablename__ = "cierre_caja_saas"
+    __table_args__ = (
+        Index(
+            "uq_cierre_periodo_vigente",
+            "desde",
+            "hasta",
+            unique=True,
+            postgresql_where=text("estado <> 'anulado'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    desde: Mapped[dt.date] = mapped_column(Date)
+    hasta: Mapped[dt.date] = mapped_column(Date)
+    # "borrador" | "cerrado" | "reabierto" | "anulado"
+    estado: Mapped[str] = mapped_column(
+        String(20), default="borrador", server_default=text("'borrador'")
+    )
+    totales: Mapped[dict] = mapped_column(JSONB)
+    observaciones: Mapped[str | None] = mapped_column(Text)
+    preparado_por: Mapped[str] = mapped_column(String(160))
+    preparado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    cerrado_por: Mapped[str | None] = mapped_column(String(160))
+    cerrado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reabierto_por: Mapped[str | None] = mapped_column(String(160))
+    reabierto_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    motivo_reapertura: Mapped[str | None] = mapped_column(String(300))
 
 
 class AjusteSuscripcion(Base):

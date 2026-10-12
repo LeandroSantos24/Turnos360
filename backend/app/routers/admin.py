@@ -1,5 +1,6 @@
 """Endpoints del panel de super-administración (alta de empresas y usuarios)."""
 
+import datetime as _dt
 import html
 import ipaddress
 import logging
@@ -211,9 +212,22 @@ def crear_usuario(
 
 @router.patch("/usuarios/{usuario_id}", response_model=UsuarioAdminOut)
 def actualizar_usuario(
-    usuario_id: int, datos: UsuarioActualizar, admin: SuperAdminActual, db: DB
+    request: Request, usuario_id: int, datos: UsuarioActualizar, admin: SuperAdminActual, db: DB
 ):
-    return svc.actualizar_usuario(db, usuario_id, datos.activo)
+    from app.models import Usuario
+
+    previo = db.get(Usuario, usuario_id)
+    antes = bool(previo.activo) if previo is not None else None
+    salida = svc.actualizar_usuario(db, usuario_id, datos.activo)
+    # Activar o desactivar un acceso es una acción sensible: queda auditada.
+    if previo is not None and antes != bool(datos.activo):
+        auditoria.auditar(
+            db, admin, "acceso_usuario", empresa_id=previo.empresa_id,
+            descripcion=f"{'Activó' if datos.activo else 'Desactivó'} el acceso de {previo.nombre}",
+            request=request,
+        )
+        db.commit()
+    return salida
 
 @router.patch("/empresas/{empresa_id}/suscripcion", response_model=EmpresaAdminOut)
 def setear_suscripcion(
@@ -599,10 +613,20 @@ def reactivar_suscripcion_admin(
 
 @router.get("/auditoria")
 def ver_auditoria(
-    admin: SuperAdminActual, db: DB, empresa_id: int | None = None, limite: int = 100
+    admin: SuperAdminActual,
+    db: DB,
+    empresa_id: int | None = None,
+    limite: int = 100,
+    accion: str | None = None,
+    admin_email: str | None = None,
+    desde: _dt.date | None = None,
+    hasta: _dt.date | None = None,
 ) -> list[dict]:
     """Qué hizo cada super-admin. Solo lectura: no hay forma de editarla."""
-    return auditoria.listar(db, empresa_id=empresa_id, limite=limite)
+    return auditoria.listar(
+        db, empresa_id=empresa_id, limite=limite, accion=accion or None,
+        admin_email=admin_email or None, desde=desde, hasta=hasta,
+    )
 
 
 @router.get("/empresas/{empresa_id}/ajustes")
