@@ -29,6 +29,13 @@ class Turno(TenantMixin, Base):
         Index("ix_turno_empresa_cliente", "empresa_id", "cliente_id"),
         Index("ix_turno_empresa_estado_inicio", "empresa_id", "estado", "fecha_inicio"),
         Index("ix_turno_empresa_cupon", "empresa_id", "cupon_id"),
+        # El link de autogestión se busca por el hash del token (0009).
+        Index(
+            "uq_turno_gestion_token",
+            "gestion_token_hash",
+            unique=True,
+            postgresql_where=text("gestion_token_hash IS NOT NULL"),
+        ),
         # Índices PARCIALES para la tarea de recordatorios, que corre cada
         # 15 minutos y filtra por fecha + flag SIN empresa_id. Como los tres
         # índices de arriba empiezan por empresa_id, ninguno le servía:
