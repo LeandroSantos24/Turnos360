@@ -95,7 +95,10 @@ function fechaHoraLegible(iso: string): string {
     d.getUTCHours(),
     d.getUTCMinutes(),
   );
-  return format(local, "EEEE d 'de' MMMM · HH:mm", { locale: es });
+  // Mayúscula solo en la primera letra: con la clase `capitalize` de CSS
+  // salía «Martes 13 De Octubre».
+  const txt = format(local, "EEEE d 'de' MMMM · HH:mm", { locale: es });
+  return txt.charAt(0).toUpperCase() + txt.slice(1);
 }
 
 function etiquetaDia(iso: string): { arriba: string; abajo: string } {
@@ -739,7 +742,7 @@ export function ReservaWizard({
                         ✓ {cuponAplicado.codigo} aplicado: −{precioFmt(cuponAplicado.descuento)}
                       </p>
                     )}
-                    <p className="mt-1 flex items-center gap-1.5 capitalize" style={{ color: TINTA_SUAVE }}>
+                    <p className="mt-1 flex items-center gap-1.5" style={{ color: TINTA_SUAVE }}>
                       <CalendarDays className="h-4 w-4" />
                       {horaSel ? fechaHoraLegible(horaSel) : ""}
                     </p>
@@ -987,7 +990,7 @@ export function ReservaWizard({
                     <p className="font-bold" style={{ color: TINTA }}>
                       {resultado.servicio}
                     </p>
-                    <p className="mt-1 capitalize" style={{ color: TINTA_SUAVE }}>
+                    <p className="mt-1" style={{ color: TINTA_SUAVE }}>
                       {fechaHoraLegible(resultado.inicio)}
                     </p>
                     <p className="mt-1" style={{ color: TINTA_SUAVE }}>

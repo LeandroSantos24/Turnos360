@@ -1114,4 +1114,3 @@ def planes(db: Session) -> list[dict]:
             "por_estado": dict(conteo[p.value]),
         })
     return salida
-

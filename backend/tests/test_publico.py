@@ -97,6 +97,36 @@ def test_matching_de_cliente_por_telefono_y_nombre(client, db, armar_empresa):
     assert clientes_de_la_empresa() == antes + 2
 
 
+def test_ficha_sin_email_toma_el_de_la_reserva_y_no_pisa_uno_cargado(
+    client, db, armar_empresa
+):
+    """La ficha que cargó el negocio sin email recibe el que el cliente escribe
+    al reservar (si no, la confirmación con el link de autogestión no le llega
+    a nadie). Un email ya cargado no se reemplaza."""
+    ctx = armar_empresa()
+    sin_email = Cliente(empresa_id=ctx.empresa.id, nombre="Ana Gomez", telefono="2615550001")
+    con_email = Cliente(
+        empresa_id=ctx.empresa.id, nombre="Pedro Gomez", telefono="2615550002",
+        email="pedro@negocio.com",
+    )
+    db.add_all([sin_email, con_email])
+    db.flush()
+
+    r1 = client.post(f"/publico/{ctx.empresa.slug}/reservar", json=_payload(ctx, 10))
+    assert r1.status_code == 200, r1.text
+    assert db.get(Turno, r1.json()["turno_id"]).cliente_id == sin_email.id
+    db.refresh(sin_email)
+    assert sin_email.email == "ana@example.com"
+
+    r2 = client.post(
+        f"/publico/{ctx.empresa.slug}/reservar",
+        json=_payload(ctx, 12, nombre="Pedro Gomez", telefono="2615550002"),
+    )
+    assert r2.status_code == 200, r2.text
+    db.refresh(con_email)
+    assert con_email.email == "pedro@negocio.com"
+
+
 def test_reservar_con_profesional_que_no_hace_el_servicio(client, db, armar_empresa):
     ctx = armar_empresa()
     ctx.servicio.recursos.remove(ctx.pablo)

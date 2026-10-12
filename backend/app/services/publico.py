@@ -566,6 +566,12 @@ def reservar(db: Session, slug: str, datos: ReservaPublicaCrear) -> dict:
         )
         db.add(cliente)
         db.flush()  # para tener cliente.id sin cerrar la transacción
+    elif not (cliente.email or "").strip() and datos.cliente.email:
+        # Ficha que cargó el negocio sin email (lo habitual en el mostrador):
+        # si no se lo guardamos acá, la confirmación —y con ella el link para
+        # cambiar o cancelar— no le llega a nadie. Un email ya cargado no se
+        # pisa: lo puede haber corregido el negocio.
+        cliente.email = datos.cliente.email
     # Si ya existía (mismo tel + mismo nombre), lo reusamos tal cual.
 
     # --- Cupón de descuento: se VALIDA ANTES de crear el turno ---
