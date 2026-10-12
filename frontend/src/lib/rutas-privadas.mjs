@@ -4,7 +4,7 @@
  * (X-Robots-Tag). Si se agrega una carpeta al panel, va acá también.
  */
 export const RUTAS_PRIVADAS = [
-  "admin", "login", "olvide-password", "restablecer", "verificar", "imprimir",
+  "admin", "login", "olvide-password", "restablecer", "activar", "verificar", "imprimir",
   "agenda", "caja", "campanas", "clientes", "cuenta", "cupones", "equipo",
   "estadisticas", "gift-cards", "inicio", "membresias", "metodos-pago",
   "mi-dia", "mi-pagina", "recursos", "reglas-reserva", "seguimiento",

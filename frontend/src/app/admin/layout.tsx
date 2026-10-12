@@ -35,7 +35,7 @@ const NAV = [
   { href: "/admin/cobros", label: "Cobros y pagos", icon: CreditCard, tambien: ["/admin/cobranza"] },
   { href: "/admin/caja", label: "Caja y cierres", icon: Landmark },
   { href: "/admin/estadisticas", label: "Estadísticas", icon: BarChart3 },
-  { href: "/admin/planes", label: "Suscripciones y planes", icon: Layers },
+  { href: "/admin/planes", label: "Suscripciones y planes", icon: Layers, tambien: ["/admin/suscripciones", "/admin/ajustes"] },
   { href: "/admin/integraciones", label: "Integraciones", icon: Plug },
   { href: "/admin/auditoria", label: "Auditoría y config.", icon: ScrollText, tambien: ["/admin/configuracion"] },
 ];

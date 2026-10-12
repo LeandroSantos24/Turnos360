@@ -163,6 +163,29 @@ export default function EstadisticasAdmin() {
             </div>
           </section>
 
+          {d.beneficios && (
+            <section aria-labelledby="t-benef" className="rounded-2xl border border-dashed bg-card p-4">
+              <h2 id="t-benef" className="text-sm font-semibold">Beneficios comerciales (días, no plata)</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">{d.beneficios.nota}</p>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                {([
+                  ["Días de cortesía", d.beneficios.total.dias_cortesia],
+                  ["Días por incidencias", d.beneficios.total.dias_incidencia],
+                  ["Sin clasificar", d.beneficios.total.dias_sin_clasificar],
+                  ["Empresas", d.beneficios.total.empresas],
+                ] as const).map(([k, v]) => (
+                  <div key={k} className="rounded-xl bg-muted/50 px-3 py-2">
+                    <dt className="text-xs text-muted-foreground">{k}</dt>
+                    <dd className="font-semibold tabular-nums">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-2 text-xs">
+                <a href="/admin/ajustes" className="font-medium underline underline-offset-4">Ver los ajustes uno por uno</a>
+              </p>
+            </section>
+          )}
+
           <details className="rounded-2xl border bg-card p-4 text-sm">
             <summary className="cursor-pointer font-semibold">Qué cuenta cada número</summary>
             <dl className="mt-3 space-y-2">

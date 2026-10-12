@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Plus, Users, ExternalLink, Copy, Check, Crown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { usePedirMotivo } from "../pedir-motivo";
 import { useConfirmar } from "@/components/confirmar";
 
 import {
@@ -62,6 +63,7 @@ function slugify(s: string, final = false): string {
 
 export default function AdminEmpresasPage() {
   const confirmar = useConfirmar();
+  const { pedir, dialogo } = usePedirMotivo();
   const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
   const [rubros, setRubros] = useState<RubroAdmin[]>([]);
   const [errorRubros, setErrorRubros] = useState<string | null>(null);
@@ -197,20 +199,18 @@ export default function AdminEmpresasPage() {
   async function renovar30(emp: EmpresaAdmin) {
     // Esto REGALA un mes de suscripción paga desde un botón chico al lado de
     // "Ver página", sin registrar ningún pago y sin dejar rastro visible.
-    if (
-      !(await confirmar({
-        titulo: `¿Renovar 30 días a ${emp.nombre}?`,
-        descripcion:
-          `El vencimiento${emp.suscripcion_vence ? ` (hoy ${emp.suscripcion_vence.split("-").reverse().join("/")})` : ""} ` +
-          "pasa a dentro de 30 días SIN registrar un pago. Queda en la auditoría. " +
-          "Si lo que querés es anotar una cuota cobrada, hacelo desde Cobranza.",
-        textoAccion: "Sí, renovar 30 días",
-        textoCancelar: "Volver",
-      }))
-    )
-      return;
+    const r = await pedir({
+      titulo: `¿Renovar 30 días a ${emp.nombre}?`,
+      descripcion:
+        `El vencimiento${emp.suscripcion_vence ? ` (hoy ${emp.suscripcion_vence.split("-").reverse().join("/")})` : ""} ` +
+        "pasa a dentro de 30 días SIN registrar un pago. " +
+        "Si lo que querés es anotar una cuota cobrada, hacelo desde Cobranza.",
+      categorias: ["cortesia", "incidencia", "correccion"],
+      textoAccion: "Sí, renovar 30 días",
+    });
+    if (!r) return;
     try {
-      await setearSuscripcion(emp.id, { renovar_30: true });
+      await setearSuscripcion(emp.id, { renovar_30: true, motivo: r.motivo, categoria: r.categoria });
       toast.success(`Suscripción de ${emp.nombre} renovada por 30 días`);
       cargar();
     } catch (err) {
@@ -220,6 +220,7 @@ export default function AdminEmpresasPage() {
 
   return (
     <div>
+      {dialogo}
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>

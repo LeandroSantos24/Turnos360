@@ -3,7 +3,9 @@
 import re
 import unicodedata
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 import datetime as dt
 
 from app.core.planes import Plan
@@ -65,7 +67,7 @@ SLUGS_RESERVADOS = frozenset({
     "inicio", "cuenta", "suscripcion", "campanas", "cupones", "membresias",
     "gift-cards", "estadisticas", "metodos-pago", "mi-pagina", "mi-dia",
     "reglas-reserva", "seguimiento", "whatsapp", "sucursales", "verificar",
-    "vista-previa", "gestionar",
+    "vista-previa", "gestionar", "activar",
     # Rutas del backend y assets
     "api", "publico", "health", "ready", "docs", "static", "_next",
     "favicon.ico", "robots.txt", "sitemap.xml", "icon.png",
@@ -141,6 +143,19 @@ class SuscripcionAdminIn(BaseModel):
     plan: Plan | None = None
     suscripcion_vence: dt.date | None = None
     renovar_30: bool = False           # atajo: vence hoy + 30 días
+    # Mover el vencimiento o el plan a mano no es plata pero cambia lo que el
+    # negocio recibe: siempre con motivo, y el vencimiento con su categoría.
+    motivo: str | None = Field(default=None, max_length=300)
+    categoria: Literal["cortesia", "incidencia", "correccion"] | None = None
+
+    @model_validator(mode="after")
+    def _motivo_obligatorio(self):
+        mueve_fecha = self.renovar_30 or self.suscripcion_vence is not None
+        if (mueve_fecha or self.plan is not None) and len((self.motivo or "").strip()) < 4:
+            raise ValueError("Escribí el motivo del ajuste (al menos 4 letras).")
+        if mueve_fecha and self.categoria is None:
+            raise ValueError("Elegí el tipo de ajuste: cortesía, incidencia o corrección.")
+        return self
 
 
 class UsuarioCrear(BaseModel):
@@ -155,7 +170,10 @@ class UsuarioCrear(BaseModel):
     def _normalizar(cls, v: str) -> str:
         """A minúsculas: la unicidad no distingue mayúsculas."""
         return v.strip().lower()
-    clave: str = Field(min_length=8, max_length=100)
+    # Sin clave: alta por invitación (la persona elige su contraseña con el
+    # link que le llega). Con clave: el alta vieja, que queda solo para no
+    # romper integraciones; el panel ya no la usa.
+    clave: str | None = Field(default=None, min_length=8, max_length=100)
     rol: RolUsuario
 
 
@@ -165,6 +183,8 @@ class UsuarioAdminOut(BaseModel):
     email: str
     rol: RolUsuario
     activo: bool
+    activacion_pendiente: bool = False
+    ultimo_ingreso_en: dt.datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -287,6 +307,12 @@ class PagoSuscripcionOut(BaseModel):
 
 class ProrrogaIn(BaseModel):
     dias: int = Field(gt=0, le=90, description="Días de gracia a sumar")
+    motivo: str = Field(min_length=4, max_length=300)
+    categoria: Literal["cortesia", "incidencia"] = "cortesia"
+
+
+class RevertirAjusteIn(BaseModel):
+    motivo: str = Field(min_length=4, max_length=300)
 
 
 class AprobarAvisoIn(BaseModel):

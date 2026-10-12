@@ -450,7 +450,7 @@ def test_renovar_30_dias_pasa_al_plan_de_entrada_no_al_del_medio(
     client.patch(
         f"/admin/empresas/{ctx.empresa.id}/suscripcion",
         headers=admin,
-        json={"renovar_30": True},
+        json={"renovar_30": True, "motivo": "Ajuste de prueba", "categoria": "cortesia"},
     )
     db.expire_all()
     assert db.get(Empresa, ctx.empresa.id).plan == "inicial"

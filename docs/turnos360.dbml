@@ -145,6 +145,8 @@ Table ajuste_suscripcion {
   revertido boolean [not null]
   revertido_en timestamp with time zone
   revertido_por varchar(160)
+  categoria varchar(20)
+  motivo varchar(300)
 
   Indexes {
     (empresa_id, creado_en) [name: 'ix_ajuste_suscripcion_empresa']
@@ -618,6 +620,27 @@ Table intento_pago {
   }
 }
 
+Table invitacion_usuario {
+  id integer [pk]
+  usuario_id integer [ref: > usuario.id, not null]
+  empresa_id integer [ref: > empresa.id, not null]
+  token_hash varchar(64) [not null, unique]
+  creada_en timestamp with time zone [not null]
+  creada_por varchar(160)
+  expira_en timestamp with time zone [not null]
+  enviada_en timestamp with time zone
+  envio_error varchar(200)
+  usada_en timestamp with time zone
+  revocada_en timestamp with time zone
+  revocada_por varchar(160)
+
+  Indexes {
+    empresa_id [name: 'ix_invitacion_usuario_empresa_id']
+    usuario_id [name: 'ix_invitacion_usuario_usuario_id']
+    usuario_id [name: 'uq_invitacion_vigente', unique]
+  }
+}
+
 Table item_turno {
   id integer [pk]
   turno_id integer [ref: > turno.id, not null]
@@ -961,6 +984,29 @@ Table servicio_sucursal {
   }
 }
 
+Table sesion_usuario {
+  id integer [pk]
+  usuario_id integer [ref: > usuario.id, not null]
+  empresa_id integer [ref: > empresa.id, not null]
+  sid varchar(32) [not null, unique]
+  creada_en timestamp with time zone [not null]
+  ultimo_uso_en timestamp with time zone
+  expira_en timestamp with time zone [not null]
+  dispositivo varchar(80)
+  token_version integer [not null]
+  refresh_jti varchar(32)
+  refresh_jti_anterior varchar(32)
+  rotado_en timestamp with time zone
+  revocada_en timestamp with time zone
+  motivo_revocacion varchar(160)
+  revocada_por varchar(160)
+
+  Indexes {
+    empresa_id [name: 'ix_sesion_usuario_empresa_id']
+    (usuario_id, creada_en) [name: 'ix_sesion_usuario_usuario']
+  }
+}
+
 Table sucursal {
   id integer [pk]
   nombre varchar(120) [not null]
@@ -980,6 +1026,19 @@ Table super_admin {
   email varchar(200) [not null, unique]
   hash_clave varchar(300) [not null]
   activo boolean [not null]
+}
+
+Table suscripcion_diaria {
+  fecha date [pk]
+  empresa_id integer [pk, ref: > empresa.id]
+  estado varchar(30) [not null]
+  plan varchar(20)
+  origen varchar(15) [not null]
+  creado_en timestamp with time zone [not null]
+
+  Indexes {
+    fecha [name: 'ix_suscripcion_diaria_fecha']
+  }
 }
 
 Table turno {
@@ -1045,6 +1104,8 @@ Table usuario {
   reset_token_hash varchar(128)
   reset_token_expira timestamp with time zone
   token_version integer [not null]
+  ultimo_ingreso_en timestamp with time zone
+  activacion_pendiente boolean [not null]
   empresa_id integer [ref: > empresa.id, not null]
 
   Indexes {

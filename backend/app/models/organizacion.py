@@ -346,6 +346,16 @@ class Usuario(TenantMixin, Base):
     # atacante en otro dispositivo— dejan de servir en el acto.
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
+    # Último ingreso con usuario y contraseña (o activación). Lo escribe el
+    # login; los refresh no cuentan como ingreso.
+    ultimo_ingreso_en: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Alta por invitación: hasta que la persona elige su contraseña con el
+    # link del email, la cuenta existe pero no puede entrar ni pedir
+    # «olvidé mi contraseña».
+    activacion_pendiente: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+
     # El recurso (silla/barbero) que opera este usuario, si es un profesional.
     # Decisión 1-a-1: un profesional ↔ un recurso. El FK vive en Recurso.usuario_id;
     # esto es solo la lectura inversa cómoda desde el ORM (usuario.recurso).

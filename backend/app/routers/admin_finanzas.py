@@ -217,10 +217,62 @@ def estadisticas(
     desde: dt.date | None = None,
     hasta: dt.date | None = None,
 ) -> dict:
+    from app.services import ajustes_admin
+
     hoy = hoy_de_pared()
     h = hasta or hoy
     d = desde or (h.replace(day=1) - dt.timedelta(days=150)).replace(day=1)
-    return fin.estadisticas(db, granularidad, d, h)
+    salida = fin.estadisticas(db, granularidad, d, h)
+    # Indicador comercial aparte: días regalados. No toca ninguna suma de plata.
+    salida["beneficios"] = ajustes_admin.beneficios(db, d, h, granularidad)
+    return salida
+
+
+# ── Suscripciones: evolución y ajustes administrativos ──────────────────────
+
+@router.get("/suscripciones/evolucion")
+def evolucion_suscripciones(
+    admin: SuperAdminActual,
+    db: DB,
+    granularidad: str = "dia",
+    desde: dt.date | None = None,
+    hasta: dt.date | None = None,
+) -> dict:
+    from app.services import historial_suscripciones
+
+    h = hasta or hoy_de_pared()
+    d = desde or h - dt.timedelta(days=29)
+    return historial_suscripciones.evolucion(db, granularidad, d, h)
+
+
+@router.post("/suscripciones/foto")
+@limiter.limit("10/hour")
+def tomar_foto_suscripciones(request: Request, admin: SuperAdminActual, db: DB) -> dict:
+    """Toma ahora la foto del día (la misma que corre a la noche). Idempotente."""
+    from app.services import historial_suscripciones
+
+    return historial_suscripciones.tomar_fotos(db)
+
+
+@router.get("/ajustes")
+def ajustes_administrativos(
+    admin: SuperAdminActual,
+    db: DB,
+    empresa_id: int | None = None,
+    admin_email: str | None = Query(default=None, max_length=160),
+    categoria: str | None = None,
+    desde: dt.date | None = None,
+    hasta: dt.date | None = None,
+    incluir_automaticos: bool = False,
+    pagina: int = Query(default=1, ge=1),
+    limite: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    from app.services import ajustes_admin
+
+    return ajustes_admin.listar(
+        db, empresa_id=empresa_id, admin_email=admin_email, categoria=categoria, desde=desde, hasta=hasta,
+        incluir_automaticos=incluir_automaticos, pagina=pagina, limite=limite,
+    )
 
 
 @router.get("/estadisticas/exportar")
@@ -284,6 +336,43 @@ class AccesoIn(BaseModel):
 @router.post("/usuarios/{usuario_id}/acceso")
 def cambiar_acceso(request: Request, usuario_id: int, datos: AccesoIn, admin: SuperAdminActual, db: DB) -> dict:
     return usuarios_svc.cambiar_acceso(db, usuario_id, activo=datos.activo, motivo=datos.motivo, admin=admin, request=request)
+
+
+class MotivoSesionIn(BaseModel):
+    motivo: str = Field(min_length=4, max_length=200)
+
+
+@router.get("/usuarios/{usuario_id}/sesiones")
+def sesiones_usuario(usuario_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    return usuarios_svc.sesiones_de(db, usuario_id)
+
+
+@router.post("/usuarios/{usuario_id}/sesiones/{sesion_id}/revocar")
+@limiter.limit("60/hour")
+def revocar_sesion(request: Request, usuario_id: int, sesion_id: int, datos: MotivoSesionIn, admin: SuperAdminActual, db: DB) -> dict:
+    return usuarios_svc.revocar_sesion(db, usuario_id, sesion_id, datos.motivo, admin, request)
+
+
+@router.post("/usuarios/{usuario_id}/cerrar-sesiones")
+@limiter.limit("30/hour")
+def cerrar_sesiones(request: Request, usuario_id: int, datos: MotivoSesionIn, admin: SuperAdminActual, db: DB) -> dict:
+    return usuarios_svc.cerrar_todas(db, usuario_id, datos.motivo, admin, request)
+
+
+@router.post("/usuarios/{usuario_id}/invitacion/reenviar")
+@limiter.limit("10/hour")
+def reenviar_invitacion(request: Request, usuario_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    from app.services import invitaciones
+
+    return invitaciones.reenviar(db, usuario_id, admin, request)
+
+
+@router.post("/usuarios/{usuario_id}/invitacion/revocar")
+@limiter.limit("30/hour")
+def revocar_invitacion(request: Request, usuario_id: int, admin: SuperAdminActual, db: DB) -> dict:
+    from app.services import invitaciones
+
+    return invitaciones.revocar(db, usuario_id, admin, request)
 
 
 class RestablecerIn(BaseModel):

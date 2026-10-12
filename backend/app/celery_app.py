@@ -15,7 +15,7 @@ from app.core.config import settings
 celery_app = Celery(
     "turnos360",
     broker=settings.redis_url,
-    include=["app.tasks.emails", "app.tasks.agenda", "app.tasks.latido"],
+    include=["app.tasks.emails", "app.tasks.agenda", "app.tasks.latido", "app.tasks.suscripciones"],
 )
 
 celery_app.conf.update(
@@ -80,6 +80,12 @@ celery_app.conf.update(
         "vencimientos": {
             "task": "app.tasks.emails.avisar_vencimientos",
             "schedule": crontab(hour=13, minute=0),
+        },
+        # Foto del estado de cada suscripción, al cierre del día argentino.
+        # Si un día no corre, la próxima completa los que falten.
+        "foto_suscripciones": {
+            "task": "app.tasks.suscripciones.foto_diaria",
+            "schedule": crontab(hour=23, minute=50),
         },
     },
 )

@@ -562,6 +562,61 @@ def pedir_resena(turno_id: int, manual: bool = False) -> None:
         )
 
 
+@celery_app.task(name="app.tasks.emails.enviar_invitacion")
+def enviar_invitacion(invitacion_id: int, token: str) -> None:
+    """Link para activar una cuenta creada desde el super-admin.
+
+    Anota en la invitación si el email salió (enviada_en) o por qué no
+    (envio_error): el panel muestra eso y deja reenviar. Si la invitación ya
+    no está vigente (se reenvió otra, se revocó, se usó) no manda nada.
+    """
+    import datetime as _dt
+
+    from app.models import Empresa, InvitacionUsuario
+
+    with SessionLocal() as db:
+        inv = db.get(InvitacionUsuario, invitacion_id)
+        if inv is None or inv.usada_en is not None or inv.revocada_en is not None:
+            return
+        usuario = db.get(Usuario, inv.usuario_id)
+        if usuario is None or not usuario.email or not usuario.activacion_pendiente:
+            return
+        empresa = db.get(Empresa, usuario.empresa_id)
+        negocio = empresa.nombre if empresa else "tu negocio"
+        horas = settings.invitacion_horas
+        vence = f"{horas // 24} días" if horas % 24 == 0 and horas >= 48 else f"{horas} horas"
+        url = f"{settings.public_base_url}/activar?token={urllib.parse.quote(token)}"
+        html = _plantilla(
+            "Te invitaron a Turnos360",
+            [
+                f"Hola{(' ' + esc(usuario.nombre)) if usuario.nombre else ''}, te crearon una "
+                f"cuenta para trabajar con <b>{esc(negocio)}</b> en Turnos360.",
+                "Tocá el botón y elegí tu contraseña para entrar. El link "
+                f"<b>vence en {vence}</b> y sirve <b>una sola vez</b>.",
+                "<span style='font-size:13px;color:#8a94a6'>Si no esperabas este "
+                "mail, ignoralo: sin elegir una contraseña nadie puede entrar a "
+                "esta cuenta.</span>",
+            ],
+            "Turnos360 · Gestión de turnos para tu negocio",
+            boton=("Elegir mi contraseña", url),
+            marca="Turnos360",
+        )
+        try:
+            mailer.enviar(usuario.email, f"Tu cuenta de {negocio} en Turnos360", html)
+            inv.enviada_en = _dt.datetime.now(_dt.timezone.utc)
+            inv.envio_error = None
+            db.commit()
+            log.info("Invitación enviada (usuario %s)", usuario.id)
+        except mailer.MailerNoConfigurado:
+            inv.envio_error = "El servidor no tiene configurado el envío de emails."
+            db.commit()
+            _link_en_dev("Link de activación", url, usuario.id)
+        except Exception:
+            inv.envio_error = "El servidor de correo rechazó o no respondió el envío."
+            db.commit()
+            raise
+
+
 @celery_app.task(name="app.tasks.emails.enviar_reset_password")
 def enviar_reset_password(usuario_id: int, token: str, por_soporte: bool = False) -> None:
     """Link para elegir una contraseña nueva.

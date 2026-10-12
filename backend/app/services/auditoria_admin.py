@@ -120,6 +120,12 @@ ETIQUETAS = {
     "acceso_usuario": "Cambió un acceso",
     "restablecer_clave": "Inició un restablecimiento de contraseña",
     "exportar": "Exportó un reporte",
+    "invitar_usuario": "Invitó a un usuario",
+    "reenviar_invitacion": "Reenvió una invitación",
+    "revocar_invitacion": "Revocó una invitación",
+    "revocar_sesion": "Cerró una sesión de un usuario",
+    "cerrar_sesiones": "Cerró todas las sesiones de un usuario",
+    "ajuste_admin": "Hizo un ajuste administrativo",
 }
 
 

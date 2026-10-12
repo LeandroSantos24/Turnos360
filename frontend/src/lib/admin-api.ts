@@ -3,7 +3,7 @@
  * Usa un token propio (separado del de los usuarios de empresa).
  */
 
-import { ApiError } from "./api";
+import { ApiError, textoDeDetalle } from "./api";
 import type { EstadoSuscripcion, TonoEstado } from "./empresa-api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -40,7 +40,7 @@ async function adminRequest<T>(path: string, options: RequestInit = {}): Promise
     let detalle = `Error ${res.status}`;
     try {
       const d = await res.json();
-      detalle = d.detail || detalle;
+      detalle = textoDeDetalle(d.detail, detalle);
     } catch {
       // respuesta no-JSON
     }
@@ -80,12 +80,22 @@ export interface EmpresaAdmin {
   estado_suscripcion: EstadoSuscripcion;
 }
 export type RolUsuario = "dueno" | "admin" | "recepcion" | "profesional";
+export interface EstadoInvitacion {
+  estado: "enviando" | "enviada" | "envio_fallido" | "vencida" | "sin_invitacion";
+  creada_en?: string | null;
+  expira_en: string | null;
+  enviada_en: string | null;
+  envio_error: string | null;
+}
 export interface UsuarioAdmin {
   id: number;
   nombre: string;
   email: string;
   rol: RolUsuario;
   activo: boolean;
+  activacion_pendiente?: boolean;
+  ultimo_ingreso_en?: string | null;
+  invitacion?: EstadoInvitacion | null;
 }
 
 // ---------- Login (fetch directo: un 401 acá es credencial inválida, no sesión vencida) ----------
@@ -140,7 +150,14 @@ export function pausarEmpresa(
 
 export function setearSuscripcion(
   id: number,
-  datos: { plan?: string; suscripcion_vence?: string | null; renovar_30?: boolean },
+  datos: {
+    plan?: string;
+    suscripcion_vence?: string | null;
+    renovar_30?: boolean;
+    /** Obligatorio: lo exige el backend para todo cambio de plan o vencimiento. */
+    motivo: string;
+    categoria?: "cortesia" | "incidencia" | "correccion" | null;
+  },
 ): Promise<EmpresaAdmin> {
   return adminApi.patch<EmpresaAdmin>(`/admin/empresas/${id}/suscripcion`, datos);
 }
@@ -149,9 +166,10 @@ export function setearSuscripcion(
 export function listarUsuarios(empresaId: number): Promise<UsuarioAdmin[]> {
   return adminApi.get<UsuarioAdmin[]>(`/admin/empresas/${empresaId}/usuarios`);
 }
+/** Alta por invitación: sin contraseña, le llega un link para elegirla. */
 export function crearUsuario(
   empresaId: number,
-  datos: { nombre: string; email: string; clave: string; rol: RolUsuario },
+  datos: { nombre: string; email: string; rol: RolUsuario },
 ): Promise<UsuarioAdmin> {
   return adminApi.post<UsuarioAdmin>(`/admin/empresas/${empresaId}/usuarios`, datos);
 }
@@ -368,6 +386,8 @@ export interface AjusteSuscripcion {
   revertido: boolean;
   revertido_por: string | null;
   reversible: boolean;
+  categoria?: string | null;
+  motivo?: string | null;
 }
 
 /**
@@ -502,16 +522,23 @@ export function historialAjustes(empresaId: number): Promise<AjusteSuscripcion[]
 export function revertirAjuste(
   empresaId: number,
   ajusteId: number,
+  motivo: string,
 ): Promise<{ ok: boolean; vence: string | null }> {
   return adminRequest(`/admin/empresas/${empresaId}/ajustes/${ajusteId}/revertir`, {
     method: "POST",
+    body: JSON.stringify({ motivo }),
   });
 }
 
-export function darProrroga(empresaId: number, dias: number): Promise<EmpresaCobranza> {
+export function darProrroga(
+  empresaId: number,
+  dias: number,
+  motivo: string,
+  categoria: "cortesia" | "incidencia",
+): Promise<EmpresaCobranza> {
   return adminRequest<EmpresaCobranza>(`/admin/empresas/${empresaId}/prorroga`, {
     method: "POST",
-    body: JSON.stringify({ dias }),
+    body: JSON.stringify({ dias, motivo, categoria }),
   });
 }
 
@@ -857,6 +884,12 @@ export interface Estadisticas {
   variacion: Record<string, number | null>;
   suscripciones_activas_hoy: number;
   definiciones: Record<string, string>;
+  /** Días dados sin cobrar. Indicador comercial: no es plata. */
+  beneficios?: {
+    serie: { periodo: string; dias_cortesia: number; dias_incidencia: number; dias_sin_clasificar: number; ajustes: number; empresas: number }[];
+    total: { dias_cortesia: number; dias_incidencia: number; dias_sin_clasificar: number; ajustes: number; empresas: number };
+    nota: string;
+  };
 }
 
 export const verEstadisticas = (granularidad: string, desde?: string, hasta?: string) =>
@@ -940,6 +973,8 @@ export interface UsuarioGlobal {
   empresa: string;
   sucursal: string | null;
   restablecimiento_pendiente: boolean;
+  activacion_pendiente?: boolean;
+  ultimo_ingreso_en?: string | null;
 }
 
 export const listarUsuariosGlobal = (f: { buscar?: string; empresa_id?: number; rol?: string; activo?: boolean; pagina?: number }) =>
@@ -959,3 +994,73 @@ export function listarAuditoriaFiltrada(f: {
 }): Promise<FilaAuditoria[]> {
   return adminApi.get<FilaAuditoria[]>(`/admin/auditoria${qs({ ...f })}`);
 }
+
+// ---------- Sesiones, actividad e invitaciones ----------
+export interface SesionAdmin {
+  id: number;
+  creada_en: string | null;
+  ultimo_uso_en: string | null;
+  expira_en: string | null;
+  dispositivo: string | null;
+  estado: "activa" | "revocada" | "invalidada" | "vencida";
+  revocada_en: string | null;
+  motivo: string | null;
+  revocada_por: string | null;
+}
+export interface ActividadUsuario {
+  usuario: {
+    id: number; nombre: string; email: string; rol: RolUsuario; activo: boolean;
+    empresa_id: number; empresa: string | null; ultimo_ingreso_en: string | null; activacion_pendiente: boolean;
+  };
+  invitacion: EstadoInvitacion | null;
+  activas: number;
+  sesiones: SesionAdmin[];
+  historial: { fecha: string | null; tipo: "ingreso" | "cierre"; detalle: string; por: string | null }[];
+  notas: string[];
+}
+export const verActividad = (id: number) => adminApi.get<ActividadUsuario>(`/admin/usuarios/${id}/sesiones`);
+export const revocarSesion = (id: number, sesionId: number, motivo: string) =>
+  adminApi.post<ActividadUsuario>(`/admin/usuarios/${id}/sesiones/${sesionId}/revocar`, { motivo });
+export const cerrarTodasLasSesiones = (id: number, motivo: string) =>
+  adminApi.post<ActividadUsuario>(`/admin/usuarios/${id}/cerrar-sesiones`, { motivo });
+export const reenviarInvitacion = (id: number) =>
+  adminApi.post<EstadoInvitacion>(`/admin/usuarios/${id}/invitacion/reenviar`, {});
+export const revocarInvitacion = (id: number) =>
+  adminApi.post<EstadoInvitacion>(`/admin/usuarios/${id}/invitacion/revocar`, {});
+
+// ---------- Evolución de suscripciones y ajustes administrativos ----------
+export interface PuntoEvolucion {
+  periodo: string; desde: string; hasta: string;
+  activas_al_cierre: number | null;
+  nuevas: number; reactivadas: number; vencimientos: number; cancelaciones: number; pruebas_vencidas: number; cambios_de_plan: number;
+  dias_con_datos: number; dias: number; dias_reconstruidos: number;
+}
+export interface EvolucionSuscripciones {
+  granularidad: "dia" | "semana" | "mes";
+  desde: string; hasta: string;
+  confiable_desde: string | null;
+  serie: PuntoEvolucion[];
+  total: Record<string, number | null>;
+  anterior: Record<string, number | null>;
+  variacion: Record<string, number | null>;
+  cambios_de_plan: { cambio: string; cantidad: number }[];
+  definiciones: Record<string, string>;
+}
+export const verEvolucion = (granularidad: string, desde?: string, hasta?: string) =>
+  adminApi.get<EvolucionSuscripciones>(`/admin/suscripciones/evolucion${qs({ granularidad, desde, hasta })}`);
+export const tomarFotoSuscripciones = () =>
+  adminApi.post<{ fecha: string; fotos: number; reconstruidas: number; transiciones: number }>("/admin/suscripciones/foto", {});
+
+export interface AjusteAdmin {
+  id: number; empresa_id: number; empresa: string | null; fecha: string | null;
+  tipo: string; tipo_etiqueta: string; categoria: string | null; categoria_etiqueta: string; clasificado: boolean;
+  vence_antes: string | null; vence_despues: string | null; dias: number | null;
+  plan_antes: string | null; plan_despues: string | null;
+  hecho_por: string | null; actor: string | null; motivo: string | null; detalle: string | null;
+  estado: "vigente" | "revertido"; revertido_por: string | null; pago_id: number | null;
+}
+export const listarAjustesAdmin = (f: {
+  empresa_id?: number; admin_email?: string; categoria?: string; desde?: string; hasta?: string; pagina?: number;
+}) => adminApi.get<{ total: number; pagina: number; limite: number; filas: AjusteAdmin[]; categorias: Record<string, string> }>(
+  `/admin/ajustes${qs({ ...f })}`,
+);

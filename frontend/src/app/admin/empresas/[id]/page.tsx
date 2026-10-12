@@ -35,6 +35,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -47,7 +48,9 @@ import { MovimientosSuscripcion } from "./movimientos-suscripcion";
 import { AuditoriaEmpresa, GestionSuscripcion } from "./gestion-suscripcion";
 import { Ficha } from "../../ficha-empresa";
 import { RestablecerClave } from "../../usuarios/restablecer-clave";
+import { BotonActividad, ETIQUETA_INVITACION } from "../../usuarios/actividad";
 import { PagosEmpresa } from "./pagos-empresa";
+import { AjustesEmpresa } from "./ajustes-empresa";
 
 const PESTANAS = [
   { id: "resumen", label: "Resumen", icon: LayoutDashboard },
@@ -84,7 +87,6 @@ export default function AdminUsuariosPage() {
 
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
-  const [clave, setClave] = useState("");
   const [rol, setRol] = useState<RolUsuario | "">("");
   // Sube cuando una acción cambia la suscripción: las secciones se recargan.
   const [version, setVersion] = useState(0);
@@ -125,13 +127,12 @@ export default function AdminUsuariosPage() {
   function resetForm() {
     setNombre("");
     setEmail("");
-    setClave("");
     setRol("");
   }
 
   async function guardar() {
-    if (!nombre.trim() || !email.trim() || clave.length < 6 || !rol) {
-      toast.error("Completá todos los campos (la clave debe tener 6+ caracteres)");
+    if (nombre.trim().length < 2 || !email.trim() || !rol) {
+      toast.error("Completá nombre, email y rol");
       return;
     }
     setGuardando(true);
@@ -139,10 +140,9 @@ export default function AdminUsuariosPage() {
       await crearUsuario(empresaId, {
         nombre: nombre.trim(),
         email: email.trim(),
-        clave,
         rol: rol as RolUsuario,
       });
-      toast.success("Usuario creado");
+      toast.success(`Le mandamos la invitación a ${email.trim()}`);
       setAbierto(false);
       resetForm();
       cargar();
@@ -228,6 +228,7 @@ export default function AdminUsuariosPage() {
             version={version}
             onCambio={() => setVersion((v) => v + 1)}
           />
+          <AjustesEmpresa empresaId={empresaId} version={version} />
           <div className="overflow-hidden rounded-2xl border">
             <Ficha key={version} empresaId={empresaId} />
           </div>
@@ -250,28 +251,28 @@ export default function AdminUsuariosPage() {
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Nuevo usuario</DialogTitle>
+              <DialogTitle>Invitar usuario</DialogTitle>
+              <DialogDescription>
+                Le llega un email con un link para elegir su contraseña. Vos no
+                ves ni elegís la clave. Hasta que la active, la cuenta no puede entrar.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <Input
                 placeholder="Nombre"
+                aria-label="Nombre"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
               />
               <Input
                 type="email"
                 placeholder="Email"
+                aria-label="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <Input
-                type="password"
-                placeholder="Contraseña (6+)"
-                value={clave}
-                onChange={(e) => setClave(e.target.value)}
-              />
               <Select value={rol} onValueChange={(v) => setRol(v as RolUsuario)}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Rol">
                   <SelectValue placeholder="Elegí un rol">
                     {(v) => labelRol(String(v))}
                   </SelectValue>
@@ -287,7 +288,7 @@ export default function AdminUsuariosPage() {
             </div>
             <DialogFooter>
               <Button onClick={guardar} disabled={guardando}>
-                {guardando ? "Creando…" : "Crear usuario"}
+                {guardando ? "Invitando…" : "Mandar invitación"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -317,13 +318,20 @@ export default function AdminUsuariosPage() {
                       Inactivo
                     </span>
                   )}
+                  {u.activacion_pendiente && (
+                    <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+                      {u.invitacion ? ETIQUETA_INVITACION[u.invitacion.estado] : "Sin activar"}
+                    </span>
+                  )}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {u.email} · {labelRol(u.rol)}
+                  {u.ultimo_ingreso_en ? ` · último ingreso ${new Date(u.ultimo_ingreso_en).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}` : ""}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <RestablecerClave usuario={u} />
+              <div className="flex flex-wrap items-center gap-2">
+                <BotonActividad usuario={u} />
+                {!u.activacion_pendiente && <RestablecerClave usuario={u} />}
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Switch
                     checked={u.activo}

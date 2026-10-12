@@ -27,6 +27,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePedirMotivo } from "../pedir-motivo";
 import { useConfirmar } from "@/components/confirmar";
 import { AvisosDePago } from "./avisos-de-pago";
 import { HistorialAvisos } from "./historial-avisos";
@@ -108,7 +109,7 @@ const FECHA = (iso: string | null | undefined) => {
 };
 
 export default function CobranzaPage() {
-  const confirmar = useConfirmar();
+  const { pedir, dialogo } = usePedirMotivo();
   const [empresas, setEmpresas] = useState<EmpresaCobranza[]>([]);
   const [resumen, setResumen] = useState<ResumenCobranza | null>(null);
   const [filtro, setFiltro] = useState<FiltroCobranza>("");
@@ -152,21 +153,19 @@ export default function CobranzaPage() {
       const f = new Date(a, m - 1, d + dias);
       return `${String(f.getDate()).padStart(2, "0")}/${String(f.getMonth() + 1).padStart(2, "0")}/${f.getFullYear()}`;
     })();
-    if (
-      !(await confirmar({
-        titulo: `¿Darle ${dias} días de gracia a ${e.nombre}?`,
-        descripcion:
-          (nuevo
-            ? `El vencimiento pasa del ${FECHA(e.suscripcion_vence)} al ${nuevo}, sin registrar ningún pago. `
-            : "Se extiende la prueba sin registrar ningún pago. ") +
-          "Es acumulativa y queda en la auditoría. Se puede deshacer desde la ficha de la empresa.",
-        textoAccion: `Sí, +${dias} días`,
-        textoCancelar: "Volver",
-      }))
-    )
-      return;
+    const r = await pedir({
+      titulo: `¿Darle ${dias} días de gracia a ${e.nombre}?`,
+      descripcion:
+        (nuevo
+          ? `El vencimiento pasa del ${FECHA(e.suscripcion_vence)} al ${nuevo}, sin registrar ningún pago. `
+          : "Se extiende la prueba sin registrar ningún pago. ") +
+        "Es acumulativa, no es plata y se puede deshacer desde la ficha de la empresa.",
+      categorias: ["cortesia", "incidencia"],
+      textoAccion: `Sí, +${dias} días`,
+    });
+    if (!r) return;
     try {
-      await darProrroga(e.id, dias);
+      await darProrroga(e.id, dias, r.motivo, r.categoria === "incidencia" ? "incidencia" : "cortesia");
       toast.success(`${e.nombre}: +${dias} días de gracia`);
       cargar();
     } catch (err) {
@@ -176,6 +175,7 @@ export default function CobranzaPage() {
 
   return (
     <div className="space-y-6">
+      {dialogo}
       <div>
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
           Cobros y pagos
@@ -1098,6 +1098,7 @@ function DialogFicha({
   const [plan, setPlan] = useState<string>(empresa.plan ?? "gratuito");
   const [guardando, setGuardando] = useState(false);
   const confirmar = useConfirmar();
+  const { pedir, dialogo } = usePedirMotivo();
   const precioInicial = empresa.precio_pactado && empresa.precio_mensual != null
     ? Number(empresa.precio_mensual)
     : null;
@@ -1106,6 +1107,7 @@ function DialogFicha({
     const precioNuevo = f.precio_mensual.trim() ? Number(f.precio_mensual) : null;
     const cambiaPrecio = precioNuevo !== precioInicial;
     const cambiaPlan = plan !== empresa.plan;
+    let motivoPlan = "";
     if (cambiaPrecio || cambiaPlan) {
       const partes = [];
       if (cambiaPlan) {
@@ -1120,13 +1122,24 @@ function DialogFicha({
             : `la cuota pactada pasa de ${precioInicial === null ? "la del plan" : PESOS(precioInicial)} a ${PESOS(precioNuevo)}`,
         );
       }
-      const ok = await confirmar({
-        titulo: `¿Cambiar lo que paga ${empresa.nombre}?`,
-        descripcion: `Al guardar, ${partes.join(" y ")}. Queda registrado en la auditoría.`,
-        textoAccion: "Sí, guardar",
-        textoCancelar: "Volver",
-      });
-      if (!ok) return;
+      if (cambiaPlan) {
+        // El cambio de plan es un ajuste administrativo: lleva motivo.
+        const r = await pedir({
+          titulo: `¿Cambiar lo que paga ${empresa.nombre}?`,
+          descripcion: `Al guardar, ${partes.join(" y ")}. Queda en el historial y en la auditoría.`,
+          textoAccion: "Sí, guardar",
+        });
+        if (!r) return;
+        motivoPlan = r.motivo;
+      } else {
+        const ok = await confirmar({
+          titulo: `¿Cambiar lo que paga ${empresa.nombre}?`,
+          descripcion: `Al guardar, ${partes.join(" y ")}. Queda registrado en la auditoría.`,
+          textoAccion: "Sí, guardar",
+          textoCancelar: "Volver",
+        });
+        if (!ok) return;
+      }
     }
     setGuardando(true);
     try {
@@ -1143,7 +1156,7 @@ function DialogFicha({
         limite_sucursales: f.limite_sucursales ? Number(f.limite_sucursales) : null,
       });
       if (plan !== empresa.plan) {
-        await setearSuscripcion(empresa.id, { plan });
+        await setearSuscripcion(empresa.id, { plan, motivo: motivoPlan });
       }
       toast.success("Ficha actualizada");
       onListo();
@@ -1167,6 +1180,8 @@ function DialogFicha({
   );
 
   return (
+    <>
+    {dialogo}
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
@@ -1235,5 +1250,6 @@ function DialogFicha({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

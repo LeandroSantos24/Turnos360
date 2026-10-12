@@ -19,7 +19,6 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.reloj import hoy_de_pared
 from app.schemas.cupon import CuponValidarIn, CuponValidarOut
-from app.core.seguridad import crear_access_token, crear_refresh_token
 from app.schemas.publico import (
     GestionCancelar,
     GestionReprogramar,
@@ -451,10 +450,12 @@ def registro(request: Request, datos: RegistroIn, db: DB) -> RegistroOut:
         # escribir preguntando por qué. Desde el panel puede pedir el reenvío.
         log.error("No se pudo mandar el email de verificación (usuario %s)", dueno.id)
 
-    tv = int(dueno.token_version or 0)
+    from app.services import sesiones
+
+    access, refresh = sesiones.ingresar(db, dueno, request)
     return RegistroOut(
-        access_token=crear_access_token(dueno.id, dueno.empresa_id, dueno.rol.value, tv),
-        refresh_token=crear_refresh_token(dueno.id, dueno.empresa_id, dueno.rol.value, tv),
+        access_token=access,
+        refresh_token=refresh,
         empresa_slug=empresa.slug,
         empresa_nombre=empresa.nombre,
         email_verificado=False,

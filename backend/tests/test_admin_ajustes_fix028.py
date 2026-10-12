@@ -53,7 +53,7 @@ def test_renovar_30_dias_queda_registrado(client, db, armar_empresa, admin):
     r = client.patch(
         f"/admin/empresas/{ctx.empresa.id}/suscripcion",
         headers=admin,
-        json={"renovar_30": True},
+        json={"renovar_30": True, "motivo": "Ajuste de prueba", "categoria": "cortesia"},
     )
     assert r.status_code == 200, r.text
 
@@ -74,7 +74,7 @@ def test_la_prorroga_queda_registrada_con_los_dias(client, db, armar_empresa, ad
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/prorroga",
         headers=admin,
-        json={"dias": 10},
+        json={"dias": 10, "motivo": "Ajuste de prueba"},
     )
     movs = _ajustes(client, ctx.empresa.id, admin)
     assert movs[0]["tipo"] == "prorroga"
@@ -106,7 +106,7 @@ def test_revertir_devuelve_el_vencimiento_a_como_estaba(client, db, armar_empres
     client.patch(
         f"/admin/empresas/{ctx.empresa.id}/suscripcion",
         headers=admin,
-        json={"renovar_30": True},
+        json={"renovar_30": True, "motivo": "Ajuste de prueba", "categoria": "cortesia"},
     )
     db.expire_all()
     assert db.get(Empresa, ctx.empresa.id).suscripcion_vence != vencia
@@ -115,6 +115,7 @@ def test_revertir_devuelve_el_vencimiento_a_como_estaba(client, db, armar_empres
     r = client.post(
         f"/admin/empresas/{ctx.empresa.id}/ajustes/{aj['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
     assert r.status_code == 200, r.text
     db.expire_all()
@@ -129,12 +130,13 @@ def test_revertir_deja_su_propio_rastro(client, db, armar_empresa, admin):
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/prorroga",
         headers=admin,
-        json={"dias": 10},
+        json={"dias": 10, "motivo": "Ajuste de prueba"},
     )
     aj = _ajustes(client, ctx.empresa.id, admin)[0]
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/ajustes/{aj['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
 
     movs = _ajustes(client, ctx.empresa.id, admin)
@@ -156,6 +158,7 @@ def test_revertir_un_pago_lo_anula(client, db, armar_empresa, admin):
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/ajustes/{aj['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
     db.expire_all()
     assert db.get(PagoSuscripcion, pago_id).anulado is True
@@ -168,12 +171,12 @@ def test_no_se_revierte_dos_veces(client, db, armar_empresa, admin):
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/prorroga",
         headers=admin,
-        json={"dias": 10},
+        json={"dias": 10, "motivo": "Ajuste de prueba"},
     )
     aj = _ajustes(client, ctx.empresa.id, admin)[0]
     url = f"/admin/empresas/{ctx.empresa.id}/ajustes/{aj['id']}/revertir"
-    assert client.post(url, headers=admin).status_code == 200
-    assert client.post(url, headers=admin).status_code == 409
+    assert client.post(url, headers=admin, json={"motivo": "Ajuste de prueba"}).status_code == 200
+    assert client.post(url, headers=admin, json={"motivo": "Ajuste de prueba"}).status_code == 409
 
 
 def test_no_se_revierte_una_reversion(client, db, armar_empresa, admin):
@@ -183,18 +186,20 @@ def test_no_se_revierte_una_reversion(client, db, armar_empresa, admin):
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/prorroga",
         headers=admin,
-        json={"dias": 10},
+        json={"dias": 10, "motivo": "Ajuste de prueba"},
     )
     aj = _ajustes(client, ctx.empresa.id, admin)[0]
     client.post(
         f"/admin/empresas/{ctx.empresa.id}/ajustes/{aj['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
     rev = _ajustes(client, ctx.empresa.id, admin)[0]
     assert rev["tipo"] == "reversion"
     r = client.post(
         f"/admin/empresas/{ctx.empresa.id}/ajustes/{rev['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
     assert r.status_code == 409
 
@@ -226,12 +231,13 @@ def test_no_se_revierte_un_ajuste_de_otra_empresa(client, db, armar_empresa, adm
     client.post(
         f"/admin/empresas/{a.empresa.id}/prorroga",
         headers=admin,
-        json={"dias": 10},
+        json={"dias": 10, "motivo": "Ajuste de prueba"},
     )
     aj = _ajustes(client, a.empresa.id, admin)[0]
 
     r = client.post(
         f"/admin/empresas/{b.empresa.id}/ajustes/{aj['id']}/revertir",
         headers=admin,
+        json={"motivo": "Ajuste de prueba"},
     )
     assert r.status_code == 404

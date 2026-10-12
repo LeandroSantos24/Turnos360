@@ -13,6 +13,8 @@ Reglas de negocio (definidas por Leandro):
   sigue operando, pero para vos ya es "me tiene que pagar".
 """
 
+import contextlib
+import contextvars
 import datetime as dt
 from decimal import Decimal
 
@@ -699,6 +701,27 @@ def historial_pagos(db: Session, empresa_id: int, limite: int = 24) -> list[dict
 # ══════════════════════════════════════════════════════════════════════════
 
 
+# Clasificación de los ajustes que hace una persona desde el panel. El router
+# la fija con `with clasificar(...)` y todo ajuste que se registre adentro la
+# hereda, sin tener que pasarla por cada función intermedia.
+_clasificacion: contextvars.ContextVar[tuple[str | None, str | None] | None] = contextvars.ContextVar(
+    "clasificacion_ajuste", default=None
+)
+# Los tipos que son ajuste del vencimiento o del plan (los demás son eventos).
+TIPOS_AJUSTE = {"prorroga", "renovacion", "manual", "reversion", "plan", "pago", "pago_devuelto"}
+# Lo que se deduce del tipo sin dudas.
+CATEGORIA_POR_TIPO = {"pago": "pago", "plan": "plan", "pago_devuelto": "devolucion", "reversion": "correccion"}
+
+
+@contextlib.contextmanager
+def clasificar(categoria: str | None, motivo: str | None):
+    marca = _clasificacion.set((categoria, (motivo or "").strip() or None))
+    try:
+        yield
+    finally:
+        _clasificacion.reset(marca)
+
+
 def registrar_ajuste(
     db: Session,
     empresa: Empresa,
@@ -724,8 +747,14 @@ def registrar_ajuste(
     ser restaurar un dato guardado y no recalcular una fecha que quizá vino de
     una prórroga acumulada sobre otra prórroga.
     """
+    ctx = _clasificacion.get()
+    categoria = None
+    if tipo in TIPOS_AJUSTE:
+        categoria = CATEGORIA_POR_TIPO.get(tipo) or (ctx[0] if ctx else None)
     aj = AjusteSuscripcion(
         empresa_id=empresa.id,
+        categoria=categoria,
+        motivo=ctx[1][:300] if ctx and ctx[1] else None,
         tipo=tipo,
         vence_antes=vence_antes,
         vence_despues=vence_despues,
@@ -821,6 +850,8 @@ def listar_ajustes(db: Session, empresa_id: int, limite: int = 40) -> list[dict]
             "creado_en": a.creado_en.isoformat() if a.creado_en else None,
             "revertido": bool(a.revertido),
             "revertido_por": a.revertido_por,
+            "categoria": a.categoria or CATEGORIA_POR_TIPO.get(a.tipo),
+            "motivo": a.motivo,
             # Una reversión no se revierte: sería un ping-pong sin sentido.
             # Para volver a mover la fecha están el cobro y la prórroga.
             "reversible": (not a.revertido)

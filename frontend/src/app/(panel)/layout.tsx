@@ -44,7 +44,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { isLoggedIn, clearToken } from "@/lib/auth";
+import { isLoggedIn } from "@/lib/auth";
+import { cerrarSesion } from "@/lib/api";
 import { EVENTO_PERFIL, getMe, UsuarioMe } from "@/lib/auth-api";
 import {
   obtenerConfigEmpresa,
@@ -218,8 +219,8 @@ export default function PanelLayout({
     }
   }, [usuario, pathname, router]);
 
-  function salir() {
-    clearToken();
+  async function salir() {
+    await cerrarSesion();
     router.push("/login");
   }
 
@@ -336,7 +337,7 @@ export default function PanelLayout({
               <div key={grupo.id}>
                 <p
                   className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-widest"
-                  style={{ color: "rgba(255,255,255,0.25)" }}
+                  style={{ color: "rgba(255,255,255,0.55)" }}
                 >
                   {grupo.label}
                 </p>
@@ -365,7 +366,7 @@ export default function PanelLayout({
                         >
                           <div
                             className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
-                            style={{ color: "rgba(255,255,255,0.3)" }}
+                            style={{ color: "rgba(255,255,255,0.55)" }}
                           >
                             <Icono size={17} className="shrink-0" />
                             <span>{labelNav(item)}</span>
@@ -462,7 +463,7 @@ export default function PanelLayout({
               </p>
               <p
                 className="truncate text-xs"
-                style={{ color: "rgba(255,255,255,0.35)" }}
+                style={{ color: "rgba(255,255,255,0.6)" }}
               >
                 {ROL_LABEL[usuario.rol as string] ?? usuario.rol}
                 {/* El plan, al lado del rol. Va acá y no en una pantalla

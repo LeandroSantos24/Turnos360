@@ -78,6 +78,14 @@ def get_current_usuario(
     if int(payload.get("tv", 0)) != int(usuario.token_version or 0):
         raise no_autorizado
 
+    # 2.6. La sesión del servidor sigue abierta (revocación individual).
+    #      Los tokens anteriores a las sesiones no traen 'sid' y pasan con el
+    #      chequeo de token_version de arriba; ver services/sesiones.py.
+    from app.services import sesiones
+
+    sesiones.validar_acceso(db, usuario, payload)
+    request.state.token_payload = payload
+
     # 3. La empresa del usuario no debe estar pausada.
     #    Este es el candado que corta los tokens YA emitidos: aunque el token
     #    sea válido y no haya vencido, si pausaste la empresa deja de entrar.

@@ -234,6 +234,8 @@ class Settings(BaseSettings):
     jwt_algoritmo: str = "HS256"
     access_token_minutos: int = 30      # token corto: viaja en cada request
     refresh_token_dias: int = 7         # token largo: solo para renovar el corto
+    # Invitaciones de alta (el usuario elige su contraseña con un link).
+    invitacion_horas: int = 72
 
     @property
     def es_produccion(self) -> bool:

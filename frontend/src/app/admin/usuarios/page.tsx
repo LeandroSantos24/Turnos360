@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Encabezado, Vacio } from "../_ui";
 import { RestablecerClave } from "./restablecer-clave";
+import { BotonActividad } from "./actividad";
 
 const ROLES: Record<string, string> = {
   dueno: "Dueño",
@@ -81,7 +82,7 @@ export default function UsuariosAdmin() {
     <div>
       <Encabezado
         titulo="Usuarios y accesos"
-        bajada="Todos los usuarios de todos los negocios. Cortar un acceso cierra sus sesiones; la contraseña se restablece con un link al email del usuario."
+        bajada="Todos los usuarios de todos los negocios, con sus sesiones y su último ingreso. Cortar un acceso cierra sus sesiones; la contraseña se restablece con un link al email del usuario."
       />
       <form
         className="mb-4 flex flex-wrap items-end gap-2"
@@ -136,15 +137,20 @@ export default function UsuariosAdmin() {
                     {!u.activo && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Sin acceso</span>}
                     {!u.email_verificado && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">Email sin verificar</span>}
                     {u.restablecimiento_pendiente && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-200">Link de clave enviado</span>}
+                    {u.activacion_pendiente && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-200">Sin activar</span>}
                   </p>
                   <p className="truncate text-sm text-muted-foreground">
                     {u.email} · {ROLES[u.rol] ?? u.rol} ·{" "}
                     <Link href={`/admin/empresas/${u.empresa_id}`} className="underline-offset-4 hover:underline">{u.empresa}</Link>
                     {u.sucursal ? ` · ${u.sucursal}` : ""}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Último ingreso: {u.ultimo_ingreso_en ? new Date(u.ultimo_ingreso_en).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "sin registro"}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <RestablecerClave usuario={u} onListo={cargar} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <BotonActividad usuario={u} />
+                  {!u.activacion_pendiente && <RestablecerClave usuario={u} onListo={cargar} />}
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Switch checked={u.activo} onCheckedChange={() => cambiar(u)} aria-label={`Acceso de ${u.nombre}`} />
                     <span className="hidden sm:inline">Acceso</span>

@@ -26,6 +26,7 @@ from app.schemas.admin import (
     PagoSuscripcionIn,
     PagoSuscripcionOut,
     ProrrogaIn,
+    RevertirAjusteIn,
     RechazoAvisoIn,
     ResumenCobranzaOut,
     RubroOut,
@@ -192,11 +193,14 @@ def pausar_empresa(
     )
 
 
-@router.get(
-    "/empresas/{empresa_id}/usuarios", response_model=list[UsuarioAdminOut]
-)
-def usuarios(empresa_id: int, admin: SuperAdminActual, db: DB):
-    return svc.listar_usuarios(db, empresa_id)
+@router.get("/empresas/{empresa_id}/usuarios")
+def usuarios(empresa_id: int, admin: SuperAdminActual, db: DB) -> list[dict]:
+    from app.services import invitaciones
+
+    return [
+        {**UsuarioAdminOut.model_validate(u).model_dump(mode="json"), "invitacion": invitaciones.estado(db, u)}
+        for u in svc.listar_usuarios(db, empresa_id)
+    ]
 
 
 @router.post(
@@ -204,9 +208,20 @@ def usuarios(empresa_id: int, admin: SuperAdminActual, db: DB):
     response_model=UsuarioAdminOut,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("30/hour")
 def crear_usuario(
-    empresa_id: int, datos: UsuarioCrear, admin: SuperAdminActual, db: DB
+    request: Request, empresa_id: int, datos: UsuarioCrear, admin: SuperAdminActual, db: DB
 ):
+    """Alta de un usuario en la empresa.
+
+    Sin `clave` (lo que manda el panel): el usuario queda pendiente y recibe
+    un link para elegir su contraseña. Con `clave`: el alta anterior, que se
+    conserva solo por compatibilidad de la API.
+    """
+    if datos.clave is None:
+        from app.services import invitaciones
+
+        return invitaciones.crear(db, empresa_id, datos, admin, request)
     return svc.crear_usuario(db, empresa_id, datos)
 
 
@@ -244,17 +259,18 @@ def setear_suscripcion(
         else "cambiar_vencimiento" if datos.suscripcion_vence is not None
         else "cambiar_plan"
     )
-    fila = _auditado(
-        db, admin, request, accion, empresa, None,
-        lambda: svc.setear_suscripcion(
-            db,
-            empresa_id,
-            datos.plan,
-            datos.suscripcion_vence,
-            datos.renovar_30,
-            hecho_por=admin.email,
-        ),
-    )
+    def hacer():
+        with cobranza.clasificar(datos.categoria, datos.motivo):
+            return svc.setear_suscripcion(
+                db,
+                empresa_id,
+                datos.plan,
+                datos.suscripcion_vence,
+                datos.renovar_30,
+                hecho_por=admin.email,
+            )
+
+    fila = _auditado(db, admin, request, accion, empresa, (datos.motivo or "").strip() or None, hacer)
     _sincronizar_debito(db, empresa)
     return fila
 
@@ -471,10 +487,11 @@ def dar_prorroga(
     empresa = _empresa_o_404(db, empresa_id)
 
     def hacer():
-        cobranza.prorrogar(db, empresa, datos.dias, hecho_por=admin.email)
+        with cobranza.clasificar(datos.categoria, datos.motivo):
+            cobranza.prorrogar(db, empresa, datos.dias, hecho_por=admin.email)
         db.commit()
 
-    _auditado(db, admin, request, "prorroga", empresa, f"+{datos.dias} días", hacer)
+    _auditado(db, admin, request, "prorroga", empresa, f"+{datos.dias} días · {datos.motivo.strip()}", hacer)
     return _fila_de(db, empresa_id)
 
 
@@ -638,13 +655,17 @@ def historial_ajustes(empresa_id: int, admin: SuperAdminActual, db: DB) -> list[
 
 @router.post("/empresas/{empresa_id}/ajustes/{ajuste_id}/revertir")
 def revertir_ajuste(
-    empresa_id: int, ajuste_id: int, admin: SuperAdminActual, db: DB, request: Request
+    empresa_id: int, ajuste_id: int, datos: RevertirAjusteIn, admin: SuperAdminActual, db: DB, request: Request
 ) -> dict:
     """Deshace un movimiento del vencimiento (el arreglo del click equivocado)."""
     empresa = _empresa_o_404(db, empresa_id)
+
+    def hacer():
+        with cobranza.clasificar("correccion", datos.motivo):
+            return cobranza.revertir_ajuste(db, empresa_id, ajuste_id, hecho_por=admin.email)
+
     return _auditado(
-        db, admin, request, "revertir", empresa, f"Movimiento #{ajuste_id}",
-        lambda: cobranza.revertir_ajuste(db, empresa_id, ajuste_id, hecho_por=admin.email),
+        db, admin, request, "revertir", empresa, f"Movimiento #{ajuste_id} · {datos.motivo.strip()}", hacer,
     )
 
 

@@ -551,7 +551,7 @@ def test_kpis_y_filtros_del_panel(client, db, armar_empresa, admin):
 
 def test_la_auditoria_lista_quien_hizo_que(client, db, armar_empresa, admin):
     ctx = _empresa(armar_empresa, db)
-    client.post(f"/admin/empresas/{ctx.empresa.id}/prorroga", headers=admin, json={"dias": 10})
+    client.post(f"/admin/empresas/{ctx.empresa.id}/prorroga", headers=admin, json={"dias": 10, "motivo": "Ajuste de prueba"})
     filas = client.get(f"/admin/auditoria?empresa_id={ctx.empresa.id}", headers=admin).json()
     assert filas[0]["accion"] == "prorroga"
     assert filas[0]["antes"]["suscripcion_vence"] != filas[0]["despues"]["suscripcion_vence"]
@@ -569,7 +569,7 @@ def test_un_intento_fallido_no_deja_auditoria(client, db, armar_empresa, admin):
 
 def test_mi_suscripcion_no_muestra_datos_internos(client, db, armar_empresa, admin):
     ctx = _empresa(armar_empresa, db)
-    client.post(f"/admin/empresas/{ctx.empresa.id}/prorroga", headers=admin, json={"dias": 5})
+    client.post(f"/admin/empresas/{ctx.empresa.id}/prorroga", headers=admin, json={"dias": 5, "motivo": "Ajuste de prueba"})
     mi = client.get("/empresa/mi-suscripcion", headers=token_de(ctx.dueno)).json()
     texto = str(mi)
     assert "@turnos360.test" not in texto

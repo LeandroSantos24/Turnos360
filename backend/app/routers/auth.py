@@ -2,14 +2,13 @@
 
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import func, select
 
 from app.api.deps import DB, UsuarioActual, verificar_empresa_activa
 from app.core.seguridad import (
     SCOPE_EMPRESA,
-    crear_access_token,
-    crear_refresh_token,
     decodificar_token,
 )
 from app.core.rate_limit import limiter
@@ -20,6 +19,7 @@ import secrets
 
 from app.core.crypto import hash_clave, hash_senuelo, necesita_rehash, verificar_clave
 from app.models import Empresa, Sucursal, Usuario
+from app.services import sesiones
 from app.schemas.auth import (
     CambiarPasswordRequest,
     CerrarSesionesRequest,
@@ -69,7 +69,9 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     hash_guardado = usuario.hash_clave if usuario else hash_senuelo()
     clave_ok = verificar_clave(datos.clave, hash_guardado)
 
-    if usuario is None or not usuario.activo or not clave_ok:
+    # Una cuenta invitada que todavía no eligió su contraseña no entra (su
+    # hash es de una clave al azar que nadie conoce, pero no se confía en eso).
+    if usuario is None or not usuario.activo or usuario.activacion_pendiente or not clave_ok:
         raise credenciales_invalidas
 
     # 2b. Si la clave estaba guardada con menos iteraciones de las que
@@ -102,16 +104,10 @@ def login(request: Request, datos: LoginRequest, db: DB) -> TokenResponse:
     empresa = db.get(Empresa, usuario.empresa_id)
     verificar_empresa_activa(empresa)
 
-    # 4. Emitir los tokens con el empresa_id y rol fijados adentro
-    tv = int(usuario.token_version or 0)
-    return TokenResponse(
-        access_token=crear_access_token(
-            usuario.id, usuario.empresa_id, usuario.rol.value, tv
-        ),
-        refresh_token=crear_refresh_token(
-            usuario.id, usuario.empresa_id, usuario.rol.value, tv
-        ),
-    )
+    # 4. Sesión nueva en el servidor + tokens con el empresa_id y rol fijados
+    #    adentro. Registra también el último ingreso.
+    access, refresh = sesiones.ingresar(db, usuario, request)
+    return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -152,16 +148,10 @@ def refresh(request: Request, datos: RefreshRequest, db: DB) -> TokenResponse:
     empresa = db.get(Empresa, usuario.empresa_id)
     verificar_empresa_activa(empresa)
 
-    # 4. Emitir tokens frescos
-    tv = int(usuario.token_version or 0)
-    return TokenResponse(
-        access_token=crear_access_token(
-            usuario.id, usuario.empresa_id, usuario.rol.value, tv
-        ),
-        refresh_token=crear_refresh_token(
-            usuario.id, usuario.empresa_id, usuario.rol.value, tv
-        ),
-    )
+    # 4. La sesión del servidor tiene que seguir abierta y este refresh ser
+    #    el último que se emitió para ella (rota en cada renovación).
+    access, refresh = sesiones.renovar(db, usuario, payload, request)
+    return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 def _usuario_me(db, usuario: Usuario) -> UsuarioMe:
@@ -183,13 +173,12 @@ def _usuario_me(db, usuario: Usuario) -> UsuarioMe:
     return datos
 
 
-def _sesion_nueva(usuario: Usuario, detalle: str) -> SesionRenovada:
-    tv = int(usuario.token_version or 0)
-    return SesionRenovada(
-        access_token=crear_access_token(usuario.id, usuario.empresa_id, usuario.rol.value, tv),
-        refresh_token=crear_refresh_token(usuario.id, usuario.empresa_id, usuario.rol.value, tv),
-        detalle=detalle,
-    )
+def _sesion_nueva(db, request: Request, usuario: Usuario, detalle: str) -> SesionRenovada:
+    """Después de cerrar todas: una sesión nueva para el dispositivo que lo pidió."""
+    sesion = sesiones.crear(db, usuario, request)
+    access, refresh = sesiones.tokens(usuario, sesion)
+    db.commit()
+    return SesionRenovada(access_token=access, refresh_token=refresh, detalle=detalle)
 
 
 @router.get("/me", response_model=UsuarioMe)
@@ -272,10 +261,14 @@ def olvide_password(request: Request, datos: OlvidePasswordRequest, db: DB) -> d
     SIEMPRE responde lo mismo: no revelamos si un email está registrado o no.
     El token viaja por email; acá solo guardamos su hash, con 60 min de vida.
     """
+    # Una cuenta invitada sin activar no recibe link de restablecimiento:
+    # se activa con su invitación (que el admin puede reenviar). La respuesta
+    # es la misma de siempre, así que no revela nada.
     usuario = db.scalars(
         select(Usuario).where(
             func.lower(Usuario.email) == datos.email.lower(),
             Usuario.activo.is_(True),
+            Usuario.activacion_pendiente.is_(False),
         )
     ).one_or_none()
     if usuario is not None:
@@ -312,6 +305,7 @@ def restablecer_password(
             Usuario.reset_token_hash == token_hash,
             Usuario.reset_token_expira > dt.datetime.now(dt.timezone.utc),
             Usuario.activo.is_(True),
+            Usuario.activacion_pendiente.is_(False),
         )
     )
     if usuario is None:
@@ -325,7 +319,7 @@ def restablecer_password(
     # Corta TODAS las sesiones abiertas. Este flujo es justo el que usa alguien
     # que sospecha que le entraron a la cuenta: si no revocara, el atacante
     # seguiría adentro con su refresh token por hasta 7 días.
-    usuario.token_version = int(usuario.token_version or 0) + 1
+    sesiones.revocar_todas(db, usuario, "Restableció la contraseña", "usuario")
     db.commit()
     return {"detalle": "Contraseña actualizada. Ya podés entrar con la nueva."}
 
@@ -354,10 +348,9 @@ def cambiar_password(
     usuario.hash_clave = hash_clave(datos.clave_nueva)
     usuario.reset_token_hash = None
     usuario.reset_token_expira = None
-    usuario.token_version = int(usuario.token_version or 0) + 1
-    db.commit()
+    sesiones.revocar_todas(db, usuario, "Cambió la contraseña", "usuario")
     return _sesion_nueva(
-        usuario,
+        db, request, usuario,
         "Contraseña actualizada. Se cerró la sesión en tus otros dispositivos.",
     )
 
@@ -372,17 +365,62 @@ def cerrar_otras_sesiones(
     Pide la contraseña: con solo un token robado, alguien podría usar esto
     para echar al dueño de verdad y quedarse con la única sesión válida.
 
-    No hay lista de sesiones para mostrar: los tokens no se guardan en el
-    servidor. Lo que sí se puede hacer, y de forma segura, es invalidarlos
-    todos de una (el mismo mecanismo que el cambio de clave).
+    Cierra todas (también los tokens viejos sin sesión, vía token_version)
+    y abre una nueva para este dispositivo.
     """
     if not verificar_clave(datos.clave_actual, usuario.hash_clave):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La contraseña no es correcta",
         )
-    usuario.token_version = int(usuario.token_version or 0) + 1
-    db.commit()
+    sesiones.revocar_todas(db, usuario, "Cerró las otras sesiones", "usuario")
     return _sesion_nueva(
-        usuario, "Listo: se cerró la sesión en todos tus otros dispositivos."
+        db, request, usuario, "Listo: se cerró la sesión en todos tus otros dispositivos."
     )
+
+
+@router.post("/logout")
+@limiter.limit("30/minute")
+def logout(request: Request, usuario: UsuarioActual, db: DB) -> dict:
+    """Cierra la sesión de este dispositivo en el servidor.
+
+    Antes «Salir» solo borraba los tokens del navegador: el refresh seguía
+    sirviendo 7 días para quien lo tuviera copiado.
+    """
+    sesiones.cerrar_actual(db, usuario, getattr(request.state, "token_payload", {}) or {})
+    return {"ok": True}
+
+
+# ============================================================
+# Activación de cuentas invitadas (alta desde el super-admin)
+# ============================================================
+
+class _TokenIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+class _ActivarIn(_TokenIn):
+    clave: str = Field(min_length=8, max_length=100)
+
+
+@router.post("/invitacion")
+@limiter.limit("10/minute")
+def ver_invitacion(request: Request, datos: _TokenIn, db: DB) -> dict:
+    """A quién invitaron (nombre de pila, negocio y email enmascarado).
+
+    POST y no GET: el token va en el cuerpo y no queda en los logs de acceso.
+    Cualquier link que no sirve (no existe, venció, ya se usó, se revocó)
+    recibe la MISMA respuesta: no se puede usar para averiguar nada.
+    """
+    from app.services import invitaciones
+
+    return invitaciones.ver(db, datos.token)
+
+
+@router.post("/activar")
+@limiter.limit("5/minute")
+def activar_cuenta(request: Request, datos: _ActivarIn, db: DB) -> dict:
+    """La persona invitada elige su contraseña. El link sirve una sola vez."""
+    from app.services import invitaciones
+
+    return invitaciones.activar(db, datos.token, datos.clave)

@@ -85,11 +85,38 @@ function renovarSesionUnaVez(): Promise<string | null> {
   return renovacionEnCurso;
 }
 
+const CAMPOS: Record<string, string> = {
+  email: "El email", nombre: "El nombre", clave: "La contraseña", clave_nueva: "La contraseña",
+  motivo: "El motivo", telefono: "El teléfono", monto: "El importe",
+};
+
+/**
+ * El `detail` de FastAPI pasado a una frase. En los 422 de validación llega
+ * una LISTA de objetos: antes se mostraba tal cual y el cartel decía
+ * «[object Object]».
+ */
+export function textoDeDetalle(detail: unknown, porDefecto: string): string {
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    const e = detail[0] as { loc?: unknown[]; msg?: string; type?: string };
+    const campo = String(e.loc?.[e.loc.length - 1] ?? "");
+    const nombre = CAMPOS[campo] ?? (campo ? `El campo «${campo}»` : "Un dato");
+    if (campo === "email") return "El email no es válido.";
+    // Validaciones propias del backend: el mensaje ya está escrito para la persona.
+    if (e.type === "value_error" && e.msg) return e.msg.replace(/^Value error,\s*/, "");
+    if (e.type === "missing") return `${nombre} es obligatorio.`;
+    if (e.type === "string_too_short") return `${nombre} es demasiado corto.`;
+    if (e.type === "string_too_long") return `${nombre} es demasiado largo.`;
+    return `${nombre} no es válido.`;
+  }
+  return porDefecto;
+}
+
 /** Lee el detalle de error que manda FastAPI, si lo hay. */
 async function detalleDeError(res: Response, porDefecto: string): Promise<string> {
   try {
     const data = await res.json();
-    return data?.detail || porDefecto;
+    return textoDeDetalle(data?.detail, porDefecto);
   } catch {
     return porDefecto;
   }
@@ -191,3 +218,24 @@ export const api = {
   postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
     request<T>(path, { method: "POST", body: form, signal }),
 };
+
+/**
+ * Cierra la sesión en el servidor (no solo en el navegador) y borra los
+ * tokens. Si la red falla, igual se sale: el servidor la da por vencida
+ * cuando pase la vida del refresh.
+ */
+export async function cerrarSesion(): Promise<void> {
+  const token = getToken();
+  if (token) {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      });
+    } catch {
+      // sin red: se sale igual
+    }
+  }
+  clearToken();
+}

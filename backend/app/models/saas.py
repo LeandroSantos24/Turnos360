@@ -10,6 +10,7 @@ import datetime as dt
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Boolean,
     Date,
     DateTime,
@@ -258,6 +259,11 @@ class AjusteSuscripcion(Base):
     __tablename__ = "ajuste_suscripcion"
     __table_args__ = (
         Index("ix_ajuste_suscripcion_empresa", "empresa_id", "creado_en"),
+        CheckConstraint(
+            "categoria IS NULL OR categoria IN "
+            "('cortesia','incidencia','correccion','plan','pago','devolucion')",
+            name="categoria",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -298,6 +304,44 @@ class AjusteSuscripcion(Base):
     )
     revertido_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revertido_por: Mapped[str | None] = mapped_column(String(160))
+
+    # Qué clase de ajuste fue, para separar lo comercial de lo contable:
+    # "cortesia" | "incidencia" | "correccion" | "plan" | "pago" | "devolucion".
+    # Nulo en los anteriores a esta columna (se muestran «sin clasificar»
+    # salvo los que se deducen sin dudas del tipo: pago, plan, devolución).
+    # Nunca es plata: los días regalados no suman ni restan en la caja.
+    categoria: Mapped[str | None] = mapped_column(String(20))
+    # Por qué, escrito por quien lo hizo. Obligatorio en las acciones a mano.
+    motivo: Mapped[str | None] = mapped_column(String(300))
+
+
+class SuscripcionDiaria(Base):
+    """Foto diaria del estado de la suscripción de cada empresa.
+
+    El estado de una suscripción se CALCULA con fechas (vencimiento, prueba,
+    gracia), así que no queda registro de cómo estaba un día cualquiera del
+    pasado: «activas» era siempre una foto de hoy. Esta tabla guarda una fila
+    por empresa y por día, tomada a la noche por una tarea idempotente.
+
+    origen = "foto": calculada ese mismo día con todos los datos.
+    origen = "reconstruido": un día que la tarea no corrió (worker caído) y se
+    completó después, deshaciendo los ajustes registrados desde entonces. Es
+    tan bueno como el registro de ajustes; se marca para poder distinguirlo.
+    Antes de la primera foto no hay datos y no se inventan.
+    """
+
+    __tablename__ = "suscripcion_diaria"
+    __table_args__ = (
+        Index("ix_suscripcion_diaria_fecha", "fecha"),
+        CheckConstraint("origen IN ('foto','reconstruido')", name="origen"),
+    )
+
+    fecha: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresa.id"), primary_key=True)
+    estado: Mapped[str] = mapped_column(String(30))
+    plan: Mapped[str | None] = mapped_column(String(20))
+    origen: Mapped[str] = mapped_column(String(15), default="foto", server_default="foto")
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AvisoPago(Base):

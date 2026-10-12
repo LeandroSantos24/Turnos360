@@ -325,6 +325,10 @@ def actualizar_usuario(db: Session, usuario_id: int, activo: bool) -> Usuario:
     usuario = db.get(Usuario, usuario_id)
     if usuario is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+    if usuario.activo and not activo:
+        from app.services import sesiones
+
+        sesiones.revocar_todas(db, usuario, "Se cortó el acceso", "admin")
     usuario.activo = activo
     db.commit()
     db.refresh(usuario)

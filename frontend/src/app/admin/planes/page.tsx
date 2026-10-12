@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ApiError } from "@/lib/api";
 import { listarPlanes, type PlanAdmin } from "@/lib/admin-api";
 import { Encabezado, pesos } from "../_ui";
+import { PestanasSuscripciones } from "./pestanas";
 
 const ESTADOS: Record<string, string> = {
   activa: "Activa",
@@ -49,6 +50,7 @@ export default function PlanesAdmin() {
         bajada="Los planes que existen y cuántos negocios activos hay en cada uno, según el estado de su suscripción hoy."
         acciones={<Link href="/admin/empresas" className="text-sm font-medium underline underline-offset-4">Ver empresas</Link>}
       />
+      <PestanasSuscripciones />
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">{error}</p>}
       {!planes ? (
         <div className="grid gap-3 md:grid-cols-2">

@@ -22,28 +22,39 @@ import {
   historialAjustes,
   revertirAjuste,
 } from "@/lib/admin-api";
-import { useConfirmar } from "@/components/confirmar";
+import { usePedirMotivo } from "../../pedir-motivo";
 import { Button } from "@/components/ui/button";
 
 const TIPO: Record<AjusteSuscripcion["tipo"], { txt: string; cls: string }> = {
   pago: { txt: "Cuota cobrada", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
-  renovacion: { txt: "Renovación manual", cls: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
-  prorroga: { txt: "Prórroga", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
+  renovacion: { txt: "Renovación manual", cls: "bg-sky-400/15 text-sky-800 dark:text-sky-300" },
+  prorroga: { txt: "Prórroga", cls: "bg-amber-400/15 text-amber-800 dark:text-amber-300" },
   manual: { txt: "Fecha a mano", cls: "bg-muted text-muted-foreground" },
   reversion: { txt: "Deshecho", cls: "bg-destructive/10 text-destructive" },
-  plan: { txt: "Plan", cls: "bg-violet-400/15 text-violet-600 dark:text-violet-400" },
-  precio: { txt: "Precio", cls: "bg-violet-400/15 text-violet-600 dark:text-violet-400" },
+  plan: { txt: "Plan", cls: "bg-violet-400/15 text-violet-800 dark:text-violet-300" },
+  precio: { txt: "Precio", cls: "bg-violet-400/15 text-violet-800 dark:text-violet-300" },
   cancelacion: { txt: "Cancelación", cls: "bg-destructive/10 text-destructive" },
   cancelada: { txt: "Cancelada", cls: "bg-destructive/10 text-destructive" },
   reactivacion: { txt: "Reactivación", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
   suspension: { txt: "Suspensión", cls: "bg-destructive/10 text-destructive" },
   reanudacion: { txt: "Reanudación", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
-  aviso: { txt: "Transferencia informada", cls: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
+  aviso: { txt: "Transferencia informada", cls: "bg-sky-400/15 text-sky-800 dark:text-sky-300" },
   aviso_rechazado: { txt: "Transferencia rechazada", cls: "bg-destructive/10 text-destructive" },
-  info_solicitada: { txt: "Info pedida", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
+  info_solicitada: { txt: "Info pedida", cls: "bg-amber-400/15 text-amber-800 dark:text-amber-300" },
   pago_rechazado: { txt: "Pago rechazado", cls: "bg-destructive/10 text-destructive" },
   pago_devuelto: { txt: "Pago devuelto", cls: "bg-destructive/10 text-destructive" },
-  baja_postergada: { txt: "Baja postergada", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
+  baja_postergada: { txt: "Baja postergada", cls: "bg-amber-400/15 text-amber-800 dark:text-amber-300" },
+  // Lo anota la foto diaria cuando algo cambia solo (vence, termina la gracia).
+  estado: { txt: "Cambio de estado", cls: "bg-muted text-foreground" },
+};
+
+const CATEGORIA: Record<string, string> = {
+  cortesia: "Cortesía",
+  incidencia: "Por incidencia",
+  correccion: "Corrección",
+  plan: "Cambio de plan",
+  pago: "Pago",
+  devolucion: "Devolución",
 };
 
 /**
@@ -75,7 +86,7 @@ export function MovimientosSuscripcion({
   nombre: string;
   onCambio?: () => void;
 }) {
-  const confirmar = useConfirmar();
+  const { pedir, dialogo } = usePedirMotivo();
   const [movs, setMovs] = useState<AjusteSuscripcion[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -96,21 +107,17 @@ export function MovimientosSuscripcion({
   }, [cargar]);
 
   async function deshacer(a: AjusteSuscripcion) {
-    if (
-      !(await confirmar({
-        titulo: "¿Deshacer este movimiento?",
-        descripcion:
-          `El vencimiento de ${nombre} vuelve al ${fecha(a.vence_antes)}.` +
-          (a.tipo === "pago"
-            ? " La cuota que se había registrado queda anulada."
-            : ""),
-        textoAccion: "Sí, deshacer",
-        destructivo: true,
-      }))
-    )
-      return;
+    const pedido = await pedir({
+      titulo: "¿Deshacer este movimiento?",
+      descripcion:
+        `El vencimiento de ${nombre} vuelve al ${fecha(a.vence_antes)}.` +
+        (a.tipo === "pago" ? " La cuota que se había registrado queda anulada." : ""),
+      textoAccion: "Sí, deshacer",
+      destructivo: true,
+    });
+    if (!pedido) return;
     try {
-      const r = await revertirAjuste(empresaId, a.id);
+      const r = await revertirAjuste(empresaId, a.id, pedido.motivo);
       toast.success(`Listo · vence ${r.vence ? fecha(r.vence) : "sin fecha"}`);
       cargar();
       onCambio?.();
@@ -121,6 +128,7 @@ export function MovimientosSuscripcion({
 
   return (
     <div className="space-y-3">
+      {dialogo}
       <div>
         <h2 className="text-lg font-semibold">Actividad de la suscripción</h2>
         <p className="text-sm text-muted-foreground">
@@ -165,7 +173,9 @@ export function MovimientosSuscripcion({
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {a.detalle ?? "—"} · {fechaHora(a.creado_en)}
                     {a.hecho_por ? ` · ${a.hecho_por}` : ""}
+                    {a.categoria && a.tipo !== "pago" && a.tipo !== "plan" ? ` · ${CATEGORIA[a.categoria] ?? a.categoria}` : ""}
                   </p>
+                  {a.motivo && <p className="mt-0.5 text-sm">Motivo: {a.motivo}</p>}
                 </div>
                 {a.reversible && (
                   <Button variant="outline" size="sm" onClick={() => deshacer(a)}>

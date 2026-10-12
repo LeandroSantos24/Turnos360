@@ -35,6 +35,8 @@ def _crear_token(
     tipo: str,
     expira: timedelta,
     token_version: int = 0,
+    sid: str | None = None,
+    jti: str | None = None,
 ) -> str:
     """Arma y firma un token con los claims del proyecto."""
     ahora = datetime.now(timezone.utc)
@@ -48,11 +50,24 @@ def _crear_token(
         "iat": ahora,                 # 'issued at': cuándo se emitió
         "exp": ahora + expira,        # 'expiration': cuándo vence
     }
+    # 'sid': la sesión del servidor (sesion_usuario) a la que pertenece el
+    # token. Los tokens emitidos antes de que existieran las sesiones no lo
+    # traen; ver services/sesiones.py.
+    if sid:
+        payload["sid"] = sid
+    # 'jti' (solo refresh): cuál de los refresh de la sesión es este. Rota en
+    # cada renovación.
+    if jti:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algoritmo)
 
 
 def crear_access_token(
-    usuario_id: int, empresa_id: int, rol: str, token_version: int = 0
+    usuario_id: int,
+    empresa_id: int,
+    rol: str,
+    token_version: int = 0,
+    sid: str | None = None,
 ) -> str:
     """Token corto que viaja en cada request."""
     return _crear_token(
@@ -62,11 +77,17 @@ def crear_access_token(
         tipo="access",
         expira=timedelta(minutes=settings.access_token_minutos),
         token_version=token_version,
+        sid=sid,
     )
 
 
 def crear_refresh_token(
-    usuario_id: int, empresa_id: int, rol: str, token_version: int = 0
+    usuario_id: int,
+    empresa_id: int,
+    rol: str,
+    token_version: int = 0,
+    sid: str | None = None,
+    jti: str | None = None,
 ) -> str:
     """Token largo que solo sirve para renovar el access."""
     return _crear_token(
@@ -76,6 +97,8 @@ def crear_refresh_token(
         tipo="refresh",
         expira=timedelta(days=settings.refresh_token_dias),
         token_version=token_version,
+        sid=sid,
+        jti=jti,
     )
 
 

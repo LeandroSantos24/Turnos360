@@ -25,6 +25,7 @@ from app.models.finanzas import (
 )
 from app.models.mensajeria import Mensaje, PlantillaMensaje
 from app.models.organizacion import Empresa, Rubro, Sucursal, SuperAdmin, Usuario
+from app.models.cuentas import InvitacionUsuario, SesionUsuario
 from app.models.turno import Turno
 from app.models.modulos.fidelizacion import *  # noqa: F401,F403  -> E11
 from app.models.modulos.giftcards import GiftCard  # noqa: F401  -> E11
@@ -43,11 +44,13 @@ from app.models.saas import (  # cobranza del SaaS
     EventoMP,
     IntentoPago,
     PagoSuscripcion,
+    SuscripcionDiaria,
     VisitaVidriera,
 )
 from app.models.whatsapp import MovimientoWhatsapp, SaldoWhatsapp
 
 __all__ = [
+    "SesionUsuario", "InvitacionUsuario", "SuscripcionDiaria",
     "VisitaVidriera",
     "AjusteGlobal",
     "DebitoAutomatico",
