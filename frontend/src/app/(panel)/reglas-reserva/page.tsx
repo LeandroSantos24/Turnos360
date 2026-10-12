@@ -315,7 +315,7 @@ export default function ReglasReservaPage() {
       <Seccion titulo="Cancelaciones">
         <FilaSwitch
           titulo="Permitir que cancelen o reprogramen"
-          detalle="Si el cliente ya pagó una seña, la seña no se devuelve. Apagarlo no evita ausentes: solo hace que no te avisen."
+          detalle="Les llega un link en el email de confirmación y en los recordatorios para cambiar o cancelar hasta la hora del turno, y a vos un aviso. Si ya pagó una seña, la seña no se devuelve. Apagarlo no evita ausentes: solo hace que no te avisen."
           valor={form.permite_cancelar}
           onChange={(v) => set("permite_cancelar", v)}
         />

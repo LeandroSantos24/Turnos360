@@ -21,6 +21,9 @@ from app.core.reloj import hoy_de_pared
 from app.schemas.cupon import CuponValidarIn, CuponValidarOut
 from app.core.seguridad import crear_access_token, crear_refresh_token
 from app.schemas.publico import (
+    GestionCancelar,
+    GestionReprogramar,
+    GestionTurnoOut,
     RegistroIn,
     RegistroOut,
     RubroPublicoOut,
@@ -493,6 +496,54 @@ def vidriera(
         visitas.registrar_por_slug(db, slug)
 
     return datos
+
+
+# ── Autogestión del turno: el link que va en los emails ─────────────────
+# Van ANTES de las rutas con /{slug}: si no, «gestion» se tomaría como slug.
+
+@router.get("/gestion/{token}", response_model=GestionTurnoOut)
+@limiter.limit("30/minute")
+def gestion_ver(request: Request, token: str, db: DB) -> GestionTurnoOut:
+    """El turno del link, con lo que el cliente puede hacer. Sin login."""
+    from app.services import autogestion
+
+    return autogestion.ver(db, token)
+
+
+@router.get("/gestion/{token}/horarios", response_model=list[HuecosDia])
+@limiter.limit("30/minute")
+def gestion_horarios(
+    request: Request,
+    token: str,
+    db: DB,
+    desde: dt.date | None = Query(default=None),
+    dias: int = Query(default=14, ge=1, le=31),
+) -> list[HuecosDia]:
+    from app.services import autogestion
+
+    return autogestion.horarios(db, token, desde or hoy_de_pared(), dias)
+
+
+@router.post("/gestion/{token}/cancelar", response_model=GestionTurnoOut)
+@limiter.limit("10/minute")
+def gestion_cancelar(
+    request: Request, token: str, datos: GestionCancelar, db: DB
+) -> GestionTurnoOut:
+    from app.services import autogestion
+    from app.services.auditoria_admin import ip_de
+
+    return autogestion.cancelar(db, token, datos.motivo, ip_de(request))
+
+
+@router.post("/gestion/{token}/reprogramar", response_model=GestionTurnoOut)
+@limiter.limit("10/minute")
+def gestion_reprogramar(
+    request: Request, token: str, datos: GestionReprogramar, db: DB
+) -> GestionTurnoOut:
+    from app.services import autogestion
+    from app.services.auditoria_admin import ip_de
+
+    return autogestion.reprogramar(db, token, datos.inicio, ip_de(request))
 
 
 @router.get("/{slug}/horarios", response_model=list[HuecosDia])

@@ -147,6 +147,24 @@ def _plantilla(
 </body>"""
 
 
+def _linea_gestion(db, turno, empresa) -> str:
+    """«¿No podés ir? Cambiá o cancelá tu turno acá», si el negocio lo permite.
+
+    El link es el mismo en todos los emails del turno (services/autogestion).
+    Sin él, la única salida para el que no puede ir era escribirle al negocio,
+    y muchos directamente no iban.
+    """
+    from app.services.autogestion import link_si_corresponde
+
+    url = link_si_corresponde(db, turno, empresa)
+    if not url:
+        return ""
+    return (
+        f'¿No podés ir? <a href="{url}" style="color:{TEAL};font-weight:bold;">'
+        "Cambiá o cancelá tu turno acá</a>, así el horario le queda a otra persona."
+    )
+
+
 def _fecha_legible(f: dt.datetime) -> str:
     return f.strftime("%d/%m/%Y a las %H:%M")
 
@@ -320,6 +338,7 @@ def enviar_confirmacion_reserva(turno_id: int) -> None:
                 f"<b>${turno.sena_monto:,.0f}</b> con Mercado Pago (el link te lo "
                 "mostró la página al reservar)."
             )
+        lineas.append(_linea_gestion(db, turno, empresa))
         gcal = _link_gcal(
             f"{servicio} · {empresa.nombre}",
             turno.fecha_inicio,
@@ -421,6 +440,7 @@ def enviar_reprogramacion(turno_id: int) -> None:
                 f"<b>{servicio}</b>" + (f" con {profesional}" if profesional else ""),
                 f"🗓 Nueva fecha: <b>{_fecha_legible(turno.fecha_inicio)}</b>",
                 f"📍 {empresa.nombre}" + (f" · {empresa.direccion}" if empresa.direccion else ""),
+                _linea_gestion(db, turno, empresa),
             ],
             _pie_negocio(empresa),
             boton=("Agregar a Google Calendar", gcal),
@@ -457,7 +477,8 @@ def enviar_recordatorio(turno_id: int) -> None:
                 f"Mañana tenés <b>{servicio}</b> en <b>{empresa.nombre}</b>.",
                 f"📅 {_fecha_legible(turno.fecha_inicio)}",
                 (f"📍 {empresa.direccion}" if empresa.direccion else ""),
-                f"Si no podés asistir, avisá así liberan el horario: {_contacto_negocio(empresa)}.",
+                _linea_gestion(db, turno, empresa)
+                or f"Si no podés asistir, avisá así liberan el horario: {_contacto_negocio(empresa)}.",
             ],
             _pie_negocio(empresa),
             marca=empresa.nombre,
@@ -489,6 +510,7 @@ def enviar_recordatorio_2h(turno_id: int) -> None:
                 f"En un rato: <b>{servicio}</b> a las "
                 f"<b>{turno.fecha_inicio.strftime('%H:%M')}</b> en <b>{empresa.nombre}</b>.",
                 (f"📍 {empresa.direccion}" if empresa.direccion else ""),
+                _linea_gestion(db, turno, empresa),
             ],
             _pie_negocio(empresa),
             marca=empresa.nombre,
@@ -1537,3 +1559,39 @@ def avisar_pago_recibido(
             log.warning("Aviso de pago sin mandar: SMTP sin configurar")
         except Exception:
             log.exception("No se pudo mandar el aviso de pago (empresa %s)", empresa_id)
+
+
+@celery_app.task(name="app.tasks.emails.avisar_negocio_autogestion")
+def avisar_negocio_autogestion(turno_id: int, accion: str, antes_iso: str | None = None) -> None:
+    """Al email del negocio: un cliente canceló o cambió su turno desde el link."""
+    with SessionLocal() as db:
+        ctx = _cargar(db, turno_id)
+        if not ctx or not ctx["empresa"].email_publico:
+            return
+        turno, empresa, cliente = ctx["turno"], ctx["empresa"], ctx["cliente"]
+        servicio = ctx["servicio"].nombre if ctx["servicio"] else "Turno"
+        quien = f"{cliente.nombre} {cliente.apellido or ''}".strip() if cliente else "Un cliente"
+        if accion == "cancelacion":
+            titulo = "Un cliente canceló su turno"
+            lineas = [
+                f"<b>{esc(quien)}</b> canceló <b>{servicio}</b> del {_fecha_legible(turno.fecha_inicio)}.",
+                "El horario ya quedó libre en tu agenda para que lo reserve otra persona.",
+            ]
+            asunto = f"Turno cancelado por el cliente · {_fecha_legible(turno.fecha_inicio)}"
+        else:
+            antes = dt.datetime.fromisoformat(antes_iso) if antes_iso else None
+            titulo = "Un cliente cambió su turno"
+            lineas = [
+                f"<b>{esc(quien)}</b> movió <b>{servicio}</b>"
+                + (f" del {_fecha_legible(antes)}" if antes else "")
+                + f" al <b>{_fecha_legible(turno.fecha_inicio)}</b>.",
+                "La agenda ya está actualizada.",
+            ]
+            asunto = f"Turno reprogramado por el cliente · {_fecha_legible(turno.fecha_inicio)}"
+        html = _plantilla(titulo, lineas, "Lo hizo desde el link de su email de Turnos360.",
+                          marca=empresa.nombre)
+        _mandar(
+            db, empresa, empresa.email_publico, asunto, html,
+            f"aviso_autogestion_{accion} turno={turno.id}",
+            cliente_id=cliente.id if cliente else None, turno_id=turno.id,
+        )

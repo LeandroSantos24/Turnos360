@@ -189,3 +189,47 @@ export function registrarNegocio(datos: DatosRegistro): Promise<RegistroResultad
 export function verificarEmail(token: string): Promise<{ ok: boolean; detalle: string }> {
   return api.post(`/publico/verificar-email?token=${encodeURIComponent(token)}`, {});
 }
+
+// ── Autogestión del turno (link del email) ──────────────────────────────
+
+export interface GestionTurno {
+  negocio: string;
+  slug: string;
+  color_marca: string | null;
+  logo_url: string | null;
+  direccion: string | null;
+  telefono: string | null;
+  /** Solo el nombre de pila. */
+  cliente: string | null;
+  servicio: string;
+  profesional: string | null;
+  /** Hora de pared etiquetada UTC (como toda la agenda). */
+  inicio: string;
+  fin: string | null;
+  estado: string;
+  sena_estado: string | null;
+  sena_monto: number | null;
+  puede_cancelar: boolean;
+  puede_reprogramar: boolean;
+  motivo_bloqueo: string | null;
+}
+
+const rutaGestion = (token: string) => `/publico/gestion/${encodeURIComponent(token)}`;
+
+export function obtenerGestion(token: string): Promise<GestionTurno> {
+  return api.get<GestionTurno>(rutaGestion(token));
+}
+
+export function huecosGestion(token: string, desde?: string, dias = 14): Promise<HuecosDia[]> {
+  const p = new URLSearchParams({ dias: String(dias) });
+  if (desde) p.set("desde", desde);
+  return api.get<HuecosDia[]>(`${rutaGestion(token)}/horarios?${p.toString()}`);
+}
+
+export function cancelarGestion(token: string, motivo?: string): Promise<GestionTurno> {
+  return api.post<GestionTurno>(`${rutaGestion(token)}/cancelar`, { motivo: motivo || null });
+}
+
+export function reprogramarGestion(token: string, inicio: string): Promise<GestionTurno> {
+  return api.post<GestionTurno>(`${rutaGestion(token)}/reprogramar`, { inicio });
+}

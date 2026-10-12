@@ -134,6 +134,11 @@ class Turno(TenantMixin, Base):
         DateTime(timezone=True), server_default=func.now()
     )
     motivo_cancelacion: Mapped[str | None] = mapped_column(String(300))
+    # Link de autogestión que va en los emails (services/autogestion.py). Se
+    # guarda el HASH del token, nunca el token. Sumar 1 a la versión revoca
+    # el link: el que estaba en el email deja de servir.
+    gestion_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    gestion_token_hash: Mapped[str | None] = mapped_column(String(64))
     notas: Mapped[str | None] = mapped_column(Text)
     creado_por: Mapped[int | None] = mapped_column(
         ForeignKey("usuario.id")

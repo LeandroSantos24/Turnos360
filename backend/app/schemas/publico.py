@@ -185,3 +185,39 @@ class RubroPublicoOut(BaseModel):
     cliente: str = "cliente"
     turno: str = "turno"
     servicios: list[str] = []
+
+
+# ── Autogestión del turno (link del email) ──────────────────────────────
+
+class GestionTurnoOut(BaseModel):
+    negocio: str
+    slug: str
+    color_marca: str | None = None
+    logo_url: str | None = None
+    direccion: str | None = None
+    telefono: str | None = None
+    cliente: str | None = None
+    servicio: str
+    profesional: str | None = None
+    inicio: dt.datetime
+    fin: dt.datetime | None = None
+    estado: str
+    sena_estado: str | None = None
+    sena_monto: float | None = None
+    puede_cancelar: bool
+    puede_reprogramar: bool
+    motivo_bloqueo: str | None = None
+
+
+class GestionCancelar(BaseModel):
+    motivo: str | None = Field(default=None, max_length=200)
+
+
+class GestionReprogramar(BaseModel):
+    inicio: dt.datetime
+
+    @field_validator("inicio")
+    @classmethod
+    def _zona(cls, v: dt.datetime) -> dt.datetime:
+        # Misma convención que la reserva: hora de pared etiquetada UTC.
+        return v.replace(tzinfo=dt.timezone.utc)
