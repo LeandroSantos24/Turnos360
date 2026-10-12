@@ -193,7 +193,7 @@ export function GestionSuscripcion({
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {s.vence ? `Vence ${fecha(s.vence)}` : "Sin vencimiento"} · ${f.plan.precio.toLocaleString("es-AR")}/mes
+            {s.vence ? `Vence ${fecha(s.vence)}` : "Sin vencimiento"} · {f.plan.precio == null ? "sin precio de lista" : `$${f.plan.precio.toLocaleString("es-AR")}/mes`}
             {f.plan.precio_pactado ? " (pactado)" : ""}
             {s.plan_programado ? ` · baja programada a ${s.plan_programado}` : ""}
           </p>

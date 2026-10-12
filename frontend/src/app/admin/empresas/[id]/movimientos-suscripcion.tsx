@@ -26,7 +26,7 @@ import { useConfirmar } from "@/components/confirmar";
 import { Button } from "@/components/ui/button";
 
 const TIPO: Record<AjusteSuscripcion["tipo"], { txt: string; cls: string }> = {
-  pago: { txt: "Cuota cobrada", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
+  pago: { txt: "Cuota cobrada", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
   renovacion: { txt: "Renovación manual", cls: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
   prorroga: { txt: "Prórroga", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
   manual: { txt: "Fecha a mano", cls: "bg-muted text-muted-foreground" },
@@ -35,9 +35,9 @@ const TIPO: Record<AjusteSuscripcion["tipo"], { txt: string; cls: string }> = {
   precio: { txt: "Precio", cls: "bg-violet-400/15 text-violet-600 dark:text-violet-400" },
   cancelacion: { txt: "Cancelación", cls: "bg-destructive/10 text-destructive" },
   cancelada: { txt: "Cancelada", cls: "bg-destructive/10 text-destructive" },
-  reactivacion: { txt: "Reactivación", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
+  reactivacion: { txt: "Reactivación", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
   suspension: { txt: "Suspensión", cls: "bg-destructive/10 text-destructive" },
-  reanudacion: { txt: "Reanudación", cls: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" },
+  reanudacion: { txt: "Reanudación", cls: "bg-emerald-400/15 text-emerald-800 dark:text-emerald-400" },
   aviso: { txt: "Transferencia informada", cls: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
   aviso_rechazado: { txt: "Transferencia rechazada", cls: "bg-destructive/10 text-destructive" },
   info_solicitada: { txt: "Info pedida", cls: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },

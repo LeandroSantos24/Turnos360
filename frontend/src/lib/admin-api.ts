@@ -555,7 +555,8 @@ export interface FichaEmpresa {
     codigo: string;
     etiqueta: string;
     resumen: string;
-    precio: number;
+    /** null en los planes sin precio de lista (gratuito, a medida). */
+    precio: number | null;
     /** El precio salió de la ficha comercial y no de la grilla. */
     precio_pactado: boolean;
   };
@@ -627,4 +628,334 @@ export function guardarMarca(logoUrl: string | null): Promise<{ logo_url: string
   return adminApi.put<{ logo_url: string | null }>("/admin/marca", {
     logo_url: logoUrl,
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Finanzas del super-admin (routers/admin_finanzas.py)
+// ══════════════════════════════════════════════════════════════════════
+
+const qs = (p: Record<string, string | number | boolean | null | undefined>) => {
+  const u = new URLSearchParams();
+  for (const [k, v] of Object.entries(p)) if (v !== undefined && v !== null && v !== "") u.set(k, String(v));
+  const s = u.toString();
+  return s ? `?${s}` : "";
+};
+
+export type EstadoOperacion =
+  | "pendiente" | "en_revision" | "acreditado" | "rechazado" | "cancelado" | "anulado"
+  | "reembolso_solicitado" | "reembolso_parcial" | "reembolso_total";
+
+export interface Operacion {
+  clave: string;
+  tipo: "pago" | "transferencia_informada" | "intento_mp";
+  id: number;
+  empresa_id: number;
+  empresa: string;
+  concepto: string;
+  monto: number;
+  moneda: string;
+  creado_en: string | null;
+  fecha: string | null;
+  acreditado_en: string | null;
+  metodo: string;
+  estado: EstadoOperacion;
+  estado_etiqueta: string;
+  id_proveedor: string | null;
+  referencia: string | null;
+  devuelto: number;
+  conciliado: boolean;
+  comision: number | null;
+  motivo?: string | null;
+}
+
+export interface FiltrosCobros {
+  desde?: string;
+  hasta?: string;
+  empresa_id?: number | null;
+  metodo?: string;
+  estado?: string;
+  monto_min?: number | null;
+  monto_max?: number | null;
+  buscar?: string;
+  pagina?: number;
+  limite?: number;
+}
+
+export interface ListaCobros {
+  total: number;
+  pagina: number;
+  limite: number;
+  filas: Operacion[];
+  sumas: { acreditado: number; en_revision: number; pendiente: number; rechazado: number; devuelto: number };
+}
+
+export function listarCobros(f: FiltrosCobros): Promise<ListaCobros> {
+  return adminApi.get<ListaCobros>(`/admin/cobros${qs({ ...f })}`);
+}
+
+/** Descarga el CSV con la sesión de admin (no es un link público). */
+export async function descargarCsv(ruta: string, nombre: string): Promise<void> {
+  const res = await fetch(`${API_URL}${ruta}`, { headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` } });
+  if (!res.ok) throw new ApiError(res.status, "No se pudo exportar.");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function exportarCobros(f: FiltrosCobros): Promise<void> {
+  const { pagina: _p, limite: _l, ...resto } = f;
+  void _p;
+  void _l;
+  return descargarCsv(`/admin/cobros/exportar${qs({ ...resto })}`, "turnos360-cobros.csv");
+}
+
+export interface Devolucion {
+  id: number;
+  monto: number;
+  metodo: "mercadopago" | "manual";
+  estado: "solicitada" | "en_proceso" | "aprobada" | "rechazada";
+  motivo: string;
+  referencia: string | null;
+  mp_refund_id: string | null;
+  error: string | null;
+  origen: string;
+  solicitada_por: string | null;
+  solicitada_en: string | null;
+  confirmada_en: string | null;
+}
+
+export interface DetallePago {
+  id: number;
+  empresa_id: number;
+  empresa: string;
+  concepto: string;
+  monto: number;
+  moneda: string;
+  metodo: string;
+  fecha: string | null;
+  creado_en: string | null;
+  registrado_por: string | null;
+  periodo_desde: string | null;
+  periodo_hasta: string | null;
+  notas: string | null;
+  mp_payment_id: string | null;
+  comision: number | null;
+  neto: number | null;
+  estado: EstadoOperacion;
+  estado_etiqueta: string;
+  anulado: boolean;
+  anulado_en: string | null;
+  anulado_por: string | null;
+  anulado_motivo: string | null;
+  conciliado: boolean;
+  conciliado_en: string | null;
+  conciliado_por: string | null;
+  referencia_banco: string | null;
+  devuelto: number;
+  devolucion_pendiente: number;
+  devolvible: number;
+  devoluciones: Devolucion[];
+  historial: { fecha: string | null; tipo: string; detalle: string | null; hecho_por: string | null; revertido: boolean }[];
+  aviso: { id: number; referencia: string | null; resuelto_por: string | null; resuelto_en: string | null; tiene_comprobante: boolean } | null;
+  acciones: { devolver_mp: boolean; devolver_manual: boolean; conciliar: boolean; anular: boolean };
+}
+
+export const verPago = (id: number) => adminApi.get<DetallePago>(`/admin/pagos/${id}`);
+export const devolverPago = (
+  id: number,
+  d: { monto: number; motivo: string; referencia?: string; confirmada?: boolean; clave: string },
+) => adminApi.post<DetallePago>(`/admin/pagos/${id}/devolver`, d);
+export const confirmarDevolucion = (id: number, referencia: string) =>
+  adminApi.post<DetallePago>(`/admin/devoluciones/${id}/confirmar`, { referencia });
+export const refrescarDevolucion = (id: number) => adminApi.post<DetallePago>(`/admin/devoluciones/${id}/refrescar`, {});
+export const conciliarPago = (id: number, conciliado: boolean, referencia?: string) =>
+  adminApi.post<DetallePago>(`/admin/pagos/${id}/conciliar`, { conciliado, referencia: referencia ?? null });
+export const anularPago = (id: number, motivo: string) => adminApi.post<DetallePago>(`/admin/pagos/${id}/anular`, { motivo });
+export const anularIntento = (id: number, motivo: string) =>
+  adminApi.post<{ id: number; estado: string }>(`/admin/intentos/${id}/anular`, { motivo });
+
+export interface TotalesCaja {
+  cobros: number;
+  transferencias_verificadas: number;
+  mercadopago: number;
+  devoluciones: number;
+  comisiones: number;
+  pagos_mp_sin_comision: number;
+  neto: number;
+  sin_conciliar: { cantidad: number; monto: number };
+  conciliado: number;
+  por_metodo: Record<string, { cobros: number; devoluciones: number }>;
+  cantidad_cobros: number;
+  cantidad_devoluciones: number;
+}
+
+export interface Cierre {
+  id: number;
+  desde: string;
+  hasta: string;
+  estado: "borrador" | "cerrado" | "reabierto" | "anulado";
+  totales: TotalesCaja & { saldo_inicial: number; saldo_final: number };
+  observaciones: string | null;
+  preparado_por: string;
+  preparado_en: string | null;
+  cerrado_por: string | null;
+  cerrado_en: string | null;
+  reabierto_por: string | null;
+  reabierto_en: string | null;
+  motivo_reapertura: string | null;
+}
+
+export interface Caja {
+  desde: string;
+  hasta: string;
+  saldo_inicial: number;
+  totales: TotalesCaja;
+  saldo_final: number;
+  es_calculado: boolean;
+  ingresos: { pago_id: number; fecha: string; empresa: string; concepto: string; metodo: string; monto: number; comision: number | null; conciliado: boolean; referencia: string | null }[];
+  devoluciones: { devolucion_id: number; pago_id: number; fecha: string; empresa: string; metodo: string; monto: number; referencia: string | null }[];
+  cierre: Cierre | null;
+  diferencias_con_cierre: Record<string, number> | null;
+}
+
+export const verCaja = (desde: string, hasta: string) => adminApi.get<Caja>(`/admin/caja${qs({ desde, hasta })}`);
+export const listarCierres = () => adminApi.get<Cierre[]>("/admin/cierres");
+export const prepararCierre = (desde: string, hasta: string, observaciones?: string) =>
+  adminApi.post<Cierre>("/admin/cierres", { desde, hasta, observaciones: observaciones || null });
+export const confirmarCierre = (id: number, observaciones?: string) =>
+  adminApi.post<Cierre>(`/admin/cierres/${id}/confirmar`, { observaciones: observaciones ?? null });
+export const reabrirCierre = (id: number, motivo: string) => adminApi.post<Cierre>(`/admin/cierres/${id}/reabrir`, { motivo });
+export const descartarCierre = (id: number) => adminApi.post<Cierre>(`/admin/cierres/${id}/descartar`, {});
+
+export interface PuntoEstadistica {
+  periodo: string;
+  bruto: number;
+  devoluciones: number;
+  comisiones: number;
+  neto: number;
+  cobros: number;
+  renovaciones: number;
+  altas: number;
+  pendientes: number;
+  rechazados: number;
+  cancelaciones: number;
+}
+
+export interface Estadisticas {
+  granularidad: "semana" | "mes";
+  desde: string;
+  hasta: string;
+  serie: PuntoEstadistica[];
+  total: Omit<PuntoEstadistica, "periodo">;
+  anterior: Omit<PuntoEstadistica, "periodo">;
+  variacion: Record<string, number | null>;
+  suscripciones_activas_hoy: number;
+  definiciones: Record<string, string>;
+}
+
+export const verEstadisticas = (granularidad: string, desde?: string, hasta?: string) =>
+  adminApi.get<Estadisticas>(`/admin/estadisticas${qs({ granularidad, desde, hasta })}`);
+export const exportarEstadisticas = (granularidad: string, desde?: string, hasta?: string) =>
+  descargarCsv(`/admin/estadisticas/exportar${qs({ granularidad, desde, hasta })}`, `turnos360-estadisticas-${granularidad}.csv`);
+
+export interface EventoMPAdmin {
+  recibido_en: string;
+  tipo: string;
+  accion: string | null;
+  resultado: string;
+  detalle: string | null;
+}
+
+export interface EstadoMP {
+  configurado: boolean;
+  entorno: "pruebas" | "produccion_o_usuario_de_prueba" | null;
+  webhook_secreto: boolean;
+  firma_modo: string;
+  webhook_url: string;
+  ultimo_evento: EventoMPAdmin | null;
+  ultimo_procesado: EventoMPAdmin | null;
+  errores_recientes: EventoMPAdmin[];
+  intentos_pendientes_24h: number;
+  pagos_mp_sin_conciliar: number;
+  devoluciones_abiertas: number;
+  comprobado: boolean;
+  falta_comprobar: string[];
+}
+
+export const estadoMercadoPago = () => adminApi.get<EstadoMP>("/admin/integraciones/mercadopago");
+
+export interface PlanAdmin {
+  codigo: string;
+  etiqueta: string;
+  precio: number | null;
+  profesionales: number | null;
+  usuarios: number | null;
+  sucursales: number;
+  se_vende_solo: boolean;
+  funciones: string[];
+  empresas: number;
+  por_estado: Record<string, number>;
+}
+
+export const listarPlanes = () => adminApi.get<PlanAdmin[]>("/admin/planes");
+
+export interface ResumenGeneral {
+  desde: string;
+  hasta: string;
+  empresas: { total: number; activas: number; inactivas: number };
+  suscripciones: { por_estado: Record<string, number>; activas: number; por_vencer_7d: number };
+  periodo: {
+    acreditado: number;
+    cantidad_cobros: number;
+    devoluciones: number;
+    comisiones: number;
+    neto: number;
+    en_revision: number;
+    pendiente: number;
+    rechazado: number;
+  };
+  transferencias_en_revision: number;
+  devoluciones_pendientes: { cantidad: number; monto: number };
+  serie_semanal: PuntoEstadistica[];
+  alertas: { tipo: "aviso" | "info" | "error"; texto: string; href: string }[];
+}
+
+export const resumenGeneral = (desde?: string, hasta?: string) =>
+  adminApi.get<ResumenGeneral>(`/admin/resumen${qs({ desde, hasta })}`);
+
+export interface UsuarioGlobal {
+  id: number;
+  nombre: string;
+  email: string;
+  rol: RolUsuario;
+  activo: boolean;
+  email_verificado: boolean;
+  empresa_id: number;
+  empresa: string;
+  sucursal: string | null;
+  restablecimiento_pendiente: boolean;
+}
+
+export const listarUsuariosGlobal = (f: { buscar?: string; empresa_id?: number; rol?: string; activo?: boolean; pagina?: number }) =>
+  adminApi.get<{ total: number; pagina: number; limite: number; filas: UsuarioGlobal[] }>(`/admin/usuarios${qs({ ...f })}`);
+export const cambiarAccesoUsuario = (id: number, activo: boolean, motivo?: string) =>
+  adminApi.post<{ id: number; activo: boolean }>(`/admin/usuarios/${id}/acceso`, { activo, motivo: motivo || null });
+export const restablecerClaveUsuario = (id: number, cerrar_sesiones: boolean) =>
+  adminApi.post<{ ok: boolean; detalle: string; sesiones_cerradas: boolean }>(`/admin/usuarios/${id}/restablecer`, { cerrar_sesiones });
+
+export function listarAuditoriaFiltrada(f: {
+  empresa_id?: number;
+  accion?: string;
+  admin_email?: string;
+  desde?: string;
+  hasta?: string;
+  limite?: number;
+}): Promise<FilaAuditoria[]> {
+  return adminApi.get<FilaAuditoria[]>(`/admin/auditoria${qs({ ...f })}`);
 }

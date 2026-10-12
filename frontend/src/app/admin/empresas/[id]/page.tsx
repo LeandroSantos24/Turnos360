@@ -3,15 +3,16 @@
 /**
  * Ficha de una empresa (/admin/empresas/[id]).
  *
- * Arriba la suscripción con sus acciones críticas (cancelar, reactivar,
- * suspender), después datos · uso · cobranza · actividad (la ficha), los
- * usuarios, los movimientos de la suscripción y la auditoría del admin.
+ * Cuatro pestañas: Resumen (la suscripción con sus acciones críticas y la
+ * ficha comercial), Usuarios (accesos y restablecer contraseña), Pagos (las
+ * operaciones de cobro de este negocio) y Uso e historial (movimientos de la
+ * suscripción y auditoría). La pestaña va en el #hash para poder linkearla.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, ExternalLink, History, LayoutDashboard, Receipt, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirmar } from "@/components/confirmar";
 
@@ -24,7 +25,7 @@ import {
   RolUsuario,
 } from "@/lib/admin-api";
 import { ApiError } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -45,6 +46,16 @@ import {
 import { MovimientosSuscripcion } from "./movimientos-suscripcion";
 import { AuditoriaEmpresa, GestionSuscripcion } from "./gestion-suscripcion";
 import { Ficha } from "../../ficha-empresa";
+import { RestablecerClave } from "../../usuarios/restablecer-clave";
+import { PagosEmpresa } from "./pagos-empresa";
+
+const PESTANAS = [
+  { id: "resumen", label: "Resumen", icon: LayoutDashboard },
+  { id: "usuarios", label: "Usuarios", icon: Users },
+  { id: "pagos", label: "Pagos", icon: Receipt },
+  { id: "historial", label: "Uso e historial", icon: History },
+] as const;
+type Pestana = (typeof PESTANAS)[number]["id"];
 
 const SYNE = { fontFamily: "var(--fuente-titulos)" } as const;
 
@@ -77,6 +88,17 @@ export default function AdminUsuariosPage() {
   const [rol, setRol] = useState<RolUsuario | "">("");
   // Sube cuando una acción cambia la suscripción: las secciones se recargan.
   const [version, setVersion] = useState(0);
+  const [pestana, setPestana] = useState<Pestana>("resumen");
+
+  useEffect(() => {
+    const h = window.location.hash.slice(1);
+    if (PESTANAS.some((p) => p.id === h)) setPestana(h as Pestana);
+  }, []);
+
+  function irA(p: Pestana) {
+    setPestana(p);
+    window.history.replaceState(null, "", `#${p}`);
+  }
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -154,7 +176,7 @@ export default function AdminUsuariosPage() {
   return (
     <div>
       <Link
-        href="/admin"
+        href="/admin/empresas"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Volver a empresas
@@ -170,7 +192,7 @@ export default function AdminUsuariosPage() {
               <button
                 type="button"
                 onClick={() => window.open(`/${slugEmpresa}`, "_blank", "noopener,noreferrer")}
-                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                className="inline-flex items-center gap-1 font-medium text-[hsl(170_85%_26%)] hover:underline dark:text-primary"
               >
                 /{slugEmpresa} <ExternalLink className="h-3.5 w-3.5" />
               </button>
@@ -179,17 +201,41 @@ export default function AdminUsuariosPage() {
         </div>
       </div>
 
-      <div className="mb-6 space-y-4">
-        <GestionSuscripcion
-          empresaId={empresaId}
-          version={version}
-          onCambio={() => setVersion((v) => v + 1)}
-        />
-        <div className="overflow-hidden rounded-2xl border">
-          <Ficha key={version} empresaId={empresaId} />
+      <div role="tablist" aria-label="Secciones de la empresa" className="-mx-1 mb-6 overflow-x-auto px-1">
+        <div className="flex min-w-max gap-1 border-b">
+          {PESTANAS.map(({ id, label, icon: Icono }) => (
+            <button
+              key={id}
+              role="tab"
+              id={`tab-${id}`}
+              aria-selected={pestana === id}
+              aria-controls={`panel-${id}`}
+              onClick={() => irA(id)}
+              className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium ${
+                pestana === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icono className="h-4 w-4" aria-hidden /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {pestana === "resumen" && (
+        <div role="tabpanel" id="panel-resumen" aria-labelledby="tab-resumen" className="mb-6 space-y-4">
+          <GestionSuscripcion
+            empresaId={empresaId}
+            version={version}
+            onCambio={() => setVersion((v) => v + 1)}
+          />
+          <div className="overflow-hidden rounded-2xl border">
+            <Ficha key={version} empresaId={empresaId} />
+          </div>
+        </div>
+      )}
+
+      {pestana === "usuarios" && (
+      <div role="tabpanel" id="panel-usuarios" aria-labelledby="tab-usuarios">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Usuarios</h2>
         <Dialog
@@ -199,10 +245,8 @@ export default function AdminUsuariosPage() {
             if (!o) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button>
+          <DialogTrigger className={buttonVariants()}>
               <Plus className="mr-1.5 h-4 w-4" /> Nuevo usuario
-            </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -278,19 +322,33 @@ export default function AdminUsuariosPage() {
                   {u.email} · {labelRol(u.rol)}
                 </p>
               </div>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Switch
-                  checked={u.activo}
-                  onCheckedChange={() => toggleActivo(u)}
-                />
-                Activo
-              </label>
+              <div className="flex items-center gap-3">
+                <RestablecerClave usuario={u} />
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Switch
+                    checked={u.activo}
+                    onCheckedChange={() => toggleActivo(u)}
+                    aria-label={`Acceso de ${u.nombre}`}
+                  />
+                  Activo
+                </label>
+              </div>
             </div>
           ))}
         </div>
       )}
+      </div>
+      )}
 
-      <div className="pt-6">
+      {pestana === "pagos" && (
+        <div role="tabpanel" id="panel-pagos" aria-labelledby="tab-pagos">
+          <PagosEmpresa empresaId={empresaId} onCambio={() => setVersion((v) => v + 1)} />
+        </div>
+      )}
+
+      {pestana === "historial" && (
+      <div role="tabpanel" id="panel-historial" aria-labelledby="tab-historial">
+      <div>
         <MovimientosSuscripcion
           key={`m${version}`}
           empresaId={empresaId}
@@ -302,6 +360,8 @@ export default function AdminUsuariosPage() {
       <div className="pt-6">
         <AuditoriaEmpresa empresaId={empresaId} version={version} />
       </div>
+      </div>
+      )}
     </div>
   );
 }

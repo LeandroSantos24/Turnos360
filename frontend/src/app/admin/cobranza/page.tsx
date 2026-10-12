@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { useConfirmar } from "@/components/confirmar";
 import { AvisosDePago } from "./avisos-de-pago";
 import { HistorialAvisos } from "./historial-avisos";
+import { PestanasCobros } from "../cobros/pestanas";
 
 import {
   AvisoPago,
@@ -177,12 +178,13 @@ export default function CobranzaPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--fuente-titulos)" }}>
-          Cobranza
+          Cobros y pagos
         </h1>
         <p className="text-sm text-muted-foreground">
-          A quién cobrarle, cuánto entró y qué está por vencer.
+          A quién cobrarle, qué transferencias revisar y qué está por vencer.
         </p>
       </div>
+      <PestanasCobros />
 
       {/* Alertas: qué hay que mirar hoy. Cada una filtra la lista. */}
       {resumen && resumen.alertas.length > 0 && (
