@@ -352,7 +352,7 @@ export default function AgendaPage() {
               value={recursoId ? String(recursoId) : undefined}
               onValueChange={(v) => setRecursoId(Number(v))}
             >
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-44" aria-label="Recurso">
                 <SelectValue placeholder="Elegí un recurso">
                   {(v) =>
                     recursos.find((r) => String(r.id) === String(v))?.nombre ?? v

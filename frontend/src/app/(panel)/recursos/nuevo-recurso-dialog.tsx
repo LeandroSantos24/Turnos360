@@ -15,7 +15,7 @@ import { crearRecurso } from "@/lib/recursos-api";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -69,9 +69,7 @@ export function NuevoRecursoDialog({ onCreado }: { onCreado: () => void }) {
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button>Nuevo recurso</Button>
-      </DialogTrigger>
+      <DialogTrigger className={buttonVariants()}>Nuevo recurso</DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nuevo recurso</DialogTitle>

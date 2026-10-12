@@ -29,7 +29,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -245,10 +245,11 @@ export default function MembresiasPage() {
                     <SoloDueno>
                       <div className="absolute right-3 top-3">
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical size={16} />
-                            </Button>
+                          <DropdownMenuTrigger
+                            className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                            aria-label={`Acciones de ${plan.nombre}`}
+                          >
+                            <MoreVertical size={16} aria-hidden />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => abrirEditar(plan)}>

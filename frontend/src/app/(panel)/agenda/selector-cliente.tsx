@@ -20,7 +20,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -113,18 +113,15 @@ export function SelectorCliente({
 
   return (
     <Popover open={abierto} onOpenChange={setAbierto}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={abierto}
-          className="w-full justify-between font-normal"
-        >
-          <span className={clienteElegido ? "" : "text-muted-foreground"}>
-            {etiqueta}
-          </span>
-          <ChevronsUpDown size={16} className="ml-2 shrink-0 opacity-50" />
-        </Button>
+      <PopoverTrigger
+        role="combobox"
+        aria-expanded={abierto}
+        className={buttonVariants({ variant: "outline", className: "w-full justify-between font-normal" })}
+      >
+        <span className={clienteElegido ? "" : "text-muted-foreground"}>
+          {etiqueta}
+        </span>
+        <ChevronsUpDown size={16} className="ml-2 shrink-0 opacity-50" aria-hidden />
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command shouldFilter={false}>

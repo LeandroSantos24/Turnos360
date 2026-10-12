@@ -15,8 +15,10 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        // Tono suave (no rojo lleno) para no gritar en cada pantalla, pero con
+        // borde y texto que pasan AA: antes el texto rojo sobre rosa daba 3,4:1.
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "border-destructive/35 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15 focus-visible:border-destructive focus-visible:ring-destructive/30 aria-expanded:bg-destructive/15 dark:bg-destructive/10 dark:hover:bg-destructive/20 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

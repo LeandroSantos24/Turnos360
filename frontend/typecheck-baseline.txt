@@ -15,25 +15,17 @@
 # Para regenerarlo (solo después de arreglar errores de verdad):
 #     npm run typecheck:actualizar
 #
-# Errores congelados: 21
+# Errores congelados: 13
 src/app/(panel)/agenda/buscar-hueco-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/agenda/buscar-hueco-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/agenda/cobro-dialog.tsx :: TS2345 :: Argument of type 'string | null' is not assignable to parameter of type 'string'.
 src/app/(panel)/agenda/nuevo-turno-dialog.tsx :: TS2345 :: Argument of type 'string | null' is not assignable to parameter of type 'SetStateAction<string>'.
 src/app/(panel)/agenda/nuevo-turno-dialog.tsx :: TS2345 :: Argument of type 'string | null' is not assignable to parameter of type 'SetStateAction<string>'.
-src/app/(panel)/agenda/selector-cliente.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & NativeButtonProps & Omit<WithBaseUIEvent<Omit<DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>, "ref"> & { ...; }>, "color" | ... 3 more ... | "defaultValue"> & { ...; } & { ...; }'.
 src/app/(panel)/agenda/turno-detalle.tsx :: TS18047 :: 'turno' is possibly 'null'.
 src/app/(panel)/agenda/turno-detalle.tsx :: TS2322 :: Type '(servicioId: string) => void' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/caja/gasto-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/caja/gasto-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/clientes/asignar-membresia-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
 src/app/(panel)/clientes/editar-cliente-dialog.tsx :: TS2345 :: Argument of type '{ nombre: string; apellido: string; dni: string; email: string; telefono: string; fecha_nacimiento: string; canal_adquisicion: string; etiquetas: string[]; observaciones: string; }' is not assignable to parameter of type 'SetStateAction<DatosCliente | null>'.
-src/app/(panel)/clientes/nuevo-cliente-dialog.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
-src/app/(panel)/clientes/page.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
 src/app/(panel)/membresias/asignar-a-cliente-dialog.tsx :: TS2322 :: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(value: string | null, eventDetails: SelectRootChangeEventDetails) => void'.
-src/app/(panel)/membresias/page.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
-src/app/(panel)/recursos/editar-recurso-dialog.tsx :: TS2322 :: Type '(v: string) => void' is not assignable to type '(value: "equipo" | "persona" | "box" | null, eventDetails: SelectRootChangeEventDetails) => void'.
-src/app/(panel)/recursos/nuevo-recurso-dialog.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
-src/app/(panel)/recursos/page.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
-src/app/(panel)/servicios/nuevo-servicio-dialog.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
-src/app/(panel)/servicios/page.tsx :: TS2322 :: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & Props<unknown>'.
+src/app/(panel)/recursos/editar-recurso-dialog.tsx :: TS2322 :: Type '(v: string) => void' is not assignable to type '(value: "persona" | "box" | "equipo" | null, eventDetails: SelectRootChangeEventDetails) => void'.

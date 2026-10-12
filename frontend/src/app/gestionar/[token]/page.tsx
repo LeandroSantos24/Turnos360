@@ -11,6 +11,7 @@
  * Cada acción tiene un paso de confirmación: un clic suelto no cancela nada.
  */
 
+import { legible } from "@/lib/color";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -28,26 +29,6 @@ import {
 import { telefonoWa } from "@/lib/telefono";
 
 const ACENTO = "#0ca88c";
-
-/** Oscurece el color del negocio hasta que el texto blanco encima se lea
- *  (AA, 4,5:1). El color de marca puede ser cualquiera: un amarillo claro
- *  con texto blanco no se lee. */
-function legible(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#0a7d68";
-  let [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
-  const lum = (x: number, y: number, z: number) => {
-    const c = [x, y, z].map((v) => {
-      const s = v / 255;
-      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  };
-  for (let i = 0; i < 20 && 1.05 / (lum(r, g, b) + 0.05) < 4.5; i++) {
-    [r, g, b] = [r, g, b].map((v) => Math.round(v * 0.9));
-  }
-  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
 
 /** La agenda guarda hora de pared etiquetada UTC: se leen los dígitos tal cual. */
 function local(iso: string): Date {

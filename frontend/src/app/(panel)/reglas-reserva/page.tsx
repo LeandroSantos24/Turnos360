@@ -97,7 +97,7 @@ function FilaSwitch({
         <p className="text-sm font-medium">{titulo}</p>
         <p className="mt-0.5 text-sm text-muted-foreground">{detalle}</p>
       </div>
-      <Switch checked={valor} onCheckedChange={onChange} />
+      <Switch checked={valor} onCheckedChange={onChange} aria-label={titulo} />
     </div>
   );
 }

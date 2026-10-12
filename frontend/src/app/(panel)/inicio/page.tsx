@@ -10,6 +10,7 @@
  * Período: hoy / esta semana / este mes (calendario) / personalizado (rango libre).
  */
 
+import { legible } from "@/lib/color";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -389,7 +390,7 @@ export default function InicioPage() {
               setBarberoId(v === "todos" ? null : Number(v))
             }
           >
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-44" aria-label="Profesional">
               <SelectValue>
                 {(v) =>
                   v === "todos"
@@ -544,8 +545,13 @@ export default function InicioPage() {
                         </span>
                       </div>
                       <span
-                        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={{ backgroundColor: `${color}22`, color }}
+                        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-[var(--chip-claro)] dark:text-[var(--chip-oscuro)]"
+                        style={{
+                          backgroundColor: `${color}22`,
+                          // Oscurecido sobre fondo claro; el color tal cual sobre el oscuro.
+                          ["--chip-claro" as string]: legible(color, 5),
+                          ["--chip-oscuro" as string]: color,
+                        }}
                       >
                         {labelEstado(t.estado)}
                       </span>

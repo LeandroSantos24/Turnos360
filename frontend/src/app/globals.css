@@ -64,7 +64,10 @@
     --accent: 168 100% 42%;           /* teal */
     --accent-foreground: 222 47% 11%;
 
-    --destructive: 0 84% 60%;         /* #ef4444 */
+    /* 42 % y no 60 % (#ef4444): ese rojo daba 3,8:1 sobre blanco, debajo del
+       AA (4,5) en los mensajes de error y en el botón destructivo. #b91c1c-ish:
+       6,4:1 como texto y con blanco encima. */
+    --destructive: 0 74% 42%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 214 32% 91%;            /* #e2e8f0 */
@@ -98,8 +101,11 @@
     --muted-foreground: 215 20% 65%;
     --accent: 168 100% 42%;
     --accent-foreground: 222 47% 11%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 210 40% 98%;
+    /* En oscuro el rojo se usa más como TEXTO que como fondo: el 30 % de antes
+       (#7f1d1d) era ilegible sobre el navy (1,6:1). Rojo claro con texto navy
+       encima: 6,9:1 en las dos direcciones. */
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 222 47% 11%;
     --border: 217 33% 17%;
     --input: 217 33% 17%;
     --ring: 168 100% 42%;
@@ -397,9 +403,14 @@ select option {
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.5rem;
-    color: hsl(var(--tono, var(--acento-teal)));
+    /* El texto va oscurecido: el tono puro sobre su propio tinte daba 3:1
+       con los acentos claros (rosa, ámbar). */
+    color: color-mix(in srgb, hsl(var(--tono, var(--acento-teal))) 62%, black);
     background-color: hsl(var(--tono, var(--acento-teal)) / 0.12);
     box-shadow: inset 0 0 0 1px hsl(var(--tono, var(--acento-teal)) / 0.2);
+  }
+  .dark .pildora {
+    color: hsl(var(--tono, var(--acento-teal)));
   }
 }
 

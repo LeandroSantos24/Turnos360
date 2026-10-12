@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { MoreVertical, Pencil, Scissors, Search, Trash2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -291,10 +291,11 @@ export default function ServiciosPage() {
                   <TableCell>
                     <SoloDueno>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical size={16} />
-                          </Button>
+                        <DropdownMenuTrigger
+                          className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                          aria-label={`Acciones de ${s.nombre}`}
+                        >
+                          <MoreVertical size={16} aria-hidden />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => setEditando(s)}>

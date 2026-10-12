@@ -16,7 +16,7 @@ import { MoreVertical, Pencil, Search, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -202,10 +202,11 @@ export default function ClientesPage() {
                     <TableCell>{c.canal_adquisicion ?? "—"}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical size={16} />
-                          </Button>
+                        <DropdownMenuTrigger
+                          className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                          aria-label={`Acciones de ${c.nombre}`}
+                        >
+                          <MoreVertical size={16} aria-hidden />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => setEditando(c)}>

@@ -7,6 +7,7 @@
  * panel (dark/light): todos los colores son explícitos a propósito.
  */
 
+import { legible } from "@/lib/color";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { urlDeImagen } from "@/lib/imagenes";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -271,9 +272,12 @@ export function BotonAcento({
   const clase = `inline-flex items-center justify-center gap-2 rounded-full font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
     grande ? "px-7 py-3.5 text-base" : "px-5 py-2.5 text-sm"
   }`;
+  // Con el color tal cual, el turquesa por defecto (#0ca88c) con texto blanco
+  // daba 3:1. Se oscurece lo justo para AA sin cambiar el tono de la marca.
+  const fondo = legible(acento);
   const estilo = {
-    background: acento,
-    outlineColor: acento,
+    background: fondo,
+    outlineColor: fondo,
     boxShadow: `0 8px 24px -10px ${hexA(acento, 0.55)}`,
   };
   if (href) {
@@ -1175,7 +1179,7 @@ export function BarraMobile({ acento, onReservar }: { acento: string; onReservar
         type="button"
         onClick={onReservar}
         className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-base font-bold text-white shadow-md"
-        style={{ background: acento, boxShadow: `0 8px 24px -10px ${hexA(acento, 0.6)}` }}
+        style={{ background: legible(acento), boxShadow: `0 8px 24px -10px ${hexA(acento, 0.6)}` }}
       >
         <CalendarCheck2 className="h-5 w-5" />
         Reservar turno

@@ -14,7 +14,7 @@ import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { CamposCliente, DatosCliente, CLIENTE_VACIO } from "./campos-cliente";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -69,9 +69,7 @@ export function NuevoClienteDialog({ onCreado }: { onCreado: () => void }) {
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button>{`Nuevo ${termino}`}</Button>
-      </DialogTrigger>
+      <DialogTrigger className={buttonVariants()}>{`Nuevo ${termino}`}</DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{`Nuevo ${termino}`}</DialogTitle>

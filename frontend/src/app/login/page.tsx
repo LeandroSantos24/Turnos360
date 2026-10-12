@@ -254,7 +254,7 @@ export default function LoginPage() {
 
           <p className="mt-7 text-center text-sm text-muted-foreground">
             ¿Todavía no tenés cuenta?{" "}
-            <Link href="/registro" className="font-semibold text-[#0e8371] hover:underline">
+            <Link href="/registro" className="font-semibold text-[#0b7262] hover:underline dark:text-primary">
               Probalo gratis
             </Link>
           </p>

@@ -101,6 +101,7 @@ function Color({
         <Input
           value={actual}
           maxLength={7}
+          aria-label={`${etiqueta} en hexadecimal`}
           onChange={(e) => {
             const v = e.target.value.trim();
             // Se acepta lo que se escribe pero solo se guarda un hex completo:
@@ -225,12 +226,14 @@ export function PanelLook({
                   >
                     Aa
                   </span>
+                  {/* Muestra en miniatura del botón del estilo, sin texto: a
+                      9 px no se leía y con algunos temas no llegaba al
+                      contraste mínimo. La tarjeta ya dice qué tema es. */}
                   <span
-                    className="px-4 py-1 text-[9px] font-semibold"
+                    aria-hidden
+                    className="block h-4 w-14"
                     style={muestra.boton}
-                  >
-                    Reservar
-                  </span>
+                  />
                 </div>
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-xs font-medium">{p.nombre}</span>

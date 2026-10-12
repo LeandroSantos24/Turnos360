@@ -19,7 +19,7 @@ import { SelectorSucursalesServicio } from "./selector-sucursales-servicio";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -124,9 +124,7 @@ export function NuevoServicioDialog({ onCreado }: { onCreado: () => void }) {
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button>Nuevo servicio</Button>
-      </DialogTrigger>
+      <DialogTrigger className={buttonVariants()}>Nuevo servicio</DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Nuevo servicio</DialogTitle>
